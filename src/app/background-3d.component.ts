@@ -1,6 +1,7 @@
 import { Component, ElementRef, OnInit, OnDestroy, ViewChild, ChangeDetectionStrategy, NgZone, PLATFORM_ID, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 @Component({
   selector: 'app-background-3d',
@@ -140,6 +141,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Zodiacal light
   private zodiacalLight!: THREE.Mesh;
 
+  // Orbit controls (Google Earth-style)
+  private controls!: OrbitControls;
+  private userInteracting = false;
+  private userInteractionTimeout: ReturnType<typeof setTimeout> | null = null;
+
+  // Shared texture loader
+  private textureLoader!: THREE.TextureLoader;
+
   private readonly ngZone = inject(NgZone);
   private readonly platformId = inject(PLATFORM_ID);
   
@@ -149,6 +158,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   ngOnChanges(changes: SimpleChanges) {
     if (this.isBrowser && (changes['slideIndex'] || changes['slideId'])) {
+      this.userInteracting = false; // Reset to slide-driven camera on slide change
+      if (this.userInteractionTimeout) clearTimeout(this.userInteractionTimeout);
       this.updateCameraForSlide(this.slideId);
     }
   }
@@ -253,6 +264,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       globalThis.removeEventListener('mousemove', this.onMouseMove.bind(this));
       if (this.renderer) {
         this.renderer.dispose();
+      }
+      if (this.controls) {
+        this.controls.dispose();
+      }
+      if (this.userInteractionTimeout) {
+        clearTimeout(this.userInteractionTimeout);
       }
     }
   }
@@ -479,6 +496,29 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
 
+    // Orbit controls — Google Earth-style zoom/pan/rotate
+    this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+    this.controls.enableDamping = true;
+    this.controls.dampingFactor = 0.08;
+    this.controls.rotateSpeed = 0.5;
+    this.controls.zoomSpeed = 0.8;
+    this.controls.panSpeed = 0.5;
+    this.controls.minDistance = 5;
+    this.controls.maxDistance = 200;
+    this.controls.enablePan = true;
+    this.controls.target.set(12, 0, -15); // Look at Jupiter
+    this.controls.addEventListener('start', () => {
+      this.userInteracting = true;
+      if (this.userInteractionTimeout) clearTimeout(this.userInteractionTimeout);
+    });
+    this.controls.addEventListener('end', () => {
+      // After 4 seconds of no interaction, resume slide-driven camera
+      if (this.userInteractionTimeout) clearTimeout(this.userInteractionTimeout);
+      this.userInteractionTimeout = setTimeout(() => {
+        this.userInteracting = false;
+      }, 4000);
+    });
+
     // Stars - Multi-colored with size variation and twinkle
     const starsGeometry = new THREE.BufferGeometry();
     const starsVertices = [];
@@ -677,7 +717,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.jupiter);
 
     // Load NASA HST OPAL high-res Jupiter map from local assets
-    const textureLoader = new THREE.TextureLoader();
+    this.textureLoader = new THREE.TextureLoader();
+    const textureLoader = this.textureLoader;
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load(
         '20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg',
@@ -901,10 +942,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Speed ratios = inverse period ratios (ω = 2π/T)
     // Sizes proportional to real radii: Io=1821km, Europa=1561km, Ganymede=2634km, Callisto=2410km
     const galileanConfigs = [
-      { name: 'Io', color: 0xddaa33, size: 0.3, distance: 14, speed: 0.008 },
-      { name: 'Europa', color: 0xeeeeee, size: 0.26, distance: 18, speed: 0.00398 },
-      { name: 'Ganymede', color: 0xaaaaaa, size: 0.43, distance: 24, speed: 0.00198 },
-      { name: 'Callisto', color: 0x666666, size: 0.4, distance: 32, speed: 0.000848 }
+      { name: 'Io', color: 0xddaa33, size: 0.3, distance: 14, speed: 0.008, texture: '2k_io.jpg' },
+      { name: 'Europa', color: 0xeeeeee, size: 0.26, distance: 18, speed: 0.00398, texture: '2k_europa.jpg' },
+      { name: 'Ganymede', color: 0xaaaaaa, size: 0.43, distance: 24, speed: 0.00198, texture: '2k_ganymede.jpg' },
+      { name: 'Callisto', color: 0x666666, size: 0.4, distance: 32, speed: 0.000848, texture: '2k_callisto.jpg' }
     ];
 
     galileanConfigs.forEach(config => {
@@ -913,6 +954,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const mesh = new THREE.Mesh(geo, mat);
       this.jupiterGroup.add(mesh);
       this.galileanMoons.push({ mesh, distance: config.distance, speed: config.speed, angle: Math.random() * Math.PI * 2 });
+
+      // Load real texture
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        textureLoader.load(config.texture, (tex) => {
+          tex.generateMipmaps = true;
+          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          mat.map = tex; mat.color.setHex(0xffffff); mat.needsUpdate = true;
+          resolve();
+        }, undefined, () => resolve());
+      }));
     });
 
     // The remaining 91 small moons (Total 95)
@@ -1113,16 +1164,20 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private updateCamera() {
     if (this.camera) {
-      this.targetCameraX = this.baseCameraX + this.mouseX * 4;
-      this.targetCameraY = this.baseCameraY + this.mouseY * 4;
-      this.targetCameraZ = this.baseCameraZ;
+      if (!this.userInteracting) {
+        // Slide-driven camera with mouse parallax
+        this.targetCameraX = this.baseCameraX + this.mouseX * 4;
+        this.targetCameraY = this.baseCameraY + this.mouseY * 4;
+        this.targetCameraZ = this.baseCameraZ;
 
-      this.camera.position.x += (this.targetCameraX - this.camera.position.x) * 0.035;
-      this.camera.position.y += (this.targetCameraY - this.camera.position.y) * 0.035;
-      this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * 0.035;
+        this.camera.position.x += (this.targetCameraX - this.camera.position.x) * 0.035;
+        this.camera.position.y += (this.targetCameraY - this.camera.position.y) * 0.035;
+        this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * 0.035;
 
-      this.currentLookAt.lerp(this.targetLookAt, 0.035);
-      this.camera.lookAt(this.currentLookAt);
+        this.currentLookAt.lerp(this.targetLookAt, 0.035);
+        this.controls.target.copy(this.currentLookAt);
+      }
+      this.controls.update();
     }
   }
 
@@ -1205,15 +1260,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createSpaceships() {
     const jupiterPos = this.jupiterGroup.position;
     const configs = [
-      { type: 'fighter', radius: 14, speed: 0.006, y: 2, incl: 0.15, scale: 3 },
-      { type: 'fighter', radius: 18, speed: -0.004, y: -1, incl: -0.2, scale: 2.5 },
-      { type: 'fighter', radius: 16, speed: 0.005, y: 3.5, incl: 0.3, scale: 2.8 },
-      { type: 'tie', radius: 20, speed: -0.005, y: -2, incl: 0.25, scale: 3 },
-      { type: 'tie', radius: 23, speed: 0.003, y: 1.5, incl: -0.15, scale: 2.5 },
-      { type: 'shuttle', radius: 28, speed: 0.002, y: 4, incl: 0.1, scale: 3.5 },
-      { type: 'shuttle', radius: 33, speed: -0.0015, y: -3, incl: -0.18, scale: 3 },
-      { type: 'fighter', radius: 40, speed: 0.003, y: 7, incl: 0.4, scale: 2 },
-      { type: 'tie', radius: 45, speed: -0.002, y: -5, incl: -0.35, scale: 2 },
+      { type: 'fighter', radius: 14, speed: 0.006, y: 2, incl: 0.15, scale: 0.6 },
+      { type: 'fighter', radius: 18, speed: -0.004, y: -1, incl: -0.2, scale: 0.5 },
+      { type: 'fighter', radius: 16, speed: 0.005, y: 3.5, incl: 0.3, scale: 0.55 },
+      { type: 'tie', radius: 20, speed: -0.005, y: -2, incl: 0.25, scale: 0.6 },
+      { type: 'tie', radius: 23, speed: 0.003, y: 1.5, incl: -0.15, scale: 0.5 },
+      { type: 'shuttle', radius: 28, speed: 0.002, y: 4, incl: 0.1, scale: 0.7 },
+      { type: 'shuttle', radius: 33, speed: -0.0015, y: -3, incl: -0.18, scale: 0.6 },
+      { type: 'fighter', radius: 40, speed: 0.003, y: 7, incl: 0.4, scale: 0.4 },
+      { type: 'tie', radius: 45, speed: -0.002, y: -5, incl: -0.35, scale: 0.4 },
     ];
 
     configs.forEach(cfg => {
@@ -1712,6 +1767,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const saturn = new THREE.Mesh(saturnGeo, saturnMat);
     this.saturnGroup.add(saturn);
 
+    // Load Saturn texture
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_saturn.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        saturnMat.map = tex; saturnMat.color.setHex(0xffffff); saturnMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
+
     // Saturn's iconic rings
     const innerR = 5.5, outerR = 9;
     const satRingGeo = new THREE.RingGeometry(innerR, outerR, 128, 4);
@@ -1778,6 +1842,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.marsMesh = new THREE.Mesh(marsGeo, marsMat);
     this.marsMesh.position.set(-55, -5, 20);
     this.scene.add(this.marsMesh);
+
+    // Load Mars texture
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_mars.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        marsMat.map = tex; marsMat.color.setHex(0xffffff); marsMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
 
     // Mars atmosphere (thin, subtle)
     const marsAtmoMat = new THREE.MeshBasicMaterial({
@@ -2177,6 +2250,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
     this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
     this.sunMesh.position.set(-50, 10, 30);
+
+    // Load Sun texture
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_sun.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        sunMat.map = tex; sunMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
 
     // Inner corona (bright yellow-white)
     const coronaInnerGeo = new THREE.SphereGeometry(5, 32, 32);

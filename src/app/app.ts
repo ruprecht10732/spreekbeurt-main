@@ -79,33 +79,34 @@ import confetti from 'canvas-confetti';
         </div>
       } @else {
         <!-- Cinematic gradient overlay on the left -->
-        <div class="absolute inset-0 bg-gradient-to-r from-black/80 via-black/40 to-transparent pointer-events-none"></div>
+        <div class="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent pointer-events-none"></div>
 
-        <!-- Regular Slide Content — left-aligned cinematic layout -->
-        <div #slideContainer class="relative w-full h-full flex flex-col justify-center pl-12 md:pl-20 pr-[45%] pointer-events-auto">
+        <!-- Regular Slide Content — glassmorphism panel -->
+        <div #slideContainer class="relative w-full h-full flex flex-col justify-center pl-8 md:pl-16 pr-[50%] pointer-events-auto">
           
-          <!-- Accent line + Title -->
-          <div class="mb-8">
-            <div class="accent-line w-16 h-1 bg-[var(--color-starwars-yellow)] mb-5 rounded-full shadow-[0_0_12px_rgba(255,232,31,0.6)] origin-left"></div>
-            <h2 class="slide-title text-4xl md:text-6xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_20px_rgba(255,232,31,0.35)]">
-              {{ currentSlide().title }}
-            </h2>
-          </div>
-          
-          <!-- Content items with left accent -->
-          <div class="space-y-4 text-lg md:text-2xl font-sans text-gray-100 leading-relaxed pl-5 border-l-2 border-white/10">
-            @for (line of currentSlide().content; track $index) {
-              <p class="slide-item drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{{ line }}</p>
-            }
-          </div>
+          <div class="slide-panel bg-black/30 backdrop-blur-md rounded-2xl border border-white/[0.06] p-8 md:p-12 shadow-[0_8px_60px_rgba(0,0,0,0.5)]">
+            <!-- Accent line + Title -->
+            <div class="mb-8">
+              <div class="accent-line w-20 h-[3px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-[var(--color-starwars-yellow)]/30 mb-5 rounded-full shadow-[0_0_16px_rgba(255,232,31,0.5)] origin-left"></div>
+              <h2 class="slide-title text-3xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_24px_rgba(255,232,31,0.3)]">
+                {{ currentSlide().title }}
+              </h2>
+            </div>
+            
+            <!-- Content items with left accent -->
+            <div class="space-y-3 text-base md:text-xl font-sans text-gray-200 leading-relaxed pl-5 border-l-2 border-[var(--color-starwars-yellow)]/15">
+              @for (line of currentSlide().content; track $index) {
+                <p class="slide-item drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-gray-100/90">{{ line }}</p>
+              }
+            </div>
 
           @if (currentSlide().id === 'h3' && currentDistance() > 0) {
-            <div class="mt-8 slide-item">
-              <div class="inline-block bg-black/40 backdrop-blur-sm rounded-xl px-6 py-4 border border-[var(--color-starwars-yellow)]/20 shadow-[0_0_30px_rgba(255,232,31,0.1)]">
+            <div class="mt-6 slide-item">
+              <div class="inline-block bg-black/30 backdrop-blur-sm rounded-xl px-6 py-4 border border-[var(--color-starwars-yellow)]/15">
                 <span class="text-xs text-[var(--color-starwars-yellow)]/60 font-starwars tracking-[0.3em] block mb-1">HUIDIGE AFSTAND</span>
                 <div class="flex items-baseline gap-2">
-                  <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_30px_rgba(255,232,31,0.5)]">{{ currentDistance() }}</span>
-                  <span class="text-lg md:text-2xl text-[var(--color-starwars-yellow)]/60 font-starwars tracking-wider">MILJOEN KM</span>
+                  <span class="text-4xl md:text-6xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
+                  <span class="text-base md:text-xl text-[var(--color-starwars-yellow)]/50 font-starwars tracking-wider">MILJOEN KM</span>
                 </div>
                 <div class="mt-2 text-xs text-[var(--color-starwars-yellow)]/40 font-mono tracking-wider">
                   ☀️ Licht doet er {{ lightTravelMinutes() }} minuten over!
@@ -188,6 +189,7 @@ import confetti from 'canvas-confetti';
               }
             </div>
           }
+          </div><!-- /slide-panel -->
         </div>
       }
 
@@ -333,6 +335,13 @@ import confetti from 'canvas-confetti';
     }
     .animate-fade-in {
       animation: fadeIn 0.5s ease-out forwards;
+    }
+    .slide-panel {
+      animation: panelSlideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes panelSlideIn {
+      from { opacity: 0; transform: translateX(-30px); }
+      to { opacity: 1; transform: translateX(0); }
     }
     .perspective-1000 { perspective: 1000px; }
     .transform-style-3d { transform-style: preserve-3d; }

@@ -108,7 +108,7 @@ import confetti from 'canvas-confetti';
                   <span class="text-lg md:text-2xl text-[var(--color-starwars-yellow)]/60 font-starwars tracking-wider">MILJOEN KM</span>
                 </div>
                 <div class="mt-2 text-xs text-[var(--color-starwars-yellow)]/40 font-mono tracking-wider">
-                  t = d/c ≈ {{ lightTravelMinutes() }} min &nbsp;·&nbsp; {{ lightTravelAU() }} AU
+                  ☀️ Licht doet er {{ lightTravelMinutes() }} minuten over!
                 </div>
               </div>
             </div>

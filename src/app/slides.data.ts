@@ -44,12 +44,11 @@ export const SLIDES: Slide[] = [
     id: 'h1',
     title: '1. Waar is Jupiter van gemaakt?',
     content: [
-      '• Geen steen of zand',
-      '• Reusachtige gasbol',
-      '• 90% Waterstof (H₂), 10% Helium (He)',
-      '• Dampkring is 1000 km dik',
-      '• Geen vaste grond om te landen',
-      '• Massa: 1,898 × 10²⁷ kg'
+      '• Geen steen of zand zoals de aarde',
+      '• Jupiter is een reusachtige gasbol!',
+      '• 90% waterstof en 10% helium',
+      '• De dampkring is wel 1000 km dik',
+      '• Je kunt er niet op landen, want er is geen grond'
     ]
   },
   {
@@ -77,32 +76,32 @@ export const SLIDES: Slide[] = [
     id: 'h3',
     title: '3. Hoe ver is Jupiter weg?',
     content: [
-      '• Afstand verandert constant',
-      '• Dichtstbij: 588 miljoen km (3,95 AU)',
-      '• Verste weg: 968 miljoen km (6,47 AU)',
-      '• Licht doet er ~33–54 minuten over (c = 299.792 km/s)',
-      '• Met de auto: honderden jaren rijden!'
+      '• De afstand verandert de hele tijd!',
+      '• Dichtstbij: 588 miljoen km',
+      '• Verst weg: 968 miljoen km',
+      '• Licht doet er 33 tot 54 minuten over',
+      '• Met de auto zou je honderden jaren rijden!'
     ]
   },
   {
     id: 'h4',
     title: '4. Hoe oud is Jupiter?',
     content: [
-      '• Ongeveer 4,503 × 10⁹ jaar oud',
-      '• Oudste planeet in ons zonnestelsel',
-      '• Razendsnel gevormd (binnen 1 miljoen jaar)',
-      '• Ontstaan uit gas en stof'
+      '• Ongeveer 4,5 miljard jaar oud!',
+      '• De oudste planeet in ons zonnestelsel',
+      '• Razendsnel ontstaan: binnen 1 miljoen jaar',
+      '• Gemaakt van gas en stof uit de ruimte'
     ]
   },
   {
     id: 'h5',
     title: '5. Is Jupiter een normale planeet?',
     content: [
-      '• Allergrootste planeet (Gasreus)',
-      '• 318× zwaarder dan de aarde (M = 1,898 × 10²⁷ kg)',
+      '• De allergrootste planeet — een gasreus!',
+      '• Meer dan 300× zwaarder dan de aarde',
       '• Draait super snel om zijn as',
-      '• Eén dag duurt maar 9 uur en 55 min',
-      '• Zwaartekracht: g = 24,79 m/s² (2,5× aarde)'
+      '• Eén dag duurt maar 9 uur en 55 minuten',
+      '• Je weegt er 2,5× meer dan op aarde!'
     ],
     video: 'Jupiter_Size_Comparison_Video.mp4',
     experiment: {
@@ -119,11 +118,11 @@ export const SLIDES: Slide[] = [
     id: 'extra',
     title: 'Extra: Kunnen we op Jupiter wonen?',
     content: [
-      '• Nee: Geen grond, enorme druk, harde wind',
+      '• Nee! Geen grond, enorme druk en keiharde wind',
       '• Maar... Jupiter heeft 95 manen!',
-      '• Europa: mogelijk oceaan onder ijs',
-      '• Getijdenkracht (F = GMm/r²) creëert warmte op Io',
-      '• Misschien daar ooit leven te vinden?'
+      '• Op de maan Europa zit misschien een oceaan onder het ijs',
+      '• Jupiter trekt zo hard aan de maan Io dat die opwarmt',
+      '• Misschien is daar ooit leven te vinden?'
     ]
   },
   {
@@ -162,7 +161,7 @@ export const SLIDES: Slide[] = [
       },
       {
         question: '5. Is Jupiter zwaarder of lichter dan de aarde?',
-        options: ['A: 318× zwaarder', 'B: 10× lichter'],
+        options: ['A: Meer dan 300× zwaarder', 'B: 10× lichter'],
         correctOptionIndex: 0,
         explanation: 'Jupiter is de zwaarste planeet van ons hele zonnestelsel.'
       }

@@ -1229,6 +1229,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Sun with corona glow
     this.createSun();
 
+    // Subtle labels on all celestial bodies (must be after createSun)
+    this.createCelestialLabels();
+
     // Jupiter night-side lightning flashes
     this.createLightning();
 
@@ -2005,8 +2008,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.neptuneMesh.position.set(-180, 15, -160);
     this.scene.add(this.neptuneMesh);
 
-    // Create all labels
-    this.createCelestialLabels();
   }
 
   private createLabelSprite(text: string, scale: number): THREE.Sprite {

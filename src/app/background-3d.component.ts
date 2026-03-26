@@ -1,7 +1,20 @@
 import { Component, ElementRef, OnInit, OnDestroy, ViewChild, ChangeDetectionStrategy, NgZone, PLATFORM_ID, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import * as THREE from 'three';
+import { getProject, type ISheetObject } from '@theatre/core';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { PhysicsManager } from './physics-manager';
+import { PostProcessManager } from './post-process-manager';
+import { THEATRE_CAMERA_PROJECT_STATE, THEATRE_SLIDE_SEQUENCE_POSITIONS, THEATRE_TOUR_SEQUENCE_POSITIONS } from './theatre-camera.state';
+
+interface TheatreCameraRig {
+  offset: { x: number; y: number; z: number };
+  lookOffset: { x: number; y: number; z: number };
+  drift: { x: number; y: number; z: number };
+  mouseParallax: { x: number; y: number; z: number };
+  lerp: number;
+  flareVisible: boolean;
+}
 
 @Component({
   selector: 'app-background-3d',
@@ -23,6 +36,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private scene!: THREE.Scene;
   private camera!: THREE.PerspectiveCamera;
   private renderer!: THREE.WebGLRenderer;
+  private readonly physicsManager = new PhysicsManager();
+  private postProcessManager: PostProcessManager | null = null;
   private jupiterGroup!: THREE.Group;
   private jupiter!: THREE.Mesh;
   private atmosphere!: THREE.Mesh;
@@ -33,10 +48,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private readonly smallMoonsData: { distance: number, speed: number, angle: number, inclination: number }[] = [];
   
   private stars!: THREE.Points;
+  private starClusters!: THREE.InstancedMesh;
   private dustSystem!: THREE.Points;
   private animationFrameId: number | null = null;
+  private lastRenderTime = 0;
   private readonly isBrowser: boolean;
   private readonly startTime = Date.now();
+  private readonly floatingOriginThreshold = 10_000;
+  private readonly projectionMatrix = new THREE.Matrix4();
+  private readonly frustum = new THREE.Frustum();
+  private readonly frustumCullTargets: Array<{ object: THREE.Object3D; radius: number }> = [];
+  private readonly resizeHandler = () => this.onWindowResize();
+  private readonly mouseMoveHandler = (event: MouseEvent) => this.onMouseMove(event);
   
   // Camera transition targets
   private targetCameraX = 0;
@@ -70,6 +93,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private cameraDriftSpeedZ = 0;
   private cameraLerpSpeed = 0.035;
   private slideStartTime = 0;
+  private theatreCameraObject: ISheetObject | null = null;
+  private theatreCameraValues: TheatreCameraRig = {
+    offset: { x: -7, y: 8, z: 52 },
+    lookOffset: { x: 0, y: 1, z: 0 },
+    drift: { x: 0, y: -0.002, z: -0.008 },
+    mouseParallax: { x: 3, y: 3, z: 0 },
+    lerp: 0.015,
+    flareVisible: true,
+  };
+  private theatreCameraUnsubscribe: (() => void) | null = null;
+  private theatreCurrentSequencePosition = 0;
 
   private earthMesh!: THREE.Mesh;
 
@@ -96,16 +130,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private earthOrbitAngle = 0;
   private earthOrbitActive = false;
 
-    // Earth's Moon (Luna) orbiting Earth
-    private moonMesh!: THREE.Mesh;
-    private moonOrbitAngle = 0;
+  // Earth's Moon (Luna) orbiting Earth
+  private moonMesh!: THREE.Mesh;
+  private moonOrbitAngle = 0;
 
-    // Titan — Saturn's largest moon
-    private titanMesh!: THREE.Mesh;
-    private titanOrbitAngle = 0;
+  // Titan — Saturn's largest moon
+  private titanMesh!: THREE.Mesh;
+  private titanOrbitAngle = 0;
 
-    // Pluto — dwarf planet beyond Neptune
-    private plutoMesh!: THREE.Mesh;
+  // Pluto — dwarf planet beyond Neptune
+  private plutoMesh!: THREE.Mesh;
 
   // Distance beam between Earth and Jupiter
   private distanceBeam!: THREE.Group;
@@ -150,6 +184,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Sun with corona
   private sunMesh!: THREE.Mesh;
+  private sunFlare!: THREE.Mesh;
 
   // Jupiter night-side lightning
   private readonly lightningFlashes: { mesh: THREE.Mesh, timer: number, cooldown: number }[] = [];
@@ -174,13 +209,36 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Zodiacal light
   private zodiacalLight!: THREE.Mesh;
 
+  // Death Star
+  private deathStarGroup!: THREE.Group;
+  private superlaserBeam!: THREE.Mesh;
+  private superlaserFiring = false;
+  private superlaserTimer = 0;
+
+  // Lightsaber duel
+  private lightsaberGroup!: THREE.Group;
+  private saberRed!: THREE.Mesh;
+  private saberGreen!: THREE.Mesh;
+  private saberLightRed!: THREE.PointLight;
+  private saberLightGreen!: THREE.PointLight;
+  private saberDuelTimer = 0;
+
+  // Hyperspace jump
+  private hyperspaceActive = false;
+  private hyperspaceTimer = 0;
+  private readonly hyperspaceDuration = 2.5;
+  private originalFov = 60;
+  private readonly originalBloomIntensity = 1.6;
+
   // SpaceX Falcon 9 rocket launch
   private falconGroup!: THREE.Group;
   private falconExhaust!: THREE.Mesh;
   private falconLaunched = false;
   private falconLaunchTime = 0;
-  private falconStartPos = new THREE.Vector3();
-  private falconTargetPos = new THREE.Vector3();
+  private readonly falconFlightDuration = 18;
+  private readonly falconStartPos = new THREE.Vector3();
+  private readonly falconTargetPos = new THREE.Vector3();
+  private readonly falconCameraAnchor = new THREE.Vector3();
 
   // Planet tour state
   private tourActive = false;
@@ -189,7 +247,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private tourTransitionProgress = 0;
   private readonly TOUR_STOP_DURATION = 8; // seconds at each planet
   private readonly TOUR_TRANSITION_DURATION = 3; // seconds flying between planets
-  private tourStops: { name: string; camX: number; camY: number; camZ: number; lookX: number; lookY: number; lookZ: number }[] = [];
+  private tourStops: { name: keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS }[] = [];
+  private activeCameraAnchorKey = 'title';
 
   // Orbit controls (Google Earth-style)
   private controls!: OrbitControls;
@@ -217,71 +276,53 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.startPlanetTour();
       } else if (!this.tourMode && this.tourActive) {
         this.tourActive = false;
+        this.activeCameraAnchorKey = 'jupiter';
+        this.updateCameraForSlide(this.slideId);
       }
     }
   }
 
   private startPlanetTour() {
-    // Build tour stops from actual planet positions
     this.tourStops = [];
-    const jPos = this.jupiterGroup?.position || new THREE.Vector3(12, 0, -15);
-    // Jupiter close-up first
-    this.tourStops.push({ name: 'jupiter', camX: jPos.x - 20, camY: jPos.y + 5, camZ: jPos.z + 18, lookX: jPos.x, lookY: jPos.y, lookZ: jPos.z });
-    // Sun
+    this.tourStops.push({ name: 'jupiter' });
     if (this.sunMesh) {
-      const p = this.sunMesh.position;
-      this.tourStops.push({ name: 'zon', camX: p.x + 18, camY: p.y + 6, camZ: p.z + 14, lookX: p.x, lookY: p.y, lookZ: p.z });
+      this.tourStops.push({ name: 'zon' });
     }
-    // Mercury
     if (this.mercuryMesh) {
-      const p = this.mercuryMesh.position;
-      this.tourStops.push({ name: 'mercurius', camX: p.x + 3, camY: p.y + 1, camZ: p.z + 3, lookX: p.x, lookY: p.y, lookZ: p.z });
+      this.tourStops.push({ name: 'mercurius' });
     }
-    // Venus
     if (this.venusMesh) {
-      const p = this.venusMesh.position;
-      this.tourStops.push({ name: 'venus', camX: p.x + 4, camY: p.y + 1.5, camZ: p.z + 4, lookX: p.x, lookY: p.y, lookZ: p.z });
+      this.tourStops.push({ name: 'venus' });
     }
-    // Earth
     if (this.earthMesh) {
       this.earthMesh.visible = true;
       this.earthMesh.position.set(-8, 2, -5);
-      const p = this.earthMesh.position;
-      this.tourStops.push({ name: 'aarde', camX: p.x + 4, camY: p.y + 1.5, camZ: p.z + 4, lookX: p.x, lookY: p.y, lookZ: p.z });
+      this.tourStops.push({ name: 'aarde' });
     }
-    // Mars
     if (this.marsMesh) {
-      const p = this.marsMesh.position;
-      this.tourStops.push({ name: 'mars', camX: p.x + 3, camY: p.y + 1, camZ: p.z + 3, lookX: p.x, lookY: p.y, lookZ: p.z });
+      this.tourStops.push({ name: 'mars' });
     }
-    // Saturn
     if (this.saturnGroup) {
-      const p = this.saturnGroup.position;
-      this.tourStops.push({ name: 'saturnus', camX: p.x - 25, camY: p.y + 12, camZ: p.z + 20, lookX: p.x, lookY: p.y, lookZ: p.z });
+      this.tourStops.push({ name: 'saturnus' });
     }
-    // Uranus
     if (this.uranusGroup) {
-      const p = this.uranusGroup.position;
-      this.tourStops.push({ name: 'uranus', camX: p.x - 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
+      this.tourStops.push({ name: 'uranus' });
     }
-      // Neptune — gas giant
-      if (this.neptuneGroup) {
-        const p = this.neptuneGroup.position;
-        this.tourStops.push({ name: 'neptunus', camX: p.x + 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
-      }
-      // Pluto — dwarf planet beyond Neptune
-      if (this.plutoMesh) {
-        const p = this.plutoMesh.position;
-        this.tourStops.push({ name: 'pluto', camX: p.x + 6, camY: p.y + 3, camZ: p.z + 6, lookX: p.x, lookY: p.y, lookZ: p.z });
-      }
-    // Back to Jupiter — full circle
-    this.tourStops.push({ name: 'jupiter-einde', camX: jPos.x + 5, camY: jPos.y + 8, camZ: jPos.z + 50, lookX: jPos.x, lookY: jPos.y, lookZ: jPos.z });
+    if (this.neptuneGroup) {
+      this.tourStops.push({ name: 'neptunus' });
+    }
+    if (this.plutoMesh) {
+      this.tourStops.push({ name: 'pluto' });
+    }
+    this.tourStops.push({ name: 'jupiter-einde' });
 
     this.tourActive = true;
     this.tourStopIndex = 0;
     this.tourStopTime = (Date.now() - this.startTime) * 0.001;
     this.tourTransitionProgress = 0;
     this.userInteracting = false;
+    this.activeCameraAnchorKey = this.tourStops[0].name;
+    this.transitionTheatreCameraToKey(this.tourStops[0].name);
     this.tourPlanet.emit(this.tourStops[0].name);
   }
 
@@ -292,54 +333,30 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const stop = this.tourStops[this.tourStopIndex];
     const totalStopTime = this.TOUR_STOP_DURATION + this.TOUR_TRANSITION_DURATION;
 
-    if (elapsed < this.TOUR_TRANSITION_DURATION) {
-      // Flying to this stop — smooth ease-in-out
-      const t = elapsed / this.TOUR_TRANSITION_DURATION;
-      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
-
-      this.baseCameraX += (stop.camX - this.baseCameraX) * (ease * 0.05 + 0.01);
-      this.baseCameraY += (stop.camY - this.baseCameraY) * (ease * 0.05 + 0.01);
-      this.baseCameraZ += (stop.camZ - this.baseCameraZ) * (ease * 0.05 + 0.01);
-      this.targetLookAt.set(
-        this.targetLookAt.x + (stop.lookX - this.targetLookAt.x) * (ease * 0.05 + 0.01),
-        this.targetLookAt.y + (stop.lookY - this.targetLookAt.y) * (ease * 0.05 + 0.01),
-        this.targetLookAt.z + (stop.lookZ - this.targetLookAt.z) * (ease * 0.05 + 0.01)
-      );
-      this.cameraLerpSpeed = 0.04;
-    } else if (elapsed < totalStopTime) {
-      // At this stop — gentle orbit drift
-      this.baseCameraX = stop.camX;
-      this.baseCameraY = stop.camY;
-      this.baseCameraZ = stop.camZ;
-      this.targetLookAt.set(stop.lookX, stop.lookY, stop.lookZ);
-      this.cameraLerpSpeed = 0.025;
-      // Gentle circular drift around the planet
-      const driftTime = elapsed - this.TOUR_TRANSITION_DURATION;
-      this.cameraDriftX = Math.sin(driftTime * 0.3) * 2;
-      this.cameraDriftY = Math.sin(driftTime * 0.2) * 0.5;
-      this.cameraDriftZ = Math.cos(driftTime * 0.3) * 2;
-    } else {
-      // Move to next stop
+    if (elapsed >= totalStopTime) {
       this.tourStopIndex++;
       this.cameraDriftX = 0;
       this.cameraDriftY = 0;
       this.cameraDriftZ = 0;
       if (this.tourStopIndex >= this.tourStops.length) {
-        // Tour finished — loop back
         this.tourStopIndex = 0;
         this.tourStopTime = time;
       } else {
         this.tourStopTime = time;
       }
+      this.activeCameraAnchorKey = this.tourStops[this.tourStopIndex].name;
+      this.transitionTheatreCameraToKey(this.tourStops[this.tourStopIndex].name);
       this.tourPlanet.emit(this.tourStops[this.tourStopIndex].name);
-      // Launch Falcon 9 when arriving at Earth
       if (this.tourStops[this.tourStopIndex].name === 'aarde' && !this.falconLaunched) {
-        setTimeout(() => this.launchFalcon9(), 2000); // 2s after arriving
+        setTimeout(() => this.launchFalcon9(), 2000);
       }
+    } else {
+      this.activeCameraAnchorKey = stop.name;
     }
   }
 
   private updateCameraForSlide(id: string) {
+    this.activeCameraAnchorKey = 'jupiter';
     this.targetJupiterRotationY = null;
     this.targetStarSpeed = 0.0001;
     this.targetMoonSpeedMultiplier = 1;
@@ -361,148 +378,81 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     switch(id) {
       case 'title':
-        // ACT 1: Approach from deep space — camera far away, slowly drifting in
-        this.baseCameraX = 5; this.baseCameraY = 8; this.baseCameraZ = 70;
-        this.targetLookAt.set(0, 0, 0);
         this.targetShipSpeedMultiplier = 0.3;
         this.targetJupiterSpinSpeed = 0.0003;
-        this.cameraLerpSpeed = 0.015; // Very slow, contemplative
-        // Slow drift inward — approaching Jupiter
-        this.cameraDriftSpeedZ = -0.008;
-        this.cameraDriftSpeedY = -0.002;
         break;
 
       case 'inhoud':
-        // ACT 1: Arrived — sweeping orbit reveals the solar system context
-        this.baseCameraX = 30; this.baseCameraY = 12; this.baseCameraZ = 30;
-        this.targetLookAt.set(0, 2, 0);
         this.targetShipSpeedMultiplier = 1;
-        this.cameraLerpSpeed = 0.025;
-        // Slow orbit drift — camera glides around Jupiter
-        this.cameraDriftSpeedX = -0.012;
-        this.cameraDriftSpeedZ = -0.006;
         break;
 
       case 'h1':
-        // ACT 2: Dive into the atmosphere — close-up on Jupiter's bands
-        this.baseCameraX = -14; this.baseCameraY = 2; this.baseCameraZ = 15;
-        this.targetLookAt.set(-3, 0, 0);
         this.targetAtmospherePulse = 1;
         this.targetJupiterSpinSpeed = 0.001; // Slightly faster — showing the gas swirling
-        this.cameraLerpSpeed = 0.03;
-        // Slow creep closer into the clouds
-        this.cameraDriftSpeedZ = -0.004;
-        this.cameraDriftSpeedX = 0.003;
         break;
 
       case 'h2':
-        // ACT 2: Dramatic swoop to the Great Red Spot
-        this.baseCameraX = 8; this.baseCameraY = -4; this.baseCameraZ = 6;
-        this.targetLookAt.set(10, -3, -10);
         this.targetJupiterRotationY = 4.7;
-        this.cameraLerpSpeed = 0.02; // Slow dramatic reveal
-        // Tiny drift — hovering over the storm
-        this.cameraDriftSpeedY = 0.002;
-        this.cameraDriftSpeedX = -0.001;
         break;
 
       case 'h3':
-        // ACT 3: Pull way back — reveal the vast distance to Earth
-        this.baseCameraX = -8; this.baseCameraY = 20; this.baseCameraZ = 55;
-        this.targetLookAt.set(0, 0, -8);
         this.targetStarSpeed = 0.002;
         this.targetShipSpeedMultiplier = 2.5;
-        this.cameraLerpSpeed = 0.02; // Slow pullback for dramatic scale
         if (this.earthMesh) this.earthMesh.visible = true;
         this.earthOrbitActive = true;
         this.distanceBeamActive = true;
-        // Slow pan across the gap
-        this.cameraDriftSpeedX = 0.005;
-        this.cameraDriftSpeedY = -0.002;
         break;
 
       case 'h4':
-        // ACT 3: Ancient flyby — majestic side pass like a spacecraft
-        this.baseCameraX = -22; this.baseCameraY = -8; this.baseCameraZ = 22;
-        this.targetLookAt.set(2, 0, 0);
         this.targetJupiterSpinSpeed = 0.0003; // Slow, ancient, timeless
         this.targetStarSpeed = 0.00005; // Stars barely move — frozen in time
         this.targetShipSpeedMultiplier = 0.3;
-        this.cameraLerpSpeed = 0.018; // Very slow, contemplative
-        // Long slow flyby drift
-        this.cameraDriftSpeedX = 0.015;
-        this.cameraDriftSpeedY = 0.004;
-        this.cameraDriftSpeedZ = -0.003;
         break;
 
       case 'h5':
-        // ACT 4: Power — look UP at Jupiter's massive underside
-        this.baseCameraX = 3; this.baseCameraY = -20; this.baseCameraZ = 20;
-        this.targetLookAt.set(0, 8, 0);
         this.targetMoonSpeedMultiplier = 30;
         this.targetJupiterSpinSpeed = 0.003; // Faster spin — showing rapid rotation
-        this.cameraLerpSpeed = 0.025;
         if (this.earthMesh) {
           this.earthMesh.visible = true;
           this.earthMesh.position.set(-8, 2, -5);
         }
-        // Slow rise upward — feeling the gravity
-        this.cameraDriftSpeedY = 0.006;
-        this.cameraDriftSpeedX = -0.002;
         break;
 
       case 'extra':
-        // ACT 4: Rise above — reveal the magnificent moon system
-        this.baseCameraX = 5; this.baseCameraY = 38; this.baseCameraZ = 22;
-        this.targetLookAt.set(0, 0, -2);
         this.targetMoonSpeedMultiplier = 3; // Visible but graceful orbital motion
         this.targetJupiterSpinSpeed = 0.001;
-        this.cameraLerpSpeed = 0.02;
-        // Slow orbit above the moon plane
-        this.cameraDriftSpeedX = -0.008;
-        this.cameraDriftSpeedZ = 0.005;
         break;
 
       case 'quiz':
-        // FINALE: Dynamic energy — Jupiter front and center, spinning with power
-        this.baseCameraX = 0; this.baseCameraY = 2; this.baseCameraZ = 20;
-        this.targetLookAt.set(0, 0, 0);
         this.targetJupiterSpinSpeed = 0.012;
         this.targetStarSpeed = 0.004;
         this.targetShipSpeedMultiplier = 3;
         this.targetMoonSpeedMultiplier = 4;
-        this.cameraLerpSpeed = 0.04; // Snappy, energetic
-        // Slow orbit — camera circles during quiz
-        this.cameraDriftSpeedX = -0.01;
-        this.cameraDriftSpeedZ = -0.008;
         break;
 
       case 'afsluiting':
-        // EPILOGUE: Pull back to the wide shot we started from — full circle
-        this.baseCameraX = 0; this.baseCameraY = 5; this.baseCameraZ = 50;
-        this.targetLookAt.set(0, 0, 0);
         this.targetShipSpeedMultiplier = 0.5;
         this.targetJupiterSpinSpeed = 0.0003;
         this.targetStarSpeed = 0.00005;
-        this.cameraLerpSpeed = 0.015; // Slow, peaceful departure
-        // Gentle drift away — leaving Jupiter behind
-        this.cameraDriftSpeedZ = 0.005;
-        this.cameraDriftSpeedY = 0.002;
         break;
 
       default:
+        break;
     }
+
+    this.transitionTheatreCameraToKey(id);
   }
 
   ngOnInit() {
     if (this.isBrowser) {
-      this.initThreeJs();
-      Promise.all(this.loadPromises).then(() => this.loaded.emit());
-      this.ngZone.runOutsideAngular(() => {
-        this.animate();
+      void this.initThreeJs().then(() => {
+        void Promise.all(this.loadPromises).then(() => this.loaded.emit());
+        this.ngZone.runOutsideAngular(() => {
+          this.animate();
+        });
       });
-      globalThis.addEventListener('resize', this.onWindowResize.bind(this));
-      globalThis.addEventListener('mousemove', this.onMouseMove.bind(this));
+      globalThis.addEventListener('resize', this.resizeHandler);
+      globalThis.addEventListener('mousemove', this.mouseMoveHandler);
     }
   }
 
@@ -511,11 +461,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.animationFrameId !== null) {
         cancelAnimationFrame(this.animationFrameId);
       }
-      globalThis.removeEventListener('resize', this.onWindowResize.bind(this));
-      globalThis.removeEventListener('mousemove', this.onMouseMove.bind(this));
+      globalThis.removeEventListener('resize', this.resizeHandler);
+      globalThis.removeEventListener('mousemove', this.mouseMoveHandler);
       if (this.renderer) {
         this.renderer.dispose();
       }
+      this.theatreCameraUnsubscribe?.();
+      this.postProcessManager?.dispose();
+      this.physicsManager.dispose();
       if (this.controls) {
         this.controls.dispose();
       }
@@ -729,7 +682,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     return [r, g, b];
   }
 
-  private initThreeJs() {
+  private async initThreeJs() {
+    await this.physicsManager.initialize();
+
     const container = this.canvasContainer.nativeElement;
     
     // Scene
@@ -737,16 +692,22 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.fog = new THREE.FogExp2(0x000000, 0.0005);
 
     // Camera
-    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50000);
     this.camera.position.z = this.targetCameraZ;
     this.camera.position.x = this.targetCameraX;
 
     // Renderer
-    this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+    this.renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      alpha: true,
+      powerPreference: 'high-performance',
+      logarithmicDepthBuffer: true,
+    });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.0;
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -836,7 +797,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       return starColorPalette[4]; // fallback K-type
     };
 
-    for (let i = 0; i < 20000; i++) {
+    for (let i = 0; i < 100000; i++) {
       starsVertices.push(
         THREE.MathUtils.randFloatSpread(2000),
         THREE.MathUtils.randFloatSpread(2000),
@@ -996,12 +957,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const jupiterGeometry = new THREE.SphereGeometry(10, 256, 256);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
-      roughness: 0.35,
+      roughness: 0.6,
       metalness: 0,
-      envMapIntensity: 0.3
+      envMapIntensity: 0.08
     });
 
-    // Cinematic shader enhancement — red spot glow, subsurface warmth, micro-contrast
+    // Keep the NASA texture readable without pushing it into stylized color grading.
     jupiterMaterial.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         `#include <map_fragment>`,
@@ -1009,21 +970,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         #ifdef USE_MAP
           vec4 sampledDiffuseColor = texture2D( map, vMapUv );
           
-          // Enhance the Great Red Spot with a warm glow
-          float redDominance = max(0.0, sampledDiffuseColor.r - max(sampledDiffuseColor.g, sampledDiffuseColor.b) * 0.85);
-          sampledDiffuseColor.r += redDominance * 0.4;
-          sampledDiffuseColor.g += redDominance * 0.05;
+          float redDominance = max(0.0, sampledDiffuseColor.r - max(sampledDiffuseColor.g, sampledDiffuseColor.b) * 0.92);
+          sampledDiffuseColor.r += redDominance * 0.12;
+          sampledDiffuseColor.g += redDominance * 0.02;
           
-          // Micro-contrast for band definition
-          vec3 luma = vec3(dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));
-          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, sampledDiffuseColor.rgb * sampledDiffuseColor.rgb * 1.8, 0.15);
-          
-          // Warm subsurface scattering tint (gas giant internal heat)
-          sampledDiffuseColor.rgb += vec3(0.02, 0.008, 0.0) * (1.0 - dot(sampledDiffuseColor.rgb, vec3(0.333)));
-          
-          // Subtle cinematic color grading — push shadows blue, highlights warm
-          float brightness = dot(sampledDiffuseColor.rgb, vec3(0.333));
-          sampledDiffuseColor.rgb += mix(vec3(-0.01, -0.005, 0.02), vec3(0.02, 0.01, -0.01), brightness);
+          vec3 neutralLuma = vec3(dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));
+          sampledDiffuseColor.rgb = mix(neutralLuma, sampledDiffuseColor.rgb, 1.08);
+          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, sampledDiffuseColor.rgb * sampledDiffuseColor.rgb * 1.15, 0.06);
 
           #ifdef DECODE_VIDEO_TEXTURE
             sampledDiffuseColor = vec4( mix( pow( sampledDiffuseColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), sampledDiffuseColor.rgb * 0.0773993808, vec3( lessThanEqual( sampledDiffuseColor.rgb, vec3( 0.04045 ) ) ) ), sampledDiffuseColor.w );
@@ -1088,6 +1041,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           texture.generateMipmaps = true;
           texture.minFilter = THREE.LinearMipmapLinearFilter;
           texture.magFilter = THREE.LinearFilter;
+          texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           earthMaterial.map = texture;
           earthMaterial.color.setHex(0xffffff);
           earthMaterial.needsUpdate = true;
@@ -1100,6 +1054,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Earth normal map for surface relief
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load('2k_earth_normal_map.jpg', (tex) => {
+        tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         earthMaterial.normalMap = tex;
         earthMaterial.normalScale = new THREE.Vector2(0.8, 0.8);
@@ -1178,6 +1133,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.scene.add(this.moonMesh);
       this.loadPromises.push(new Promise<void>((resolve) => {
         textureLoader.load('2k_moon.jpg', (tex) => {
+          tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           moonMat.map = tex; moonMat.color.setHex(0xffffff); moonMat.needsUpdate = true;
           resolve();
@@ -1240,73 +1196,24 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       varying vec3 vPosition;
       varying vec3 vNormalWorld;
 
-      // 3D noise for atmospheric turbulence
-      float hash(float n) { return fract(sin(n) * 1e4); }
-      float noise(vec3 x) {
-          const vec3 step = vec3(110.0, 241.0, 171.0);
-          vec3 i = floor(x);
-          vec3 f = fract(x);
-          float n = dot(i, step);
-          vec3 u = f * f * (3.0 - 2.0 * f);
-          return mix(mix(mix( hash(n + dot(step, vec3(0, 0, 0))), hash(n + dot(step, vec3(1, 0, 0))), u.x),
-                         mix( hash(n + dot(step, vec3(0, 1, 0))), hash(n + dot(step, vec3(1, 1, 0))), u.x), u.y),
-                     mix(mix( hash(n + dot(step, vec3(0, 0, 1))), hash(n + dot(step, vec3(1, 0, 1))), u.x),
-                         mix( hash(n + dot(step, vec3(0, 1, 1))), hash(n + dot(step, vec3(1, 1, 1))), u.x), u.y), u.z);
-      }
-
       void main() {
         vec3 viewDirection = normalize(-vPosition);
-        float fresnel = dot(viewDirection, vNormal);
-        fresnel = clamp(1.0 - fresnel, 0.0, 1.0);
-        
-        // Sun direction and scattering
+        float fresnel = clamp(1.0 - dot(viewDirection, vNormal), 0.0, 1.0);
         vec3 sunDir = normalize(uSunDirection);
         float sunDot = dot(vNormalWorld, sunDir);
-        
-        // Volumetric scattering approximations
-        // Rayleigh scattering (prominent on day side)
-        float rayleigh = smoothstep(-0.2, 1.0, sunDot);
-        
-        // Terminator glow (pronounced at the day/night boundary)
-        float terminatorGlow = smoothstep(0.25, 0.0, abs(sunDot + 0.05));
-        
-        // Mie scattering (forward scattering halo around the sun)
-        float mie = pow(max(dot(viewDirection, sunDir), 0.0), 8.0) * smoothstep(0.0, 0.5, sunDot);
 
-        // Base glow from fresnel (edge of the atmosphere)
-        float baseGlow = pow(fresnel, 3.5) * 1.5 + pow(fresnel, 7.0) * 2.5;
-        
-        // Atmospheric turbulence (shimmer/pulse)
-        float turbulence = noise(vNormalWorld * 6.0 + uTime * 0.3);
-        float highFreqTurbulence = noise(vNormalWorld * 15.0 - uTime * 0.6);
-        float combinedTurbulence = mix(turbulence, highFreqTurbulence, 0.4);
-        
-        // The pulse intensity controls how active the atmosphere is
-        float activePulse = uPulse * combinedTurbulence;
-        
-        // Combine effects
-        float finalGlow = baseGlow * rayleigh + 
-                          baseGlow * terminatorGlow * 3.0 + 
-                          mie * 1.2 + 
-                          (activePulse * fresnel * 4.0);
+        // Jupiter's visible "atmosphere" should read as a thin neutral limb haze,
+        // strongest near the sunlit edge and only slightly enhanced at the terminator.
+        float daySide = smoothstep(-0.05, 0.35, sunDot);
+        float terminator = 1.0 - smoothstep(0.0, 0.16, abs(sunDot));
+        float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 6.0);
+        float baseHaze = pow(fresnel, 4.8);
+        float pulse = mix(1.0, 1.04, uPulse * 0.15);
 
-        // Colors
-        vec3 dayColor = vec3(0.3, 0.6, 1.0); // Sci-fi blue/cyan
-        vec3 nightColor = vec3(0.02, 0.05, 0.1); // Deep blue/black
-        vec3 terminatorColor = vec3(1.0, 0.4, 0.05); // Fiery orange
-        
-        // Mix colors based on sun position
-        vec3 colorMix = mix(nightColor, dayColor, rayleigh);
-        colorMix = mix(colorMix, terminatorColor, terminatorGlow * 0.9);
-        
-        // Add pulse color (bright cyan/white flashes)
-        vec3 pulseColor = vec3(0.7, 0.9, 1.0) * activePulse;
-        colorMix += pulseColor;
-        
-        // Fade out the atmosphere on the dark side, except for the terminator
-        float alpha = finalGlow * smoothstep(-0.4, 0.1, sunDot + terminatorGlow);
-        
-        gl_FragColor = vec4(colorMix, clamp(alpha, 0.0, 1.0));
+        float alpha = baseHaze * (daySide * 0.2 + terminator * 0.35 + forwardScatter * 0.08) * pulse;
+        vec3 hazeColor = mix(vec3(0.92, 0.88, 0.8), vec3(0.98, 0.95, 0.86), daySide);
+
+        gl_FragColor = vec4(hazeColor, clamp(alpha, 0.0, 0.2));
       }
     `;
 
@@ -1353,6 +1260,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.loadPromises.push(new Promise<void>((resolve) => {
         textureLoader.load(config.texture, (tex) => {
           tex.generateMipmaps = true;
+          tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           tex.minFilter = THREE.LinearMipmapLinearFilter;
           mat.map = tex; mat.color.setHex(0xffffff); mat.needsUpdate = true;
           resolve();
@@ -1391,34 +1299,31 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     this.jupiterGroup.add(this.smallMoons);
 
-    // Lighting — physically motivated but cinematic
-    // Deep space has virtually no ambient light; minimal fill preserves realism
-    const ambientLight = new THREE.AmbientLight(0x050510, 0.25);
+    // Lighting — cinematic deep-space look with enough fill to read detail
+    const ambientLight = new THREE.AmbientLight(0x06090e, 0.22);
     this.scene.add(ambientLight);
 
-    // Main sun light — warm white (5778K blackbody close to 0xfff5e0)
-    // Directional to simulate parallel sun rays at Jupiter's distance.
-    const sunLight = new THREE.DirectionalLight(0xfff5e0, 3.2);
+    // Main sun light — warm white (≈5778 K blackbody)
+    const sunLight = new THREE.DirectionalLight(0xfff3dd, 3.8);
     sunLight.position.set(-50, 10, 30);
+    sunLight.target = this.jupiterGroup;
     this.scene.add(sunLight);
 
-    // Point light at the Sun — natural inverse-square falloff for nearby objects
-    // Creates realistic illumination gradient on planets close to the Sun
-    const sunPointLight = new THREE.PointLight(0xffeedd, 8, 200, 1.5);
-    sunPointLight.position.set(-50, 10, 30);
-    this.scene.add(sunPointLight);
-
-    // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    const fillLight = new THREE.DirectionalLight(0x0d1a33, 0.35);
+    // Cool fill from opposite side — keeps nightside detail without washing out contrast
+    const fillLight = new THREE.DirectionalLight(0x1a2640, 0.35);
     fillLight.position.set(50, -10, -30);
     this.scene.add(fillLight);
 
-    // Subtle overhead hemisphere fill for readability (warm above, dark below)
-    const hemiLight = new THREE.HemisphereLight(0x0a0a18, 0x000000, 0.15);
+    // Rim / kick light — subtle edge separation
+    const rimLight = new THREE.DirectionalLight(0x4466aa, 0.18);
+    rimLight.position.set(0, 30, -40);
+    this.scene.add(rimLight);
+
+    const hemiLight = new THREE.HemisphereLight(0x0a0e14, 0x000000, 0.08);
     this.scene.add(hemiLight);
 
     // Cinematic Anamorphic Lens Flare
-    const flareGeo = new THREE.PlaneGeometry(120, 120);
+    const flareGeo = new THREE.PlaneGeometry(42, 42);
     const flareMat = new THREE.ShaderMaterial({
       uniforms: {
         color: { value: new THREE.Color(0x88bbff) }
@@ -1449,9 +1354,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false,
       transparent: true
     });
-    const sunFlare = new THREE.Mesh(flareGeo, flareMat);
-    sunFlare.position.copy(sunLight.position);
-    this.scene.add(sunFlare);
+    this.sunFlare = new THREE.Mesh(flareGeo, flareMat);
+    this.sunFlare.position.copy(sunLight.position);
+    this.scene.add(this.sunFlare);
 
     // Post-processing setup (Film Grain, Vignette, Bloom & Color Grading)
     this.postScene = new THREE.Scene();
@@ -1476,8 +1381,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Soft cinematic vignette — wide falloff for natural look
           float vignette = smoothstep(1.1, 0.25, dist * 1.1);
           
-          // Fine organic film grain (subtle, not distracting)
-          float grain = (random(vUv * 800.0 + mod(uTime, 10.0)) - 0.5) * 0.03;
+          // Very light film texture so bright highlights stay clean
+          float grain = (random(vUv * 420.0 + mod(uTime, 10.0)) - 0.5) * 0.008;
           
           // Subtle anamorphic horizontal streak
           float streak = smoothstep(0.5, 0.0, abs(center.y)) * smoothstep(0.6, 0.3, abs(center.x)) * 0.012;
@@ -1491,7 +1396,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           overlayColor.b += dist * 0.035;
           
           overlayColor.rgb += grain;
-          overlayColor.a += abs(grain) * 0.3;
+          overlayColor.a += abs(grain) * 0.08;
           overlayColor.a = max(overlayColor.a - streak, 0.0);
           
           gl_FragColor = overlayColor;
@@ -1507,8 +1412,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Add spaceships
     this.createSpaceships();
 
+    // Death Star with superlaser
+    this.createDeathStar();
+
+    // Lightsaber duel (Sith vs Jedi easter egg)
+    this.createLightsaberDuel();
+
     // Galaxy effects for deep-space feel
     this.createGalaxyEffects();
+    this.createStarClusters();
 
     // Solar system planets: Saturn, Mars
     this.createSolarSystemPlanets();
@@ -1564,6 +1476,136 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Distance beam between Earth and Jupiter
     this.createDistanceBeam();
+
+    await this.initializeTheatreCamera();
+    this.updateCameraForSlide(this.slideId);
+
+    this.bootstrapManagers();
+  }
+
+  private async initializeTheatreStudio() {
+    if (!this.isBrowser) return;
+
+    const host = globalThis.location.hostname;
+    if (host !== 'localhost' && host !== '127.0.0.1') return;
+
+    const studioModule = await import('@theatre/studio');
+    const theatreStateHash = this.hashTheatreState(JSON.stringify(THEATRE_CAMERA_PROJECT_STATE));
+    studioModule.default.initialize({ persistenceKey: `spreekbeurt-theatre-studio-${theatreStateHash}` });
+  }
+
+  private hashTheatreState(value: string): string {
+    let hash = 5381;
+
+    for (let index = 0; index < value.length; index++) {
+      hash = ((hash << 5) + hash) ^ (value.codePointAt(index) ?? 0);
+    }
+
+    return (hash >>> 0).toString(36);
+  }
+
+  private async initializeTheatreCamera() {
+    await this.initializeTheatreStudio();
+
+    const project = getProject('spreekbeurt-camera', { state: THEATRE_CAMERA_PROJECT_STATE });
+    await project.ready;
+    const sheet = project.sheet('slide-camera');
+    const theatreCameraObject = sheet.object('jupiter-camera', this.theatreCameraValues as never);
+    this.theatreCameraObject = theatreCameraObject;
+    sheet.sequence.position = this.getTheatreSequencePosition(this.slideId);
+    this.theatreCurrentSequencePosition = sheet.sequence.position;
+    this.theatreCameraUnsubscribe?.();
+    this.theatreCameraUnsubscribe = theatreCameraObject.onValuesChange((values) => {
+      const nextValues = values as unknown as TheatreCameraRig;
+      this.theatreCameraValues = nextValues;
+      this.cameraLerpSpeed = nextValues.lerp;
+      this.cameraDriftSpeedX = nextValues.drift.x;
+      this.cameraDriftSpeedY = nextValues.drift.y;
+      this.cameraDriftSpeedZ = nextValues.drift.z;
+      if (this.sunFlare) {
+        this.sunFlare.visible = nextValues.flareVisible;
+      }
+    });
+  }
+
+  private getTheatreSequencePosition(id: string): number {
+    return THEATRE_SLIDE_SEQUENCE_POSITIONS[id as keyof typeof THEATRE_SLIDE_SEQUENCE_POSITIONS] ?? 0;
+  }
+
+  private getTheatreSequencePositionForKey(key: string): number {
+    if (key in THEATRE_TOUR_SEQUENCE_POSITIONS) {
+      return THEATRE_TOUR_SEQUENCE_POSITIONS[key as keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS];
+    }
+
+    if (key in THEATRE_SLIDE_SEQUENCE_POSITIONS) {
+      return THEATRE_SLIDE_SEQUENCE_POSITIONS[key as keyof typeof THEATRE_SLIDE_SEQUENCE_POSITIONS];
+    }
+
+    return THEATRE_SLIDE_SEQUENCE_POSITIONS.title;
+  }
+
+  private transitionTheatreCameraToSlide(id: string) {
+    this.transitionTheatreCameraToKey(id);
+  }
+
+  private transitionTheatreCameraToKey(key: string) {
+    const sequence = this.theatreCameraObject?.sheet.sequence;
+    if (!sequence) return;
+
+    const targetPosition = this.getTheatreSequencePositionForKey(key);
+    const currentPosition = sequence.position;
+    if (Math.abs(targetPosition - currentPosition) < 0.001) {
+      sequence.position = targetPosition;
+      this.theatreCurrentSequencePosition = targetPosition;
+      return;
+    }
+
+    sequence.pause();
+    sequence.position = currentPosition;
+    this.theatreCurrentSequencePosition = currentPosition;
+    const movingForward = targetPosition >= currentPosition;
+    const distance = Math.abs(targetPosition - currentPosition);
+    void sequence.play({
+      range: movingForward ? [currentPosition, targetPosition] : [targetPosition, currentPosition],
+      direction: movingForward ? 'normal' : 'reverse',
+      rate: Math.max(1.25, distance * 2.2),
+    }).then(() => {
+      this.theatreCurrentSequencePosition = targetPosition;
+    });
+  }
+
+  private getSlideCameraAnchor(): THREE.Vector3 {
+    return this.jupiterGroup?.position ?? new THREE.Vector3(12, 0, -15);
+  }
+
+  private getCameraAnchorForKey(key: string): THREE.Vector3 {
+    switch (key) {
+      case 'falcon-launch':
+      case 'falcon-landing':
+        return this.falconCameraAnchor;
+      case 'zon':
+        return this.sunMesh?.position ?? this.getSlideCameraAnchor();
+      case 'mercurius':
+        return this.mercuryMesh?.position ?? this.getSlideCameraAnchor();
+      case 'venus':
+        return this.venusMesh?.position ?? this.getSlideCameraAnchor();
+      case 'aarde':
+        return this.earthMesh?.position ?? this.getSlideCameraAnchor();
+      case 'mars':
+        return this.marsMesh?.position ?? this.getSlideCameraAnchor();
+      case 'saturnus':
+        return this.saturnGroup?.position ?? this.getSlideCameraAnchor();
+      case 'uranus':
+        return this.uranusGroup?.position ?? this.getSlideCameraAnchor();
+      case 'neptunus':
+        return this.neptuneGroup?.position ?? this.getSlideCameraAnchor();
+      case 'pluto':
+        return this.plutoMesh?.position ?? this.getSlideCameraAnchor();
+      case 'jupiter':
+      case 'jupiter-einde':
+      default:
+        return this.getSlideCameraAnchor();
+    }
   }
 
   private updateAtmosphere(time: number) {
@@ -1571,10 +1613,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const pulseScale = 1 + Math.sin(time * 3) * 0.03 * this.currentAtmospherePulse;
       this.atmosphere.scale.set(pulseScale, pulseScale, pulseScale);
 
+      // Cloud parallax: atmosphere rotates ~15% faster than the surface layer
+      this.atmosphere.rotation.y += this.currentJupiterSpinSpeed * 0.15;
+
       const mat = this.atmosphere.material as THREE.ShaderMaterial;
       if (mat.uniforms) {
         mat.uniforms['uTime'].value = time;
         mat.uniforms['uPulse'].value = this.currentAtmospherePulse;
+        if (this.sunMesh && this.jupiterGroup) {
+          const sunDirection = this.sunMesh.position.clone().sub(this.jupiterGroup.position).normalize();
+          mat.uniforms['uSunDirection'].value.copy(sunDirection);
+        }
       }
     }
   }
@@ -1582,22 +1631,44 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private updateCamera() {
     if (this.camera) {
       if (!this.userInteracting) {
-        // Accumulate cinematic drift (slow continuous camera creep within each slide)
-        this.cameraDriftX += this.cameraDriftSpeedX;
-        this.cameraDriftY += this.cameraDriftSpeedY;
-        this.cameraDriftZ += this.cameraDriftSpeedZ;
+        // Disable OrbitControls when slide-driven camera is active to prevent fighting
+        this.controls.enabled = false;
 
-        // Slide-driven camera with mouse parallax + cinematic drift
-        this.targetCameraX = this.baseCameraX + this.mouseX * 3 + this.cameraDriftX;
-        this.targetCameraY = this.baseCameraY + this.mouseY * 3 + this.cameraDriftY;
-        this.targetCameraZ = this.baseCameraZ + this.cameraDriftZ;
+        // Smooth sinusoidal drift (prevents unbounded accumulation)
+        const driftTime = (Date.now() - this.startTime) * 0.001 - this.slideStartTime;
+        this.cameraDriftX = Math.sin(driftTime * this.cameraDriftSpeedX * 8) * Math.abs(this.cameraDriftSpeedX) * 40;
+        this.cameraDriftY = Math.sin(driftTime * this.cameraDriftSpeedY * 8 + 1.2) * Math.abs(this.cameraDriftSpeedY) * 40;
+        this.cameraDriftZ = Math.sin(driftTime * this.cameraDriftSpeedZ * 8 + 2.4) * Math.abs(this.cameraDriftSpeedZ) * 40;
 
-        this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
-        this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
-        this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.cameraLerpSpeed;
+        const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
+        this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
+        this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
+        this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
 
-        this.currentLookAt.lerp(this.targetLookAt, this.cameraLerpSpeed);
+        // During falcon tracking, reduce mouse parallax to avoid camera snapping
+        const isFalconMode = this.activeCameraAnchorKey === 'falcon-launch' || this.activeCameraAnchorKey === 'falcon-landing';
+        const parallaxScale = isFalconMode ? 0.15 : 1;
+
+        this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x * parallaxScale + this.cameraDriftX;
+        this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y * parallaxScale + this.cameraDriftY;
+        this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z * parallaxScale + this.cameraDriftZ;
+        this.targetLookAt.set(
+          anchor.x + this.theatreCameraValues.lookOffset.x,
+          anchor.y + this.theatreCameraValues.lookOffset.y,
+          anchor.z + this.theatreCameraValues.lookOffset.z,
+        );
+
+        // Use faster lerp during falcon tracking for responsive following
+        const lerpSpeed = isFalconMode ? Math.max(this.cameraLerpSpeed, 0.06) : this.cameraLerpSpeed;
+
+        this.camera.position.x += (this.targetCameraX - this.camera.position.x) * lerpSpeed;
+        this.camera.position.y += (this.targetCameraY - this.camera.position.y) * lerpSpeed;
+        this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * lerpSpeed;
+
+        this.currentLookAt.lerp(this.targetLookAt, lerpSpeed);
         this.controls.target.copy(this.currentLookAt);
+      } else {
+        this.controls.enabled = true;
       }
       this.controls.update();
     }
@@ -1720,6 +1791,253 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         orbitInclination: cfg.incl,
       });
     });
+  }
+
+  private createDeathStar() {
+    this.deathStarGroup = new THREE.Group();
+
+    // Main sphere — PBR metallic surface
+    const dsGeo = new THREE.SphereGeometry(4, 64, 64);
+    const dsMat = new THREE.MeshStandardMaterial({
+      color: 0x888888,
+      metalness: 0.8,
+      roughness: 0.4,
+      emissive: 0x0a0a0a,
+      emissiveIntensity: 0.2,
+    });
+    const dsMain = new THREE.Mesh(dsGeo, dsMat);
+    this.deathStarGroup.add(dsMain);
+
+    // Equatorial trench — darkened groove ring
+    const trenchGeo = new THREE.TorusGeometry(4.01, 0.15, 8, 64);
+    const trenchMat = new THREE.MeshStandardMaterial({
+      color: 0x333333,
+      metalness: 0.9,
+      roughness: 0.2,
+    });
+    const trench = new THREE.Mesh(trenchGeo, trenchMat);
+    trench.rotation.x = Math.PI / 2;
+    this.deathStarGroup.add(trench);
+
+    // Superlaser dish — concavity in the upper hemisphere
+    const dishGeo = new THREE.SphereGeometry(1.2, 32, 32, 0, Math.PI * 2, 0, Math.PI / 3);
+    const dishMat = new THREE.MeshStandardMaterial({
+      color: 0x222222,
+      metalness: 0.95,
+      roughness: 0.15,
+      side: THREE.BackSide,
+    });
+    const dish = new THREE.Mesh(dishGeo, dishMat);
+    dish.position.set(0, 2.6, -2.6);
+    dish.lookAt(0, 4.5, -4.5);
+    this.deathStarGroup.add(dish);
+
+    // Superlaser beam (cylinder, hidden by default)
+    const beamGeo = new THREE.CylinderGeometry(0.08, 0.3, 50, 8);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: 0x44ff44,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+    });
+    this.superlaserBeam = new THREE.Mesh(beamGeo, beamMat);
+    this.superlaserBeam.position.set(0, 2.8, -2.8);
+    this.superlaserBeam.lookAt(0, 30, -30);
+    this.superlaserBeam.visible = false;
+    this.deathStarGroup.add(this.superlaserBeam);
+
+    // Surface greeble detail via panel lines (subtle normal distortion)
+    const panelGeo = new THREE.IcosahedronGeometry(4.02, 3);
+    const panelMat = new THREE.MeshStandardMaterial({
+      color: 0x777777,
+      metalness: 0.85,
+      roughness: 0.35,
+      wireframe: true,
+      transparent: true,
+      opacity: 0.15,
+    });
+    this.deathStarGroup.add(new THREE.Mesh(panelGeo, panelMat));
+
+    // Position near Jupiter
+    const jp = this.jupiterGroup.position;
+    this.deathStarGroup.position.set(jp.x + 45, jp.y + 12, jp.z - 30);
+    this.scene.add(this.deathStarGroup);
+  }
+
+  private updateDeathStar(time: number) {
+    if (!this.deathStarGroup) return;
+    // Slow rotation
+    this.deathStarGroup.rotation.y += 0.0003;
+
+    // Periodic superlaser firing (every ~30 seconds, lasts 2s)
+    if (!this.superlaserFiring && time - this.superlaserTimer > 30) {
+      this.superlaserFiring = true;
+      this.superlaserTimer = time;
+      this.superlaserBeam.visible = true;
+    }
+    if (this.superlaserFiring) {
+      const elapsed = time - this.superlaserTimer;
+      const mat = this.superlaserBeam.material as THREE.MeshBasicMaterial;
+      if (elapsed < 0.5) {
+        // Charge-up: scale grows, opacity rises
+        const t = elapsed / 0.5;
+        mat.opacity = t * 0.9;
+        this.superlaserBeam.scale.set(t, 1, t);
+      } else if (elapsed < 1.8) {
+        // Full fire: flicker
+        mat.opacity = 0.7 + Math.random() * 0.3;
+        this.superlaserBeam.scale.set(1, 1, 1);
+      } else if (elapsed < 2.2) {
+        // Fade out
+        const t = 1 - (elapsed - 1.8) / 0.4;
+        mat.opacity = t * 0.9;
+        this.superlaserBeam.scale.set(t, 1, t);
+      } else {
+        mat.opacity = 0;
+        this.superlaserBeam.visible = false;
+        this.superlaserFiring = false;
+      }
+    }
+  }
+
+  private createLightsaberDuel() {
+    this.lightsaberGroup = new THREE.Group();
+
+    // Red saber blade (Sith)
+    const bladeGeo = new THREE.CapsuleGeometry(0.03, 1.2, 4, 8);
+    const redMat = new THREE.MeshStandardMaterial({
+      color: 0xff0000,
+      emissive: 0xff0000,
+      emissiveIntensity: 20,
+      transparent: true,
+      opacity: 0.95,
+    });
+    this.saberRed = new THREE.Mesh(bladeGeo, redMat);
+    this.saberRed.position.set(-0.4, 0, 0);
+    this.lightsaberGroup.add(this.saberRed);
+
+    // Green saber blade (Jedi)
+    const greenMat = new THREE.MeshStandardMaterial({
+      color: 0x00ff00,
+      emissive: 0x00ff00,
+      emissiveIntensity: 20,
+      transparent: true,
+      opacity: 0.95,
+    });
+    this.saberGreen = new THREE.Mesh(bladeGeo.clone(), greenMat);
+    this.saberGreen.position.set(0.4, 0, 0);
+    this.lightsaberGroup.add(this.saberGreen);
+
+    // Simple hilt handles
+    const hiltGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8);
+    const hiltMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.2 });
+    const hiltRed = new THREE.Mesh(hiltGeo, hiltMat);
+    hiltRed.position.set(-0.4, -0.75, 0);
+    this.lightsaberGroup.add(hiltRed);
+    const hiltGreen = new THREE.Mesh(hiltGeo.clone(), hiltMat.clone());
+    hiltGreen.position.set(0.4, -0.75, 0);
+    this.lightsaberGroup.add(hiltGreen);
+
+    // Dynamic PointLights on each blade
+    this.saberLightRed = new THREE.PointLight(0xff0000, 3, 8, 2);
+    this.saberLightRed.position.copy(this.saberRed.position);
+    this.lightsaberGroup.add(this.saberLightRed);
+    this.saberLightGreen = new THREE.PointLight(0x00ff00, 3, 8, 2);
+    this.saberLightGreen.position.copy(this.saberGreen.position);
+    this.lightsaberGroup.add(this.saberLightGreen);
+
+    // Position near an orbiting TIE fighter area
+    const jp = this.jupiterGroup.position;
+    this.lightsaberGroup.position.set(jp.x + 28, jp.y + 3, jp.z + 10);
+    this.lightsaberGroup.scale.setScalar(1.5);
+    this.scene.add(this.lightsaberGroup);
+  }
+
+  private updateLightsaberDuel(time: number) {
+    if (!this.lightsaberGroup) return;
+    this.saberDuelTimer = time;
+
+    // Animated swing pattern — sabers cross and separate
+    const swing = Math.sin(time * 3) * 0.6;
+    const thrust = Math.sin(time * 2.1) * 0.3;
+
+    this.saberRed.rotation.z = swing + 0.3;
+    this.saberRed.position.x = -0.4 + thrust * 0.3;
+    this.saberRed.position.y = Math.sin(time * 2.5) * 0.2;
+    this.saberGreen.rotation.z = -swing - 0.3;
+    this.saberGreen.position.x = 0.4 - thrust * 0.3;
+    this.saberGreen.position.y = Math.sin(time * 2.5 + 1) * 0.2;
+
+    // Update light positions
+    this.saberLightRed.position.copy(this.saberRed.position);
+    this.saberLightGreen.position.copy(this.saberGreen.position);
+
+    // Clash strobe — when blades are close together
+    const bladeDist = this.saberRed.position.distanceTo(this.saberGreen.position);
+    if (bladeDist < 0.5) {
+      const strobe = Math.random() > 0.3 ? 8 : 2;
+      this.saberLightRed.intensity = strobe;
+      this.saberLightGreen.intensity = strobe;
+    } else {
+      this.saberLightRed.intensity = 3;
+      this.saberLightGreen.intensity = 3;
+    }
+
+    // Gentle group rotation so the duel is visible from different angles
+    this.lightsaberGroup.rotation.y += 0.003;
+  }
+
+  triggerHyperspaceJump() {
+    if (this.hyperspaceActive) return;
+    this.hyperspaceActive = true;
+    this.hyperspaceTimer = 0;
+    this.originalFov = this.camera.fov;
+  }
+
+  private updateHyperspace(deltaTime: number) {
+    if (!this.hyperspaceActive) return;
+    this.hyperspaceTimer += deltaTime;
+    const t = this.hyperspaceTimer / this.hyperspaceDuration;
+
+    if (t < 0.2) {
+      // Phase 1: FOV kick (60 → 120)
+      const fovT = t / 0.2;
+      this.camera.fov = THREE.MathUtils.lerp(this.originalFov, 120, fovT);
+      this.camera.updateProjectionMatrix();
+    } else if (t < 0.3) {
+      // Phase 2: White-out bloom spike
+      this.camera.fov = 120;
+      this.camera.updateProjectionMatrix();
+      this.postProcessManager?.setBloomIntensity(10);
+    } else if (t < 0.8) {
+      // Phase 3: Streaked stars (held), bloom fading
+      this.camera.fov = 120;
+      this.camera.updateProjectionMatrix();
+      const fadeT = (t - 0.3) / 0.5;
+      this.postProcessManager?.setBloomIntensity(THREE.MathUtils.lerp(10, this.originalBloomIntensity, fadeT));
+    } else if (t < 1) {
+      // Phase 4: Snap back
+      const snapT = (t - 0.8) / 0.2;
+      this.camera.fov = THREE.MathUtils.lerp(120, this.originalFov, snapT);
+      this.camera.updateProjectionMatrix();
+      this.postProcessManager?.setBloomIntensity(this.originalBloomIntensity);
+    } else {
+      // Done
+      this.camera.fov = this.originalFov;
+      this.camera.updateProjectionMatrix();
+      this.postProcessManager?.setBloomIntensity(this.originalBloomIntensity);
+      this.hyperspaceActive = false;
+    }
+
+    // Stretch background stars along camera Z-axis for motion-blur effect
+    if (this.stars && t < 0.8) {
+      const stretch = t < 0.2 ? t / 0.2 : 1;
+      const zScale = 1 + stretch * 15;
+      this.stars.scale.set(1, 1, zScale);
+    } else if (this.stars) {
+      const snapT = Math.min((t - 0.8) / 0.2, 1);
+      this.stars.scale.set(1, 1, THREE.MathUtils.lerp(16, 1, snapT));
+    }
   }
 
   private buildFighterShip(): THREE.Group {
@@ -2021,25 +2339,34 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const sinI = Math.sin(ship.orbitInclination);
       const cosI = Math.cos(ship.orbitInclination);
 
-      ship.group.position.set(
+      const targetPosition = new THREE.Vector3(
         jupiterPos.x + ship.orbitRadius * cosA,
         jupiterPos.y + ship.orbitY + ship.orbitRadius * sinA * sinI,
         jupiterPos.z + ship.orbitRadius * sinA * cosI
       );
 
-      // Face direction of travel
-      const ahead = ship.orbitAngle + Math.sign(ship.orbitSpeed) * 0.1;
-      ship.group.lookAt(
+      const currentPosition = this.physicsManager.getObjectPosition(ship.group);
+      const steeringImpulse = targetPosition.sub(currentPosition).multiplyScalar(0.018);
+      this.physicsManager.applyImpulse(ship.group, steeringImpulse, true);
+      this.physicsManager.applyInverseSquareGravity(ship.group, this.getGravitySources(), 0.08);
+
+      const velocity = this.physicsManager.getLinearVelocity(ship.group);
+      if (velocity.lengthSq() > 0.0001) {
+        ship.group.lookAt(ship.group.position.clone().add(velocity));
+      } else {
+        const ahead = ship.orbitAngle + Math.sign(ship.orbitSpeed) * 0.1;
+        ship.group.lookAt(
         jupiterPos.x + ship.orbitRadius * Math.cos(ahead),
         jupiterPos.y + ship.orbitY + ship.orbitRadius * Math.sin(ahead) * sinI,
         jupiterPos.z + ship.orbitRadius * Math.sin(ahead) * cosI
-      );
+        );
+      }
     });
   }
 
   private createGalaxyEffects() {
     // Milky Way band - dense concentration of stars in a tilted plane
-    const bandCount = 25000;
+    const bandCount = 35000;
     const bandGeo = new THREE.BufferGeometry();
     const bandPos = new Float32Array(bandCount * 3);
     const bandColors = new Float32Array(bandCount * 3);
@@ -2177,6 +2504,177 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     })));
   }
 
+  private createStarClusters() {
+    const clusterCount = 2500;
+    const clusterGeo = new THREE.IcosahedronGeometry(0.18, 0);
+    const clusterMat = new THREE.MeshBasicMaterial({
+      color: 0xffffff,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.starClusters = new THREE.InstancedMesh(clusterGeo, clusterMat, clusterCount);
+
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < clusterCount; i++) {
+      const radius = 200 + Math.random() * 1200;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(THREE.MathUtils.randFloatSpread(2));
+      dummy.position.setFromSphericalCoords(radius, phi, theta);
+      const scale = 0.6 + Math.random() * 2.2;
+      dummy.scale.setScalar(scale);
+      dummy.updateMatrix();
+      this.starClusters.setMatrixAt(i, dummy.matrix);
+      this.starClusters.setColorAt(i, new THREE.Color().setHSL(0.08 + Math.random() * 0.14, 0.4, 0.75));
+    }
+
+    this.starClusters.instanceMatrix.needsUpdate = true;
+    if (this.starClusters.instanceColor) {
+      this.starClusters.instanceColor.needsUpdate = true;
+    }
+
+    this.scene.add(this.starClusters);
+  }
+
+  private bootstrapManagers() {
+    this.postProcessManager = new PostProcessManager(this.renderer, this.scene, this.camera, this.sunMesh);
+    this.registerBloomTargets();
+    this.registerPhysicsBodies();
+    this.registerFrustumTargets();
+  }
+
+  private registerBloomTargets() {
+    if (!this.postProcessManager) return;
+
+    if (this.sunMesh) {
+      this.postProcessManager.addBloomSelectionRecursive(this.sunMesh);
+    }
+    if (this.falconExhaust) {
+      this.postProcessManager.addBloomSelectionRecursive(this.falconExhaust);
+    }
+    if (this.auroraTop) this.postProcessManager.addBloomSelection(this.auroraTop);
+    if (this.auroraBottom) this.postProcessManager.addBloomSelection(this.auroraBottom);
+    this.spaceshipData.forEach((ship) => {
+      ship.group.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
+          this.postProcessManager?.addBloomSelection(child);
+        }
+      });
+    });
+
+    // Lightsaber blades on bloom layer (Selective Bloom)
+    if (this.saberRed) this.postProcessManager.addBloomSelection(this.saberRed);
+    if (this.saberGreen) this.postProcessManager.addBloomSelection(this.saberGreen);
+    // Death Star superlaser beam on bloom layer
+    if (this.superlaserBeam) this.postProcessManager.addBloomSelection(this.superlaserBeam);
+  }
+
+  private registerPhysicsBodies() {
+    this.physicsManager.bridge(this.jupiterGroup, { kind: 'fixed', collider: 'ball', radius: 10 });
+    this.physicsManager.bridge(this.sunMesh, { kind: 'fixed', collider: 'ball', radius: 6 });
+    this.physicsManager.bridge(this.earthMesh, { kind: 'kinematic', collider: 'ball', radius: 0.89 });
+    this.physicsManager.bridge(this.moonMesh, { kind: 'kinematic', collider: 'ball', radius: 0.28 });
+    this.physicsManager.bridge(this.marsMesh, { kind: 'fixed', collider: 'ball', radius: 0.475 });
+    this.physicsManager.bridge(this.saturnGroup, { kind: 'fixed', collider: 'ball', radius: 8.4 });
+    this.physicsManager.bridge(this.uranusGroup, { kind: 'fixed', collider: 'ball', radius: 3.6 });
+    this.physicsManager.bridge(this.neptuneGroup, { kind: 'fixed', collider: 'ball', radius: 3.5 });
+    this.physicsManager.bridge(this.titanMesh, { kind: 'kinematic', collider: 'ball', radius: 0.5 });
+    this.physicsManager.bridge(this.plutoMesh, { kind: 'fixed', collider: 'ball', radius: 0.32 });
+    this.physicsManager.bridge(this.falconGroup, {
+      kind: 'dynamic',
+      collider: 'capsule',
+      radius: 0.05,
+      halfHeight: 0.22,
+      mass: 0.4,
+      linearDamping: 0.06,
+      angularDamping: 0.25,
+      ccd: true,
+      canSleep: false,
+    });
+
+    this.spaceshipData.forEach((ship, index) => {
+      const box = new THREE.Box3().setFromObject(ship.group);
+      const size = new THREE.Vector3();
+      box.getSize(size).multiplyScalar(0.5);
+      this.physicsManager.bridge(ship.group, {
+        kind: 'dynamic',
+        collider: 'box',
+        halfExtents: size.max(new THREE.Vector3(0.03, 0.03, 0.03)),
+        mass: 0.7,
+        linearDamping: 0.18,
+        angularDamping: 0.45,
+        ccd: true,
+        canSleep: false,
+      });
+      if (index === 0) {
+        this.physicsManager.setPlayerObject(ship.group);
+      }
+    });
+  }
+
+  private registerFrustumTargets() {
+    this.frustumCullTargets.length = 0;
+    this.frustumCullTargets.push(
+      { object: this.saturnGroup, radius: 30 },
+      { object: this.uranusGroup, radius: 18 },
+      { object: this.neptuneGroup, radius: 18 },
+      { object: this.plutoMesh, radius: 8 },
+      { object: this.asteroidBelt, radius: 55 },
+      { object: this.trojanL4, radius: 28 },
+      { object: this.trojanL5, radius: 28 },
+      { object: this.starClusters, radius: 1500 },
+      { object: this.deathStarGroup, radius: 12 },
+      { object: this.lightsaberGroup, radius: 6 },
+    );
+  }
+
+  private updateCustomFrustumCulling() {
+    this.projectionMatrix.multiplyMatrices(this.camera.projectionMatrix, this.camera.matrixWorldInverse);
+    this.frustum.setFromProjectionMatrix(this.projectionMatrix);
+
+    for (const target of this.frustumCullTargets) {
+      if (!target.object) continue;
+      const sphere = new THREE.Sphere(target.object.position.clone(), target.radius);
+      target.object.visible = this.frustum.intersectsSphere(sphere);
+    }
+  }
+
+  private getGravitySources() {
+    return [
+      { position: this.jupiterGroup.position.clone(), mass: 120_000 },
+      { position: this.sunMesh.position.clone(), mass: 240_000 },
+      { position: this.earthMesh.position.clone(), mass: 3_000 },
+      { position: this.marsMesh.position.clone(), mass: 1_800 },
+    ];
+  }
+
+  private maybeShiftFloatingOrigin() {
+    const playerPosition = this.physicsManager.getPlayerPosition();
+    if (!playerPosition || playerPosition.length() < this.floatingOriginThreshold) {
+      return;
+    }
+
+    const shift = playerPosition.clone();
+    this.scene.children.forEach((child) => {
+      child.position.sub(shift);
+    });
+    this.physicsManager.shiftWorld(shift);
+
+    this.camera.position.sub(shift);
+    this.currentLookAt.sub(shift);
+    this.targetLookAt.sub(shift);
+    this.baseCameraX -= shift.x;
+    this.baseCameraY -= shift.y;
+    this.baseCameraZ -= shift.z;
+    this.targetCameraX -= shift.x;
+    this.targetCameraY -= shift.y;
+    this.targetCameraZ -= shift.z;
+    this.controls.target.sub(shift);
+    this.falconStartPos.sub(shift);
+    this.falconTargetPos.sub(shift);
+  }
+
   private buildFalcon9(): THREE.Group {
     const group = new THREE.Group();
 
@@ -2292,85 +2790,190 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.falconExhaust.visible = true;
     this.falconLaunched = true;
     this.falconLaunchTime = (Date.now() - this.startTime) * 0.001;
-    // Start and end positions
+    this.falconGroup.scale.setScalar(1);
+    // Start and end positions — read from physics after setting translation
     this.falconStartPos.copy(this.falconGroup.position);
-    this.falconTargetPos.copy(this.marsMesh.position);
+    this.falconTargetPos.copy(this.marsMesh.position).add(new THREE.Vector3(0.42, 0.58, 0.38));
+    this.physicsManager.setTranslation(this.falconGroup, this.falconStartPos, true);
+    this.physicsManager.setLinvel(this.falconGroup, new THREE.Vector3(), true);
+    // Gentle initial lift impulse
+    this.physicsManager.applyImpulse(this.falconGroup, new THREE.Vector3(0, 1.8, 0.4), true);
     // Point exhaust light on
     const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
     if (light) light.intensity = 4;
+
+    // ★ Immediately switch camera to follow the launch
+    this.falconCameraAnchor.copy(this.earthMesh.position).lerp(this.falconGroup.position, 0.55);
+    this.activeCameraAnchorKey = 'falcon-launch';
+    this.userInteracting = false;
+  }
+
+  private getFalconCruiseMidpoint(): THREE.Vector3 {
+    const midpoint = new THREE.Vector3().lerpVectors(this.falconStartPos, this.falconTargetPos, 0.18);
+    midpoint.y += 8;
+    return midpoint;
+  }
+
+  private getFalconApproachPosition(): THREE.Vector3 {
+    return this.falconTargetPos.clone().add(new THREE.Vector3(0, 2.3, 0));
+  }
+
+  private getFalconFlightTarget(t: number): THREE.Vector3 {
+    if (t < 0.1) {
+      const liftT = t / 0.1;
+      const liftEase = liftT * liftT;
+      return new THREE.Vector3().lerpVectors(
+        this.falconStartPos,
+        new THREE.Vector3(this.falconStartPos.x, this.falconStartPos.y + 3.4, this.falconStartPos.z),
+        liftEase
+      );
+    }
+
+    if (t < 0.24) {
+      const turnT = (t - 0.1) / 0.14;
+      const above = new THREE.Vector3(this.falconStartPos.x, this.falconStartPos.y + 3.4, this.falconStartPos.z);
+      return new THREE.Vector3().lerpVectors(above, this.getFalconCruiseMidpoint(), turnT);
+    }
+
+    if (t < 0.82) {
+      const cruiseT = (t - 0.24) / 0.58;
+      const cruiseEase = 1 - Math.pow(1 - cruiseT, 2);
+      const scale = Math.max(0.42, 1 - cruiseT * 0.55);
+      this.falconGroup.scale.setScalar(scale);
+      return new THREE.Vector3().lerpVectors(this.getFalconCruiseMidpoint(), this.getFalconApproachPosition(), cruiseEase);
+    }
+
+    const landingT = (t - 0.82) / 0.18;
+    const landingEase = 1 - Math.pow(1 - landingT, 3);
+    const landingScale = Math.max(0.34, 0.45 - landingT * 0.08);
+    this.falconGroup.scale.setScalar(landingScale);
+    return new THREE.Vector3().lerpVectors(this.getFalconApproachPosition(), this.falconTargetPos, landingEase);
+  }
+
+  private getFalconGuidanceStrength(t: number): number {
+    // Ramp up guidance slowly at launch so the initial impulse isn't overridden
+    if (t < 0.05) return 0.005;
+    if (t < 0.24) return 0.028;
+    if (t < 0.82) return 0.014;
+    // Stronger on approach so the rocket converges on the landing pad
+    return 0.032;
+  }
+
+  private updateFalconCameraAnchor(timeRatio: number, falconPosition: THREE.Vector3) {
+    if (timeRatio < 0.18) {
+      // Launch phase — camera blends between Earth and Falcon for dramatic liftoff view
+      const launchBlend = Math.min(timeRatio / 0.12, 1);
+      if (this.earthMesh) {
+        this.falconCameraAnchor.copy(this.earthMesh.position).lerp(falconPosition, 0.4 + launchBlend * 0.3);
+      }
+      this.activeCameraAnchorKey = 'falcon-launch';
+    } else if (timeRatio < 0.8) {
+      // Cruise phase — smoothly track the falcon mid-flight
+      this.falconCameraAnchor.lerp(falconPosition, 0.08);
+      this.activeCameraAnchorKey = 'falcon-launch';
+    } else {
+      // Landing phase — camera blends between Falcon and Mars for epic landing
+      const landingBlend = Math.min((timeRatio - 0.8) / 0.15, 1);
+      if (this.marsMesh) {
+        this.falconCameraAnchor.copy(falconPosition).lerp(this.marsMesh.position, landingBlend * 0.45);
+      }
+      this.activeCameraAnchorKey = 'falcon-landing';
+    }
+  }
+
+  private updateFalconExhaustVisuals(time: number, timeRatio: number) {
+    if (!this.falconExhaust) return;
+
+    const mat = this.falconExhaust.material as THREE.ShaderMaterial;
+    // Use relative time from launch for consistent exhaust animation
+    mat.uniforms['uTime'].value = time - this.falconLaunchTime;
+
+    let thrustScale = 1;
+    if (timeRatio < 0.05) {
+      // Ignition ramp-up
+      thrustScale = 0.3 + (timeRatio / 0.05) * 1.7;
+    } else if (timeRatio < 0.15) {
+      // Full thrust — max plume
+      thrustScale = 2;
+    } else if (timeRatio > 0.82 && timeRatio < 0.94) {
+      // Landing burn — re-ignition
+      const landT = (timeRatio - 0.82) / 0.12;
+      thrustScale = 0.4 + landT * 1.2;
+    } else if (timeRatio >= 0.94) {
+      thrustScale = 0.3;
+    } else {
+      // Cruise — moderate thrust
+      thrustScale = 0.75;
+    }
+
+    this.falconExhaust.scale.set(thrustScale, thrustScale * (1 + Math.sin(time * 20) * 0.1), thrustScale);
+    this.falconExhaust.visible = timeRatio < 0.97;
+
+    // Update exhaust point light intensity to match thrust
+    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+    if (light) {
+      light.intensity = thrustScale * 2.5;
+    }
+  }
+
+  private finalizeFalconLanding() {
+    this.falconExhaust.visible = false;
+    this.physicsManager.setTranslation(this.falconGroup, this.falconTargetPos, true);
+    this.physicsManager.setLinvel(this.falconGroup, new THREE.Vector3(), true);
+    this.falconGroup.quaternion.slerp(new THREE.Quaternion(), 1);
+    this.falconGroup.visible = true;
+    // Mark as no longer in flight, but keep the rocket visible on Mars
+    this.falconLaunched = false;
+    // Exhaust light off
+    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+    if (light) light.intensity = 0;
+    // Return camera to the tour's current planet stop
+    if (this.tourActive && this.tourStops.length > 0) {
+      this.activeCameraAnchorKey = this.tourStops[this.tourStopIndex].name;
+    }
   }
 
   private updateFalcon9(time: number) {
     if (!this.falconLaunched || !this.falconGroup) return;
 
     const elapsed = time - this.falconLaunchTime;
-    const totalDuration = 25; // seconds for full journey
+    const totalDuration = this.falconFlightDuration;
     const t = Math.min(elapsed / totalDuration, 1);
 
-    // Ease: slow start (liftoff), accelerate, then cruise
-    const ease = t < 0.15 ? (t / 0.15) * (t / 0.15) * 0.15 : 0.15 + (t - 0.15) * (0.85 / 0.85);
+    const targetPosition = this.getFalconFlightTarget(t);
 
-    if (t < 0.08) {
-      // Phase 1: Liftoff — straight up from Earth
-      const liftT = t / 0.08;
-      const liftEase = liftT * liftT; // Accelerating upward
-      this.falconGroup.position.lerpVectors(
-        this.falconStartPos,
-        new THREE.Vector3(this.falconStartPos.x, this.falconStartPos.y + 3, this.falconStartPos.z),
-        liftEase
-      );
-    } else if (t < 0.2) {
-      // Phase 2: Gravity turn — arc over toward Mars
-      const turnT = (t - 0.08) / 0.12;
-      const above = new THREE.Vector3(this.falconStartPos.x, this.falconStartPos.y + 3, this.falconStartPos.z);
-      const midpoint = new THREE.Vector3().lerpVectors(this.falconStartPos, this.falconTargetPos, 0.15);
-      midpoint.y += 8; // High arc above the plane
-      this.falconGroup.position.lerpVectors(above, midpoint, turnT);
-    } else {
-      // Phase 3: Interplanetary cruise toward Mars
-      const cruiseT = (t - 0.2) / 0.8;
-      const cruiseEase = 1 - Math.pow(1 - cruiseT, 2); // Ease out
-      const midpoint = new THREE.Vector3().lerpVectors(this.falconStartPos, this.falconTargetPos, 0.15);
-      midpoint.y += 8;
-      this.falconGroup.position.lerpVectors(midpoint, this.falconTargetPos, cruiseEase);
-      // Scale down as it flies away to simulate distance
-      const scale = Math.max(0.3, 1 - cruiseT * 0.7);
-      this.falconGroup.scale.setScalar(scale);
-    }
+    const falconPosition = this.physicsManager.getObjectPosition(this.falconGroup);
+    const guidance = targetPosition.clone().sub(falconPosition).multiplyScalar(this.getFalconGuidanceStrength(t));
+    this.physicsManager.applyImpulse(this.falconGroup, guidance, true);
+    this.physicsManager.applyInverseSquareGravity(this.falconGroup, this.getGravitySources(), 0.12);
 
-    // Orient rocket along velocity (look in direction of travel)
-    if (t > 0.01) {
-      const dir = new THREE.Vector3();
-      if (t < 0.08) {
-        dir.set(0, 1, 0);
-      } else {
-        dir.subVectors(this.falconTargetPos, this.falconGroup.position).normalize();
-      }
+    // Velocity damping — prevents overshoot & oscillation, stronger near landing
+    const damping = t > 0.85 ? 0.92 : 0.97;
+    const vel = this.physicsManager.getLinearVelocity(this.falconGroup);
+    this.physicsManager.setLinvel(this.falconGroup, vel.multiplyScalar(damping), true);
+
+    const updatedFalconPosition = this.physicsManager.getObjectPosition(this.falconGroup);
+    this.updateFalconCameraAnchor(t, updatedFalconPosition);
+
+    const velocity = this.physicsManager.getLinearVelocity(this.falconGroup);
+    if (t > 0.01 && velocity.lengthSq() > 0.0001) {
+      const dir = velocity.normalize();
       const up = new THREE.Vector3(0, 1, 0);
       const quat = new THREE.Quaternion();
       const mat4 = new THREE.Matrix4();
       mat4.lookAt(new THREE.Vector3(), dir, up);
       quat.setFromRotationMatrix(mat4);
-      // Rocket's "up" is Y axis, but lookAt points Z forward, so rotate
       const adjust = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
       quat.multiply(adjust);
-      this.falconGroup.quaternion.slerp(quat, 0.05);
+      // Faster slerp for snappy orientation; extra responsive during landing
+      const slerpFactor = t > 0.82 ? 0.15 : 0.1;
+      this.falconGroup.quaternion.slerp(quat, slerpFactor);
     }
 
-    // Exhaust animation
-    if (this.falconExhaust) {
-      const mat = this.falconExhaust.material as THREE.ShaderMaterial;
-      mat.uniforms['uTime'].value = time;
-      // Vary exhaust size with thrust
-      const thrustScale = t < 0.15 ? 1.5 : 1;
-      this.falconExhaust.scale.set(thrustScale, thrustScale * (1 + Math.sin(time * 20) * 0.1), thrustScale);
-    }
+    this.updateFalconExhaustVisuals(time, t);
 
-    // Done
     if (t >= 1) {
-      this.falconGroup.visible = false;
-      this.falconExhaust.visible = false;
-      this.falconLaunched = false;
+      this.finalizeFalconLanding();
     }
   }
 
@@ -2389,6 +2992,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Load Saturn texture
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('2k_saturn.jpg', (tex) => {
+        tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         saturnMat.map = tex; saturnMat.color.setHex(0xffffff); saturnMat.needsUpdate = true;
         resolve();
@@ -3316,9 +3920,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 viewDir = normalize(-vPos);
           float rim = 1.0 - dot(viewDir, vNormal);
           // Thin bright ring at the very edge — Hα red-pink emission
-          float chromo = pow(rim, 6.0) * 3.0;
+          float chromo = pow(rim, 6.0) * 2.0;
           vec3 color = mix(vec3(1.0, 0.3, 0.15), vec3(1.0, 0.5, 0.3), rim);
-          gl_FragColor = vec4(color * 2.0, chromo * 0.8);
+          gl_FragColor = vec4(color * 1.45, chromo * 0.42);
         }
       `,
       transparent: true, side: THREE.FrontSide,
@@ -3365,13 +3969,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           streamers *= 0.7 + 0.3 * noise2(vec2(angle * 3.0, uTime * 0.05));
           
           // Corona intensity falls off as ~r^-2.5
-          float corona = pow(rim, 1.8) * 2.0;
+          float corona = pow(rim, 1.8) * 1.35;
           corona *= (0.6 + 0.4 * streamers);
           
           // Pearly white with slight warm tint
           vec3 color = mix(vec3(1.0, 0.96, 0.88), vec3(1.0, 0.8, 0.5), rim * 0.5);
           
-          gl_FragColor = vec4(color * 1.5, corona * 0.5);
+          gl_FragColor = vec4(color * 1.1, corona * 0.24);
         }
       `,
       transparent: true, side: THREE.BackSide,
@@ -3400,11 +4004,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPos);
           float rim = 1.0 - dot(viewDir, vNormal);
-          float corona = pow(rim, 1.5) * 0.8;
+          float corona = pow(rim, 1.5) * 0.52;
           // Slow breathing
           corona *= 0.9 + 0.1 * sin(uTime * 0.3);
           vec3 color = vec3(1.0, 0.88, 0.65);
-          gl_FragColor = vec4(color, corona * 0.12);
+          gl_FragColor = vec4(color, corona * 0.08);
         }
       `,
       transparent: true, side: THREE.BackSide,
@@ -3430,7 +4034,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPos);
           float facing = max(dot(viewDir, vNormal), 0.0);
-          float glow = pow(facing, 3.0) * 0.15;
+          float glow = pow(facing, 3.4) * 0.08;
           vec3 color = vec3(1.0, 0.92, 0.7);
           gl_FragColor = vec4(color, glow);
         }
@@ -4000,6 +4604,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.animationFrameId = requestAnimationFrame(() => this.animate());
 
     const time = (Date.now() - this.startTime) * 0.001;
+    const deltaTime = this.lastRenderTime === 0 ? 1 / 60 : Math.min(time - this.lastRenderTime, 1 / 15);
+    this.lastRenderTime = time;
 
     // Lerp contextual animation values (speed matches camera for cohesive feel)
     const contextLerp = Math.min(this.cameraLerpSpeed * 0.8, 0.04);
@@ -4020,6 +4626,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.earthOrbitActive) {
         this.updateEarthOrbit();
       }
+      this.physicsManager.setKinematicTarget(this.earthMesh, this.earthMesh.position, this.earthMesh.quaternion);
     }
 
       // Moon follows Earth, always visible when Earth is visible
@@ -4036,6 +4643,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           );
           this.moonMesh.rotation.y += 0.002;
         }
+        this.physicsManager.setKinematicTarget(this.moonMesh, this.moonMesh.position, this.moonMesh.quaternion);
       }
 
       // Titan orbits Saturn
@@ -4048,6 +4656,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           sPos.z + 22 * Math.sin(this.titanOrbitAngle)
         );
         this.titanMesh.rotation.y += 0.002;
+        this.physicsManager.setKinematicTarget(this.titanMesh, this.titanMesh.position, this.titanMesh.quaternion);
       }
       // Rotate Pluto slowly
       if (this.plutoMesh) {
@@ -4062,6 +4671,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // New immersive effects
     this.updateShootingStars();
     this.updateComet();
+    this.updateDeathStar(time);
+    this.updateLightsaberDuel(time);
+    this.updateHyperspace(deltaTime);
 
     // Rotate Saturn slowly
     if (this.saturnGroup) {
@@ -4119,6 +4731,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       (this.radiationBelt.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
     }
 
+    this.physicsManager.step(time);
+    this.updateCustomFrustumCulling();
+    this.maybeShiftFloatingOrigin();
+
     // Sun surface + corona animation
     if (this.sunMesh) {
       // Photosphere shader time (granulation + sunspot drift)
@@ -4157,7 +4773,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     this.renderer.autoClear = false;
     this.renderer.clear();
-    this.renderer.render(this.scene, this.camera);
+    this.postProcessManager?.render(deltaTime);
     this.renderer.render(this.postScene, this.postCamera);
   }
 
@@ -4166,6 +4782,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.postProcessManager?.setSize(window.innerWidth, window.innerHeight);
     }
   }
 }

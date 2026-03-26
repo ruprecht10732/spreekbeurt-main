@@ -483,7 +483,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x000000, 0.0008);
+    this.scene.fog = new THREE.FogExp2(0x000000, 0.0005);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -495,7 +495,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.1;
+    this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -535,7 +535,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('2k_stars_milky_way.jpg', (tex) => {
         skyMat.map = tex;
-        skyMat.color.setHex(0x444466); // slightly tinted to not overpower scene
+        skyMat.color.setHex(0x222233); // muted blue-grey — natural deep-space tint
         skyMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -552,8 +552,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     fgDustGeo.setAttribute('position', new THREE.Float32BufferAttribute(fgDustPos, 3));
     const fgDust = new THREE.Points(fgDustGeo, new THREE.PointsMaterial({
-      color: 0x6688cc, transparent: true, opacity: 0.12,
-      size: 0.15, sizeAttenuation: true,
+      color: 0x6688cc, transparent: true, opacity: 0.08,
+      size: 0.12, sizeAttenuation: true,
       blending: THREE.AdditiveBlending, depthWrite: false
     }));
     this.scene.add(fgDust);
@@ -563,13 +563,27 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const starsVertices = [];
     const starsColors = [];
     const starsSizes = [];
+    // Spectral-class star colors (Hertzsprung-Russell diagram)
+    // O/B type: blue-white, A type: white, F type: yellow-white,
+    // G type: yellow (Sun), K type: orange, M type: red-orange
     const starColorPalette = [
-      [1, 1, 1],
-      [0.8, 0.85, 1],
-      [1, 0.95, 0.8],
-      [1, 0.8, 0.7],
-      [0.7, 0.8, 1],
+      [0.65, 0.75, 1.0],   // O/B — hot blue-white (rare, bright)
+      [0.82, 0.87, 1.0],   // A — white-blue (Sirius, Vega)
+      [1.0, 0.98, 0.95],   // F — warm white
+      [1.0, 0.94, 0.8],    // G — yellow-white (Sun-like)
+      [1.0, 0.82, 0.62],   // K — orange (most common visible)
+      [1.0, 0.7, 0.5],     // M — red-orange (faint)
     ];
+    // Weighted distribution: M>K>G>F>A>O (realistic stellar population)
+    const starWeights = [0.03, 0.08, 0.15, 0.22, 0.30, 0.22];
+    const pickStarColor = () => {
+      let r = Math.random();
+      for (let i = 0; i < starWeights.length; i++) {
+        r -= starWeights[i];
+        if (r <= 0) return starColorPalette[i];
+      }
+      return starColorPalette[4]; // fallback K-type
+    };
 
     for (let i = 0; i < 20000; i++) {
       starsVertices.push(
@@ -577,7 +591,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         THREE.MathUtils.randFloatSpread(2000),
         THREE.MathUtils.randFloatSpread(2000)
       );
-      const color = starColorPalette[Math.floor(Math.random() * starColorPalette.length)];
+      const color = pickStarColor();
       starsColors.push(color[0], color[1], color[2]);
       starsSizes.push(Math.random() * 2.5 + 0.5);
     }
@@ -592,24 +606,41 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         attribute float aSize;
         attribute vec3 color;
         varying vec3 vColor;
+        varying float vSize;
         uniform float uTime;
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          float twinkle = sin(uTime * 2.0 + position.x * 0.1 + position.y * 0.15) * 0.3 + 0.7;
-          gl_PointSize = aSize * twinkle * (300.0 / -mvPosition.z);
+          // Subtle atmospheric scintillation (twinkling)
+          float twinkle = sin(uTime * 1.8 + position.x * 0.12 + position.y * 0.17) * 0.25 + 0.75;
+          float sz = aSize * twinkle * (300.0 / -mvPosition.z);
+          vSize = sz;
+          gl_PointSize = sz;
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
+        varying float vSize;
         void main() {
-          float dist = length(gl_PointCoord - vec2(0.5));
+          vec2 uv = gl_PointCoord - vec2(0.5);
+          float dist = length(uv);
           if (dist > 0.5) discard;
+          
+          // Soft Airy-disk-like falloff (realistic point-spread function)
           float alpha = smoothstep(0.5, 0.0, dist);
-          float core = smoothstep(0.3, 0.0, dist);
-          vec3 finalColor = vColor + core * 0.5;
-          gl_FragColor = vec4(finalColor, alpha * 0.9);
+          float core = smoothstep(0.15, 0.0, dist);
+          
+          // Diffraction spikes for brighter stars (cross pattern)
+          float spike = 0.0;
+          if (vSize > 3.0) {
+            float sx = smoothstep(0.08, 0.0, abs(uv.y)) * smoothstep(0.5, 0.1, abs(uv.x));
+            float sy = smoothstep(0.08, 0.0, abs(uv.x)) * smoothstep(0.5, 0.1, abs(uv.y));
+            spike = (sx + sy) * 0.4 * smoothstep(3.0, 6.0, vSize);
+          }
+          
+          vec3 finalColor = vColor + core * 0.6;
+          gl_FragColor = vec4(finalColor, clamp(alpha * 0.9 + spike, 0.0, 1.0));
         }
       `,
       transparent: true,
@@ -630,9 +661,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     dustGeometry.setAttribute('position', new THREE.BufferAttribute(dustPos, 3));
     const dustMaterial = new THREE.PointsMaterial({ 
       color: 0xaaaaaa, 
-      size: 0.15, 
+      size: 0.12, 
       transparent: true, 
-      opacity: 0.4 
+      opacity: 0.25 
     });
     this.dustSystem = new THREE.Points(dustGeometry, dustMaterial);
     this.scene.add(this.dustSystem);
@@ -1054,24 +1085,24 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — physically motivated but cinematic
-    // Deep space has virtually no ambient light; we keep a tiny amount for fill
-    const ambientLight = new THREE.AmbientLight(0x080810, 0.8);
+    // Deep space has virtually no ambient light; minimal fill preserves realism
+    const ambientLight = new THREE.AmbientLight(0x060610, 0.35);
     this.scene.add(ambientLight);
 
     // Main sun light — warm white (5778K blackbody close to 0xfff5e0)
     // At Jupiter's distance (5.2 AU) sunlight is ~27× weaker than at Earth,
     // but we boost for visual clarity. Directional to simulate parallel sun rays.
-    const sunLight = new THREE.DirectionalLight(0xfff5e0, 3.2);
+    const sunLight = new THREE.DirectionalLight(0xfff5e0, 3.5);
     sunLight.position.set(-50, 10, 30);
     this.scene.add(sunLight);
 
     // Dim blue-ish fill from opposite side — scattered light in the solar system
-    const fillLight = new THREE.DirectionalLight(0x1a2a44, 0.6);
+    const fillLight = new THREE.DirectionalLight(0x0d1a33, 0.4);
     fillLight.position.set(50, -10, -30);
     this.scene.add(fillLight);
 
     // Subtle overhead hemisphere fill for readability (no harsh rim)
-    const hemiLight = new THREE.HemisphereLight(0x111122, 0x000000, 0.3);
+    const hemiLight = new THREE.HemisphereLight(0x0a0a18, 0x000000, 0.2);
     this.scene.add(hemiLight);
 
     // Cinematic Anamorphic Lens Flare
@@ -1110,7 +1141,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     sunFlare.position.copy(sunLight.position);
     this.scene.add(sunFlare);
 
-    // Post-processing setup (Film Grain & Vignette)
+    // Post-processing setup (Film Grain, Vignette, Bloom & Color Grading)
     this.postScene = new THREE.Scene();
     this.postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
     this.postMaterial = new THREE.ShaderMaterial({
@@ -1130,23 +1161,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec2 center = vUv - 0.5;
           float dist = length(center);
           
-          // Deeper cinematic vignette
-          float vignette = smoothstep(1.0, 0.2, dist * 1.3);
+          // Soft cinematic vignette — wide falloff for natural look
+          float vignette = smoothstep(1.1, 0.25, dist * 1.1);
           
-          // Organic film grain
-          float grain = (random(vUv * 1000.0 + mod(uTime, 10.0)) - 0.5) * 0.06;
+          // Fine organic film grain (subtle, not distracting)
+          float grain = (random(vUv * 800.0 + mod(uTime, 10.0)) - 0.5) * 0.03;
           
           // Subtle anamorphic horizontal streak
-          float streak = smoothstep(0.5, 0.0, abs(center.y)) * smoothstep(0.6, 0.3, abs(center.x)) * 0.015;
+          float streak = smoothstep(0.5, 0.0, abs(center.y)) * smoothstep(0.6, 0.3, abs(center.x)) * 0.012;
           
           vec4 overlayColor = vec4(0.0, 0.0, 0.0, 1.0 - vignette);
           
-          // Teal-orange color grading at edges
-          overlayColor.r += dist * 0.04;
-          overlayColor.b += dist * 0.02;
+          // Cinematic color grading: warm highlights, cool shadows
+          // Subtle teal in shadows (outer edges)
+          overlayColor.r += dist * 0.025;
+          overlayColor.g += dist * 0.008;
+          overlayColor.b += dist * 0.035;
           
           overlayColor.rgb += grain;
-          overlayColor.a += abs(grain) * 0.4;
+          overlayColor.a += abs(grain) * 0.3;
           overlayColor.a = max(overlayColor.a - streak, 0.0);
           
           gl_FragColor = overlayColor;

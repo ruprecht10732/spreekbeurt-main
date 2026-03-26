@@ -48,7 +48,7 @@ import { animate, stagger, cubicBezier } from 'motion';
           <div #crawlContainer class="w-[80%] max-w-3xl text-center text-[var(--color-starwars-yellow)] font-starwars transform-gpu rotate-x-[20deg] origin-bottom">
             <h1 class="text-7xl md:text-9xl mb-8 uppercase tracking-widest title-shimmer">{{ currentSlide().title }}</h1>
             @if (currentSlide().id === 'title') {
-              <p class="text-sm md:text-xl mb-4 uppercase tracking-[0.5em] opacity-30 font-starwars">Gemaakt door</p>
+              <p class="text-sm md:text-xl mb-4 uppercase tracking-[0.5em] opacity-50 font-starwars">Gemaakt door</p>
               <div class="name-backdrop relative mb-6">
                 @for (char of nameChars; track $index) {
                   <span class="name-char relative inline-block text-5xl md:text-8xl font-starwars uppercase"
@@ -56,7 +56,7 @@ import { animate, stagger, cubicBezier } from 'motion';
                         [style.min-width]="char === ' ' ? '0.4em' : 'auto'">{{ char }}</span>
                 }
               </div>
-              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-30 name-subtitle">Klas: Groep 7</p>
+              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-45 name-subtitle">Klas: Groep 7</p>
             } @else {
               @for (line of currentSlide().content; track $index) {
                 <p class="text-3xl md:text-5xl mb-4 uppercase tracking-wider">{{ line }}</p>
@@ -86,8 +86,8 @@ import { animate, stagger, cubicBezier } from 'motion';
       } @else {
         <!-- Gradient overlays for text readability -->
         <div class="absolute inset-0 pointer-events-none" [class]="videoRevealed() ? 'video-readability-overlay' : ''">
-          <div class="absolute inset-0 bg-gradient-to-r from-black/50 via-black/15 to-transparent"></div>
-          <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+          <div class="absolute inset-0 bg-gradient-to-r from-black/70 via-black/25 to-transparent"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25"></div>
         </div>
 
         <div #slideContainer class="relative w-full h-full pointer-events-auto">
@@ -104,39 +104,39 @@ import { animate, stagger, cubicBezier } from 'motion';
           @if (currentSlide().id === 'h1') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[14%] right-[16%] text-right">
-                <div class="text-[10px] font-mono text-cyan-400/40 tracking-[0.3em] mb-1">CLASSIFICATIE</div>
-                <div class="text-3xl md:text-5xl font-starwars text-cyan-300/80 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GASREUS</div>
-                <div class="text-xs text-white/30 mt-1">Geen steen of zand zoals de aarde</div>
+                <div class="text-[11px] font-mono text-cyan-400/60 tracking-[0.3em] mb-1">CLASSIFICATIE</div>
+                <div class="text-3xl md:text-5xl font-starwars text-cyan-300/90 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GASREUS</div>
+                <div class="text-xs text-white/50 mt-1">Geen steen of zand zoals de aarde</div>
               </div>
               <div class="slide-item absolute top-[38%] right-[6%] md:right-[10%]">
                 <div class="flex items-baseline gap-1">
                   <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_30px_rgba(255,232,31,0.4)] tabular-nums">90</span>
-                  <span class="text-xl text-[var(--color-starwars-yellow)]/40 font-starwars">%</span>
+                  <span class="text-xl text-[var(--color-starwars-yellow)]/60 font-starwars">%</span>
                 </div>
-                <div class="text-xs text-white/35 tracking-wider">WATERSTOF (H₂)</div>
+                <div class="text-xs text-white/55 tracking-wider">WATERSTOF (H₂)</div>
               </div>
               <div class="slide-item absolute top-[55%] right-[18%] md:right-[22%]">
                 <div class="flex items-baseline gap-1">
-                  <span class="text-3xl md:text-5xl font-starwars text-orange-300/70 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">10</span>
-                  <span class="text-lg text-orange-300/30 font-starwars">%</span>
+                  <span class="text-3xl md:text-5xl font-starwars text-orange-300/80 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">10</span>
+                  <span class="text-lg text-orange-300/50 font-starwars">%</span>
                 </div>
-                <div class="text-xs text-white/30 tracking-wider">HELIUM (He)</div>
+                <div class="text-xs text-white/50 tracking-wider">HELIUM (He)</div>
               </div>
               <div class="slide-item absolute bottom-[28%] right-[10%] md:right-[14%]">
                 <div class="flex items-center gap-3">
-                  <div class="w-10 h-px bg-gradient-to-r from-transparent to-cyan-400/30"></div>
+                  <div class="w-10 h-px bg-gradient-to-r from-transparent to-cyan-400/40"></div>
                   <div>
                     <div class="flex items-baseline gap-1">
-                      <span class="text-2xl md:text-3xl font-starwars text-cyan-200/60 tabular-nums">1000</span>
-                      <span class="text-[10px] text-cyan-200/25 tracking-wider">KM</span>
+                      <span class="text-2xl md:text-3xl font-starwars text-cyan-200/75 tabular-nums">1000</span>
+                      <span class="text-[11px] text-cyan-200/45 tracking-wider">KM</span>
                     </div>
-                    <div class="text-[10px] text-white/20 tracking-wider">DAMPKRING DIKTE</div>
+                    <div class="text-[11px] text-white/40 tracking-wider">DAMPKRING DIKTE</div>
                   </div>
                 </div>
               </div>
               <div class="slide-item absolute bottom-[16%] right-[22%]">
-                <div class="text-xs text-red-300/40 italic flex items-center gap-2">
-                  <div class="w-1 h-1 rounded-full bg-red-400/30"></div>
+                <div class="text-xs text-red-300/60 italic flex items-center gap-2">
+                  <div class="w-1 h-1 rounded-full bg-red-400/50"></div>
                   Geen vaste grond om op te landen
                 </div>
               </div>
@@ -146,45 +146,45 @@ import { animate, stagger, cubicBezier } from 'motion';
           } @else if (currentSlide().id === 'h5') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[12%] right-[14%] text-right">
-                <div class="text-[10px] font-mono text-purple-400/40 tracking-[0.3em] mb-1">MASSA</div>
+                <div class="text-[11px] font-mono text-purple-400/60 tracking-[0.3em] mb-1">MASSA</div>
                 <div class="flex items-baseline gap-1 justify-end">
-                  <span class="text-4xl md:text-6xl font-starwars text-purple-300/80 drop-shadow-[0_0_25px_rgba(180,130,255,0.4)] tabular-nums">300</span>
-                  <span class="text-lg text-purple-300/40 font-starwars">×</span>
+                  <span class="text-4xl md:text-6xl font-starwars text-purple-300/90 drop-shadow-[0_0_25px_rgba(180,130,255,0.4)] tabular-nums">300</span>
+                  <span class="text-lg text-purple-300/60 font-starwars">×</span>
                 </div>
-                <div class="text-xs text-white/30">zwaarder dan de aarde</div>
+                <div class="text-xs text-white/50">zwaarder dan de aarde</div>
               </div>
               <div class="slide-item absolute top-[35%] right-[6%] md:right-[8%]">
                 <div class="flex items-baseline gap-1">
                   <span class="text-3xl md:text-4xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_20px_rgba(255,232,31,0.3)] tabular-nums">9u 55m</span>
                 </div>
-                <div class="text-xs text-white/30 tracking-wider">ÉÉN DAG OP JUPITER</div>
+                <div class="text-xs text-white/50 tracking-wider">ÉÉN DAG OP JUPITER</div>
               </div>
               <div class="slide-item absolute top-[52%] right-[16%] md:right-[20%]">
                 <div class="flex items-baseline gap-1">
-                  <span class="text-4xl md:text-5xl font-starwars text-orange-300/70 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">2.5</span>
-                  <span class="text-lg text-orange-300/30 font-starwars">×</span>
+                  <span class="text-4xl md:text-5xl font-starwars text-orange-300/85 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">2.5</span>
+                  <span class="text-lg text-orange-300/55 font-starwars">×</span>
                 </div>
-                <div class="text-xs text-white/30 tracking-wider">ZWAARTEKRACHT</div>
-                <div class="text-[10px] text-white/20 mt-0.5">Je weegt er flink meer!</div>
+                <div class="text-xs text-white/50 tracking-wider">ZWAARTEKRACHT</div>
+                <div class="text-[11px] text-white/40 mt-0.5">Je weegt er flink meer!</div>
               </div>
               <div class="slide-item absolute bottom-[25%] right-[12%]">
-                <div class="text-xs text-cyan-300/35 flex items-center gap-2">
-                  <div class="w-8 h-px bg-gradient-to-r from-transparent to-cyan-400/20"></div>
+                <div class="text-xs text-cyan-300/55 flex items-center gap-2">
+                  <div class="w-8 h-px bg-gradient-to-r from-transparent to-cyan-400/35"></div>
                   Allergrootste planeet — een gasreus
                 </div>
               </div>
             </div>
             @if (currentSlide().experiment) {
               <div class="absolute bottom-24 left-10 md:left-14 max-w-[32%] slide-item">
-                <div class="pl-4 border-l-2 border-green-500/20">
-                  <h3 class="text-base font-starwars text-green-400/70 mb-2 flex items-center gap-2">
+                <div class="pl-4 border-l-2 border-green-500/30">
+                  <h3 class="text-base font-starwars text-green-400/80 mb-2 flex items-center gap-2">
                     <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
                   </h3>
-                  <p class="text-green-200/40 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
-                  <ul class="space-y-1 text-green-100/50 text-xs">
+                  <p class="text-green-200/60 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1 text-green-100/65 text-xs">
                     @for (instruction of currentSlide().experiment?.instructions; track $index) {
                       <li class="flex items-start gap-1.5">
-                        <span class="text-green-500/40 mt-0.5 text-[10px]">▶</span>
+                        <span class="text-green-500/55 mt-0.5 text-[10px]">▶</span>
                         <span>{{ instruction }}</span>
                       </li>
                     }
@@ -197,23 +197,23 @@ import { animate, stagger, cubicBezier } from 'motion';
           } @else if (currentSlide().id === 'extra') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[12%] right-[18%] text-right">
-                <div class="text-[10px] font-mono text-blue-400/40 tracking-[0.3em] mb-1">MAANSYSTEEM</div>
+                <div class="text-[11px] font-mono text-blue-400/60 tracking-[0.3em] mb-1">MAANSYSTEEM</div>
                 <div class="flex items-baseline gap-1 justify-end">
-                  <span class="text-5xl md:text-7xl font-starwars text-blue-300/80 drop-shadow-[0_0_30px_rgba(100,150,255,0.4)] tabular-nums">95</span>
+                  <span class="text-5xl md:text-7xl font-starwars text-blue-300/90 drop-shadow-[0_0_30px_rgba(100,150,255,0.4)] tabular-nums">95</span>
                 </div>
-                <div class="text-xs text-white/30">manen in een baan om Jupiter</div>
+                <div class="text-xs text-white/50">manen in een baan om Jupiter</div>
               </div>
               <div class="slide-item absolute top-[38%] right-[6%] md:right-[8%]">
-                <div class="text-lg font-starwars text-cyan-200/70 drop-shadow-[0_0_15px_rgba(100,210,255,0.3)]">EUROPA</div>
-                <div class="text-xs text-white/30 mt-0.5 max-w-[180px]">Oceaan onder het ijs — misschien leven?</div>
+                <div class="text-lg font-starwars text-cyan-200/80 drop-shadow-[0_0_15px_rgba(100,210,255,0.3)]">EUROPA</div>
+                <div class="text-xs text-white/50 mt-0.5 max-w-[180px]">Oceaan onder het ijs — misschien leven?</div>
               </div>
               <div class="slide-item absolute top-[56%] right-[18%] md:right-[22%]">
-                <div class="text-lg font-starwars text-yellow-300/70 drop-shadow-[0_0_15px_rgba(255,200,50,0.3)]">IO</div>
-                <div class="text-xs text-white/30 mt-0.5 max-w-[170px]">Vulkanen door Jupiters zwaartekracht</div>
+                <div class="text-lg font-starwars text-yellow-300/80 drop-shadow-[0_0_15px_rgba(255,200,50,0.3)]">IO</div>
+                <div class="text-xs text-white/50 mt-0.5 max-w-[170px]">Vulkanen door Jupiters zwaartekracht</div>
               </div>
               <div class="slide-item absolute bottom-[22%] right-[14%]">
-                <div class="text-xs text-red-300/35 italic flex items-center gap-2">
-                  <div class="w-1 h-1 rounded-full bg-red-400/30"></div>
+                <div class="text-xs text-red-300/55 italic flex items-center gap-2">
+                  <div class="w-1 h-1 rounded-full bg-red-400/50"></div>
                   Extreme druk, wind en geen grond
                 </div>
               </div>
@@ -274,7 +274,7 @@ import { animate, stagger, cubicBezier } from 'motion';
             <div class="absolute bottom-24 left-10 md:left-14 max-w-[35%]">
               <div class="space-y-1.5">
                 @for (line of currentSlide().content; track $index) {
-                  <p class="slide-item text-xs text-white/35 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                  <p class="slide-item text-xs text-white/50 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
                 }
               </div>
             </div>
@@ -284,19 +284,19 @@ import { animate, stagger, cubicBezier } from 'motion';
             <div class="absolute bottom-28 left-10 md:left-14 max-w-[35%] flex flex-col gap-6">
               <div class="space-y-2.5">
                 @for (line of currentSlide().content; track $index) {
-                  <p class="slide-item text-sm md:text-base text-white/65 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                  <p class="slide-item text-sm md:text-base text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
                 }
               </div>
               @if (currentSlide().experiment) {
-                <div class="slide-item pl-4 border-l-2 border-green-500/20">
-                  <h3 class="text-base font-starwars text-green-400/70 mb-2 flex items-center gap-2">
+                <div class="slide-item pl-4 border-l-2 border-green-500/30">
+                  <h3 class="text-base font-starwars text-green-400/80 mb-2 flex items-center gap-2">
                     <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
                   </h3>
-                  <p class="text-green-200/40 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
-                  <ul class="space-y-1 text-green-100/50 text-xs">
+                  <p class="text-green-200/60 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1 text-green-100/65 text-xs">
                     @for (instruction of currentSlide().experiment?.instructions; track $index) {
                       <li class="flex items-start gap-1.5">
-                        <span class="text-green-500/40 mt-0.5 text-[10px]">▶</span>
+                        <span class="text-green-500/55 mt-0.5 text-[10px]">▶</span>
                         <span>{{ instruction }}</span>
                       </li>
                     }
@@ -309,12 +309,12 @@ import { animate, stagger, cubicBezier } from 'motion';
           <!-- Distance counter (h3) — floating near the beam -->
           @if (currentSlide().id === 'h3' && currentDistance() > 0) {
             <div class="absolute right-[10%] top-1/2 -translate-y-1/2 slide-item text-right pointer-events-none">
-              <div class="text-[10px] text-[var(--color-starwars-yellow)]/40 font-starwars tracking-[0.3em] mb-1">HUIDIGE AFSTAND</div>
+              <div class="text-[11px] text-[var(--color-starwars-yellow)]/55 font-starwars tracking-[0.3em] mb-1">HUIDIGE AFSTAND</div>
               <div class="flex items-baseline gap-1 justify-end">
                 <span class="text-4xl md:text-6xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
-                <span class="text-xs text-[var(--color-starwars-yellow)]/35 font-starwars tracking-wider">M KM</span>
+                <span class="text-xs text-[var(--color-starwars-yellow)]/50 font-starwars tracking-wider">M KM</span>
               </div>
-              <div class="mt-1 text-[10px] text-[var(--color-starwars-yellow)]/25 font-mono tracking-wider">
+              <div class="mt-1 text-[11px] text-[var(--color-starwars-yellow)]/45 font-mono tracking-wider">
                 ☀️ Licht: {{ lightTravelMinutes() }} min
               </div>
             </div>
@@ -487,6 +487,22 @@ import { animate, stagger, cubicBezier } from 'motion';
     .rotate-x-\\[20deg\\] {
       transform: rotateX(20deg);
     }
+    /* Space-overlay text readability — multi-layer dark halo behind all text */
+    .slide-item,
+    .slide-item * {
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+    }
+    .slide-title {
+      text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 30px rgba(0,0,0,0.5), 0 0 60px rgba(0,0,0,0.3);
+    }
+    .quiz-option,
+    .quiz-option * {
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.5);
+    }
+    .quiz-complete,
+    .quiz-complete * {
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6);
+    }
     /* Video background scrim — cinematic vignette for readability */
     .video-scrim {
       background:
@@ -501,7 +517,7 @@ import { animate, stagger, cubicBezier } from 'motion';
     }
     /* Extra readability overlay when video plays behind text */
     .video-readability-overlay > div:first-child {
-      background: linear-gradient(to right, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.25) 45%, transparent 100%) !important;
+      background: linear-gradient(to right, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 45%, transparent 100%) !important;
     }
   `]
 })

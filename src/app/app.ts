@@ -107,12 +107,15 @@ import confetti from 'canvas-confetti';
                   
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
                     @for (option of q.options; track $index) {
-                      <div class="quiz-option px-5 py-4 rounded-lg transition-all duration-300 flex items-center text-lg md:text-xl font-semibold"
+                      <div (click)="!isAnswerRevealed() && selectQuizOption($index)"
+                           class="quiz-option px-5 py-4 rounded-lg transition-all duration-300 flex items-center text-lg md:text-xl font-semibold"
                            [class]="isAnswerRevealed() 
                                     ? ($index === q.correctOptionIndex 
                                         ? 'bg-green-500/20 border-l-4 border-green-400 text-white shadow-[0_0_20px_rgba(74,222,128,0.3)] scale-[1.02]' 
                                         : 'bg-white/5 border-l-4 border-red-500/30 text-gray-500 opacity-50 scale-[0.98]')
-                                    : 'bg-white/5 border-l-4 border-blue-400/40 text-blue-50 hover:bg-white/10'">
+                                    : selectedQuizOption() === $index
+                                      ? 'bg-[var(--color-starwars-yellow)]/15 border-l-4 border-[var(--color-starwars-yellow)] text-white cursor-pointer'
+                                      : 'bg-white/5 border-l-4 border-blue-400/40 text-blue-50 hover:bg-white/10 cursor-pointer hover:border-blue-300/60'">
                         <span class="mr-3 text-sm opacity-50 font-starwars">{{ ['A','B','C','D'][$index] }}</span>
                         {{ option }}
                       </div>
@@ -127,8 +130,10 @@ import confetti from 'canvas-confetti';
 
                   <div class="flex justify-start gap-4">
                     @if (!isAnswerRevealed()) {
-                      <button (click)="revealAnswer()" class="px-6 py-3 bg-[var(--color-starwars-yellow)] text-black font-starwars tracking-widest rounded-lg hover:bg-yellow-400 transition-colors shadow-[0_0_20px_rgba(255,232,31,0.3)]">
-                        Toon Antwoord
+                      <button (click)="revealAnswer()" 
+                              [disabled]="selectedQuizOption() === -1"
+                              class="px-6 py-3 bg-[var(--color-starwars-yellow)] text-black font-starwars tracking-widest rounded-lg hover:bg-yellow-400 transition-all shadow-[0_0_20px_rgba(255,232,31,0.3)] disabled:opacity-30 disabled:hover:bg-[var(--color-starwars-yellow)] disabled:cursor-not-allowed">
+                        {{ selectedQuizOption() === -1 ? 'Kies een antwoord' : 'Toon Antwoord' }}
                       </button>
                     } @else {
                       <button (click)="nextQuizQuestion()" class="px-6 py-3 bg-blue-500/80 text-white font-starwars tracking-widest rounded-lg hover:bg-blue-400 transition-colors">
@@ -138,15 +143,23 @@ import confetti from 'canvas-confetti';
                   </div>
                 </div>
               } @else {
-                <div class="text-left">
-                  <mat-icon class="text-6xl text-[var(--color-starwars-yellow)] mb-4 drop-shadow-[0_0_20px_rgba(255,232,31,0.5)]" style="height: 60px; width: 60px; font-size: 60px;">emoji_events</mat-icon>
-                  <h3 class="text-4xl font-starwars text-[var(--color-starwars-yellow)] mb-4 tracking-widest">Gefeliciteerd!</h3>
+                <div class="text-left quiz-complete">
+                  <mat-icon class="text-6xl text-[var(--color-starwars-yellow)] mb-4 drop-shadow-[0_0_20px_rgba(255,232,31,0.5)] trophy-bounce" style="height: 60px; width: 60px; font-size: 60px;">emoji_events</mat-icon>
+                  <h3 class="text-4xl font-starwars text-[var(--color-starwars-yellow)] mb-4 tracking-widest title-shimmer">Gefeliciteerd!</h3>
                   <p class="text-2xl text-green-100">Jullie zijn de ultieme Jupiter-experts!</p>
                 </div>
               }
             </div>
           }
         </div>
+      }
+
+      <!-- Mute Toggle -->
+      @if (hasStarted()) {
+        <button (click)="toggleMute()" 
+                class="absolute top-6 right-6 z-20 p-2 rounded-full bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-black/60 transition-all duration-300 pointer-events-auto backdrop-blur-sm">
+          <mat-icon>{{ isMuted() ? 'volume_off' : 'volume_up' }}</mat-icon>
+        </button>
       }
 
       <!-- Navigation Controls -->
@@ -202,6 +215,14 @@ import confetti from 'canvas-confetti';
     .play-pulse {
       animation: playPulse 2s ease-in-out infinite;
     }
+    @keyframes trophyBounce {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-8px) rotate(-5deg); }
+      75% { transform: translateY(-4px) rotate(5deg); }
+    }
+    .trophy-bounce {
+      animation: trophyBounce 2s ease-in-out infinite;
+    }
     .animate-fade-in {
       animation: fadeIn 0.5s ease-out forwards;
     }
@@ -226,7 +247,10 @@ export class App implements AfterViewInit {
   direction = signal<1 | -1>(1);
   videoRevealed = signal(false);
   hasStarted = signal(false);
+  isMuted = signal(false);
+  selectedQuizOption = signal(-1);
   private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
+  private bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
   private isBrowser: boolean;
   private platformId = inject(PLATFORM_ID);
 
@@ -249,6 +273,12 @@ export class App implements AfterViewInit {
       if (current.quiz) {
         this.currentQuizQuestionIndex.set(0);
         this.isAnswerRevealed.set(false);
+        this.selectedQuizOption.set(-1);
+      }
+
+      // Fire confetti on the "Einde" slide
+      if (current.id === 'afsluiting' && this.isBrowser) {
+        setTimeout(() => this.fireFinaleConfetti(), 600);
       }
       
       // Animate new slide content
@@ -274,7 +304,12 @@ export class App implements AfterViewInit {
               }
               vid.play().catch(() => {});
             }
+            // Duck the background music while video plays
+            this.fadeBgMusicTo(0.1);
             this.videoRevealTimer = setTimeout(() => this.videoRevealed.set(true), 1800);
+          } else {
+            // Restore background music on non-video slides
+            this.fadeBgMusicTo(0.3);
           }
         }, 50);
       }
@@ -411,7 +446,7 @@ export class App implements AfterViewInit {
             y: [15, 0],
             filter: ['blur(6px)', 'blur(0px)']
           },
-          { delay: stagger(0.07), duration: 0.7, ease: customEase }
+          { delay: stagger(0.12), duration: 0.8, ease: customEase }
         );
       }
     } else if (!this.crawlContainer?.nativeElement) {
@@ -429,7 +464,9 @@ export class App implements AfterViewInit {
       }
       return;
     }
-    if (event.key === 'ArrowRight' || event.key === ' ') {
+    if (event.key === 'm' || event.key === 'M') {
+      this.toggleMute();
+    } else if (event.key === 'ArrowRight' || event.key === ' ') {
       this.nextSlide();
     } else if (event.key === 'ArrowLeft') {
       this.prevSlide();
@@ -454,10 +491,13 @@ export class App implements AfterViewInit {
     }
   }
 
+  selectQuizOption(index: number) {
+    this.selectedQuizOption.set(index);
+  }
+
   revealAnswer() {
     this.isAnswerRevealed.set(true);
     if (this.isBrowser) {
-      // Triple burst confetti cascade
       const colors = ['#ffe81f', '#0044ff', '#ff3300', '#4ade80', '#a855f7'];
       confetti({ particleCount: 80, spread: 60, origin: { x: 0.25, y: 0.6 }, colors, startVelocity: 45 });
       setTimeout(() => confetti({ particleCount: 150, spread: 100, origin: { x: 0.5, y: 0.4 }, colors, startVelocity: 55 }), 150);
@@ -467,6 +507,44 @@ export class App implements AfterViewInit {
 
   nextQuizQuestion() {
     this.isAnswerRevealed.set(false);
-    this.currentQuizQuestionIndex.update(i => i + 1);
+    this.selectedQuizOption.set(-1);
+    const quiz = this.currentSlide().quiz;
+    const nextIdx = this.currentQuizQuestionIndex() + 1;
+    this.currentQuizQuestionIndex.set(nextIdx);
+    // Fire grand confetti when quiz is completed
+    if (quiz && nextIdx >= quiz.length && this.isBrowser) {
+      setTimeout(() => this.fireFinaleConfetti(), 300);
+    }
+  }
+
+  toggleMute() {
+    const audio = this.bgAudio?.nativeElement;
+    if (!audio) return;
+    this.isMuted.update(m => !m);
+    audio.muted = this.isMuted();
+  }
+
+  private fadeBgMusicTo(target: number) {
+    const audio = this.bgAudio?.nativeElement;
+    if (!audio || this.isMuted()) return;
+    if (this.bgMusicVolumeTween) clearInterval(this.bgMusicVolumeTween);
+    this.bgMusicVolumeTween = setInterval(() => {
+      const diff = target - audio.volume;
+      if (Math.abs(diff) < 0.01) {
+        audio.volume = target;
+        clearInterval(this.bgMusicVolumeTween!);
+        this.bgMusicVolumeTween = null;
+      } else {
+        audio.volume += diff * 0.15;
+      }
+    }, 50);
+  }
+
+  private fireFinaleConfetti() {
+    const colors = ['#ffe81f', '#0044ff', '#ff3300', '#4ade80', '#a855f7', '#ff69b4'];
+    confetti({ particleCount: 100, spread: 70, origin: { x: 0.2, y: 0.7 }, colors, startVelocity: 50 });
+    setTimeout(() => confetti({ particleCount: 200, spread: 120, origin: { x: 0.5, y: 0.5 }, colors, startVelocity: 60 }), 200);
+    setTimeout(() => confetti({ particleCount: 100, spread: 70, origin: { x: 0.8, y: 0.7 }, colors, startVelocity: 50 }), 400);
+    setTimeout(() => confetti({ particleCount: 150, spread: 160, origin: { x: 0.5, y: 0.3 }, colors, startVelocity: 45, gravity: 0.8 }), 700);
   }
 }

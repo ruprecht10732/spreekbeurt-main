@@ -1179,23 +1179,28 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Lighting — physically motivated but cinematic
     // Deep space has virtually no ambient light; minimal fill preserves realism
-    const ambientLight = new THREE.AmbientLight(0x060610, 0.35);
+    const ambientLight = new THREE.AmbientLight(0x050510, 0.25);
     this.scene.add(ambientLight);
 
     // Main sun light — warm white (5778K blackbody close to 0xfff5e0)
-    // At Jupiter's distance (5.2 AU) sunlight is ~27× weaker than at Earth,
-    // but we boost for visual clarity. Directional to simulate parallel sun rays.
-    const sunLight = new THREE.DirectionalLight(0xfff5e0, 3.5);
+    // Directional to simulate parallel sun rays at Jupiter's distance.
+    const sunLight = new THREE.DirectionalLight(0xfff5e0, 3.2);
     sunLight.position.set(-50, 10, 30);
     this.scene.add(sunLight);
 
-    // Dim blue-ish fill from opposite side — scattered light in the solar system
-    const fillLight = new THREE.DirectionalLight(0x0d1a33, 0.4);
+    // Point light at the Sun — natural inverse-square falloff for nearby objects
+    // Creates realistic illumination gradient on planets close to the Sun
+    const sunPointLight = new THREE.PointLight(0xffeedd, 8, 200, 1.5);
+    sunPointLight.position.set(-50, 10, 30);
+    this.scene.add(sunPointLight);
+
+    // Dim blue-ish fill from opposite side — scattered light / ISM reflection
+    const fillLight = new THREE.DirectionalLight(0x0d1a33, 0.35);
     fillLight.position.set(50, -10, -30);
     this.scene.add(fillLight);
 
-    // Subtle overhead hemisphere fill for readability (no harsh rim)
-    const hemiLight = new THREE.HemisphereLight(0x0a0a18, 0x000000, 0.2);
+    // Subtle overhead hemisphere fill for readability (warm above, dark below)
+    const hemiLight = new THREE.HemisphereLight(0x0a0a18, 0x000000, 0.15);
     this.scene.add(hemiLight);
 
     // Cinematic Anamorphic Lens Flare
@@ -2568,12 +2573,90 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private createSun() {
-    // The Sun — bright glowing sphere in the direction of sunlight (-50, 10, 30)
+    // The Sun — realistic multi-layer star at (-50, 10, 30)
     // Real: Sun radius 696,000 km = 97.4 Rj — would fill entire scene
     // Using artistic size (6 units) large enough to be prominent but not overwhelming
-    const sunGeo = new THREE.SphereGeometry(6, 32, 32);
-    const sunMat = new THREE.MeshBasicMaterial({
-      color: 0xffffee,
+    const sunRadius = 6;
+
+    // Photosphere — animated surface with limb darkening + granulation turbulence
+    const sunGeo = new THREE.SphereGeometry(sunRadius, 64, 64);
+    const sunMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uSunTex: { value: null as THREE.Texture | null }
+      },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        varying vec2 vUv;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vUv = uv;
+          vPos = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform sampler2D uSunTex;
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        varying vec2 vUv;
+
+        // Simplex-like hash noise for granulation
+        vec3 hash3(vec3 p) {
+          p = vec3(dot(p,vec3(127.1,311.7,74.7)), dot(p,vec3(269.5,183.3,246.1)), dot(p,vec3(113.5,271.9,124.6)));
+          return -1.0 + 2.0 * fract(sin(p) * 43758.5453);
+        }
+        float noise3(vec3 p) {
+          vec3 i = floor(p);
+          vec3 f = fract(p);
+          vec3 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(mix(dot(hash3(i+vec3(0,0,0)),f-vec3(0,0,0)), dot(hash3(i+vec3(1,0,0)),f-vec3(1,0,0)), u.x),
+                         mix(dot(hash3(i+vec3(0,1,0)),f-vec3(0,1,0)), dot(hash3(i+vec3(1,1,0)),f-vec3(1,1,0)), u.x), u.y),
+                     mix(mix(dot(hash3(i+vec3(0,0,1)),f-vec3(0,0,1)), dot(hash3(i+vec3(1,0,1)),f-vec3(1,0,1)), u.x),
+                         mix(dot(hash3(i+vec3(0,1,1)),f-vec3(0,1,1)), dot(hash3(i+vec3(1,1,1)),f-vec3(1,1,1)), u.x), u.y), u.z);
+        }
+        float fbm(vec3 p) {
+          float v = 0.0; float a = 0.5;
+          for (int i = 0; i < 4; i++) { v += a * noise3(p); p *= 2.0; a *= 0.5; }
+          return v;
+        }
+
+        void main() {
+          vec3 viewDir = normalize(-vPos);
+          float NdotV = dot(viewDir, vNormal);
+          
+          // Limb darkening — realistic solar profile (Neckel & Labs coefficients approximation)
+          float mu = max(NdotV, 0.0);
+          float limbDark = 0.3 + 0.93 * mu - 0.23 * mu * mu;
+          
+          // Base texture
+          vec4 baseTex = texture2D(uSunTex, vUv);
+          vec3 baseColor = baseTex.rgb;
+          
+          // Animated granulation turbulence — convection cells on surface
+          vec3 noiseCoord = vec3(vUv * 8.0, uTime * 0.03);
+          float granulation = fbm(noiseCoord) * 0.15;
+          
+          // Sunspot-like dark patches (slow drift)
+          float spots = smoothstep(0.35, 0.5, fbm(vec3(vUv * 3.0, uTime * 0.008)));
+          
+          // Color temperature variation (hotter center = whiter, cooler limb = redder)
+          vec3 hotColor = vec3(1.0, 0.98, 0.92);  // ~6000K white-yellow
+          vec3 coolColor = vec3(1.0, 0.7, 0.3);    // ~4500K reddish
+          vec3 tempColor = mix(coolColor, hotColor, mu * 0.8 + 0.2);
+          
+          vec3 finalColor = baseColor * tempColor * limbDark;
+          finalColor += granulation * vec3(1.0, 0.85, 0.5);
+          finalColor *= (1.0 - spots * 0.15); // Darken in sunspot regions
+          
+          // Bright HDR emission — push beyond 1.0 for tone mapping bloom
+          finalColor *= 2.5;
+          
+          gl_FragColor = vec4(finalColor, 1.0);
+        }
+      `,
       fog: false
     });
     this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
@@ -2583,15 +2666,132 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('2k_sun.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
-        sunMat.map = tex; sunMat.needsUpdate = true;
+        sunMat.uniforms['uSunTex'].value = tex;
+        sunMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
     }));
 
-    // Inner corona (bright yellow-white)
-    const coronaInnerGeo = new THREE.SphereGeometry(10, 32, 32);
+    // Chromosphere — thin bright reddish layer just above photosphere (Hα emission)
+    const chromoGeo = new THREE.SphereGeometry(sunRadius * 1.02, 48, 48);
+    const chromoMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPos = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        void main() {
+          vec3 viewDir = normalize(-vPos);
+          float rim = 1.0 - dot(viewDir, vNormal);
+          // Thin bright ring at the very edge — Hα red-pink emission
+          float chromo = pow(rim, 6.0) * 3.0;
+          vec3 color = mix(vec3(1.0, 0.3, 0.15), vec3(1.0, 0.5, 0.3), rim);
+          gl_FragColor = vec4(color * 2.0, chromo * 0.8);
+        }
+      `,
+      transparent: true, side: THREE.FrontSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.sunMesh.add(new THREE.Mesh(chromoGeo, chromoMat));
+
+    // Inner corona (K-corona — electron-scattered white light)
+    const coronaInnerGeo = new THREE.SphereGeometry(sunRadius * 1.7, 48, 48);
     const coronaInnerMat = new THREE.ShaderMaterial({
       uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        varying vec2 vUv;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vUv = uv;
+          vPos = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        varying vec2 vUv;
+
+        // Simple noise for coronal streamers
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        float noise2(vec2 p) {
+          vec2 i = floor(p); vec2 f = fract(p);
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash(i), hash(i+vec2(1,0)), u.x), mix(hash(i+vec2(0,1)), hash(i+vec2(1,1)), u.x), u.y);
+        }
+
+        void main() {
+          vec3 viewDir = normalize(-vPos);
+          float rim = 1.0 - dot(viewDir, vNormal);
+          
+          // Radial coronal streamers — asymmetric, slowly rotating
+          float angle = atan(vUv.y - 0.5, vUv.x - 0.5);
+          float streamers = 0.5 + 0.5 * sin(angle * 4.0 + uTime * 0.1);
+          streamers *= 0.7 + 0.3 * noise2(vec2(angle * 3.0, uTime * 0.05));
+          
+          // Corona intensity falls off as ~r^-2.5
+          float corona = pow(rim, 1.8) * 2.0;
+          corona *= (0.6 + 0.4 * streamers);
+          
+          // Pearly white with slight warm tint
+          vec3 color = mix(vec3(1.0, 0.96, 0.88), vec3(1.0, 0.8, 0.5), rim * 0.5);
+          
+          gl_FragColor = vec4(color * 1.5, corona * 0.5);
+        }
+      `,
+      transparent: true, side: THREE.BackSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    const coronaInner = new THREE.Mesh(coronaInnerGeo, coronaInnerMat);
+    this.sunMesh.add(coronaInner);
+
+    // Outer corona (F-corona — dust-scattered, very faint extended halo)
+    const coronaOuterGeo = new THREE.SphereGeometry(sunRadius * 3.5, 32, 32);
+    const coronaOuterMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPos = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        void main() {
+          vec3 viewDir = normalize(-vPos);
+          float rim = 1.0 - dot(viewDir, vNormal);
+          float corona = pow(rim, 1.5) * 0.8;
+          // Slow breathing
+          corona *= 0.9 + 0.1 * sin(uTime * 0.3);
+          vec3 color = vec3(1.0, 0.88, 0.65);
+          gl_FragColor = vec4(color, corona * 0.12);
+        }
+      `,
+      transparent: true, side: THREE.BackSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.sunMesh.add(new THREE.Mesh(coronaOuterGeo, coronaOuterMat));
+
+    // God-rays / volumetric light cone (subtle directional glow toward camera)
+    const godRayGeo = new THREE.SphereGeometry(sunRadius * 5, 16, 16);
+    const godRayMat = new THREE.ShaderMaterial({
       vertexShader: `
         varying vec3 vNormal;
         varying vec3 vPos;
@@ -2606,25 +2806,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         varying vec3 vPos;
         void main() {
           vec3 viewDir = normalize(-vPos);
-          float rim = 1.0 - dot(viewDir, vNormal);
-          float corona = pow(rim, 2.0) * 1.5;
-          vec3 color = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.6, 0.1), rim);
-          gl_FragColor = vec4(color, corona * 0.6);
+          float facing = max(dot(viewDir, vNormal), 0.0);
+          float glow = pow(facing, 3.0) * 0.15;
+          vec3 color = vec3(1.0, 0.92, 0.7);
+          gl_FragColor = vec4(color, glow);
         }
       `,
       transparent: true, side: THREE.BackSide,
       depthWrite: false, blending: THREE.AdditiveBlending
     });
-    const coronaInner = new THREE.Mesh(coronaInnerGeo, coronaInnerMat);
-    this.sunMesh.add(coronaInner);
-
-    // Outer corona (faint extended halo)
-    const coronaOuterGeo = new THREE.SphereGeometry(20, 32, 32);
-    const coronaOuterMat = new THREE.MeshBasicMaterial({
-      color: 0xffddaa, transparent: true, opacity: 0.06,
-      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
-    });
-    this.sunMesh.add(new THREE.Mesh(coronaOuterGeo, coronaOuterMat));
+    this.sunMesh.add(new THREE.Mesh(godRayGeo, godRayMat));
 
     this.scene.add(this.sunMesh);
   }
@@ -3267,10 +3458,40 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       (this.radiationBelt.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
     }
 
-    // Sun corona pulse
+    // Sun surface + corona animation
     if (this.sunMesh) {
-      const coronaScale = 1 + Math.sin(time * 0.5) * 0.02;
-      this.sunMesh.children[0]?.scale.set(coronaScale, coronaScale, coronaScale);
+      // Photosphere shader time (granulation + sunspot drift)
+      const sunShader = (this.sunMesh.material as THREE.ShaderMaterial);
+      if (sunShader.uniforms) sunShader.uniforms['uTime'].value = time;
+
+      // Chromosphere (child 0) — subtle flicker
+      const chromo = this.sunMesh.children[0];
+      if (chromo) {
+        const chromoMat = (chromo as THREE.Mesh).material as THREE.ShaderMaterial;
+        if (chromoMat.uniforms) chromoMat.uniforms['uTime'].value = time;
+      }
+
+      // Inner corona (child 1) — slow rotation + breathing with streamer animation
+      const coronaInner = this.sunMesh.children[1];
+      if (coronaInner) {
+        const ciMat = (coronaInner as THREE.Mesh).material as THREE.ShaderMaterial;
+        if (ciMat.uniforms) ciMat.uniforms['uTime'].value = time;
+        const s1 = 1 + Math.sin(time * 0.4) * 0.03 + Math.sin(time * 0.17) * 0.015;
+        coronaInner.scale.set(s1, s1, s1);
+        coronaInner.rotation.y = time * 0.02;
+      }
+
+      // Outer corona (child 2) — slow breathing
+      const coronaOuter = this.sunMesh.children[2];
+      if (coronaOuter) {
+        const coMat = (coronaOuter as THREE.Mesh).material as THREE.ShaderMaterial;
+        if (coMat.uniforms) coMat.uniforms['uTime'].value = time;
+        const s2 = 1 + Math.sin(time * 0.25) * 0.04;
+        coronaOuter.scale.set(s2, s2, s2);
+      }
+
+      // Slow self-rotation of the Sun (~25 day period, sped up for visual)
+      this.sunMesh.rotation.y = time * 0.01;
     }
 
     this.renderer.autoClear = false;

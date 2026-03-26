@@ -114,6 +114,32 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Orbital trace rings for Galilean moons
   private readonly orbitalRings: THREE.Line[] = [];
 
+  // Sun with corona
+  private sunMesh!: THREE.Mesh;
+
+  // Jupiter night-side lightning
+  private readonly lightningFlashes: { mesh: THREE.Mesh, timer: number, cooldown: number }[] = [];
+
+  // Io plasma torus (ionized sulfur ring along Io's orbit)
+  private ioPlasmaTorusMesh!: THREE.Mesh;
+
+  // Europa water plumes
+  private europaPlume!: THREE.Points;
+
+  // Solar wind particles streaming from sun
+  private solarWind!: THREE.Points;
+  private solarWindPositions!: Float32Array;
+
+  // Jupiter radiation belts
+  private radiationBelt!: THREE.Mesh;
+
+  // Trojan asteroid clusters at L4/L5
+  private trojanL4!: THREE.InstancedMesh;
+  private trojanL5!: THREE.InstancedMesh;
+
+  // Zodiacal light
+  private zodiacalLight!: THREE.Mesh;
+
   private readonly ngZone = inject(NgZone);
   private readonly platformId = inject(PLATFORM_ID);
   
@@ -1043,6 +1069,30 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Enhance Galilean moon details (Io volcanism, Europa ice)
     this.enhanceGalileanMoons();
+
+    // Sun with corona glow
+    this.createSun();
+
+    // Jupiter night-side lightning flashes
+    this.createLightning();
+
+    // Io plasma torus (ionized sulfur along Io orbit)
+    this.createIoPlasmaTorus();
+
+    // Europa water plumes (Hubble discovery)
+    this.createEuropaPlumes();
+
+    // Solar wind particle stream
+    this.createSolarWind();
+
+    // Jupiter radiation belts
+    this.createRadiationBelts();
+
+    // Trojan asteroids at L4/L5 Lagrange points
+    this.createTrojanAsteroids();
+
+    // Zodiacal light along the ecliptic
+    this.createZodiacalLight();
 
     // Distance beam between Earth and Jupiter
     this.createDistanceBeam();
@@ -2117,6 +2167,429 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
   }
 
+  private createSun() {
+    // The Sun — bright glowing sphere in the direction of sunlight (-50, 10, 30)
+    // Real sun: enormous, but at this scale we show it as a bright point with corona
+    const sunGeo = new THREE.SphereGeometry(3, 32, 32);
+    const sunMat = new THREE.MeshBasicMaterial({
+      color: 0xffffee,
+      fog: false
+    });
+    this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
+    this.sunMesh.position.set(-50, 10, 30);
+
+    // Inner corona (bright yellow-white)
+    const coronaInnerGeo = new THREE.SphereGeometry(5, 32, 32);
+    const coronaInnerMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPos = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPos, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vNormal;
+        varying vec3 vPos;
+        void main() {
+          vec3 viewDir = normalize(-vPos);
+          float rim = 1.0 - dot(viewDir, vNormal);
+          float corona = pow(rim, 2.0) * 1.5;
+          vec3 color = mix(vec3(1.0, 0.95, 0.8), vec3(1.0, 0.6, 0.1), rim);
+          gl_FragColor = vec4(color, corona * 0.6);
+        }
+      `,
+      transparent: true, side: THREE.BackSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    const coronaInner = new THREE.Mesh(coronaInnerGeo, coronaInnerMat);
+    this.sunMesh.add(coronaInner);
+
+    // Outer corona (faint extended halo)
+    const coronaOuterGeo = new THREE.SphereGeometry(12, 32, 32);
+    const coronaOuterMat = new THREE.MeshBasicMaterial({
+      color: 0xffddaa, transparent: true, opacity: 0.06,
+      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.sunMesh.add(new THREE.Mesh(coronaOuterGeo, coronaOuterMat));
+
+    this.scene.add(this.sunMesh);
+  }
+
+  private createLightning() {
+    // Jupiter has real lightning, discovered by Voyager 1
+    // Blue-white flashes on the night side (opposite sun direction)
+    // Sun is at (-50, 10, 30) → night side faces roughly (+x, -y, -z)
+    for (let i = 0; i < 6; i++) {
+      // Random positions on the night-side hemisphere
+      const theta = Math.random() * Math.PI * 0.6 + Math.PI * 0.2; // latitude band
+      const phi = Math.random() * Math.PI - Math.PI * 0.5; // night-side longitude
+      const r = 10.05; // just above Jupiter surface
+
+      const x = r * Math.sin(theta) * Math.cos(phi + Math.PI);
+      const y = r * Math.cos(theta);
+      const z = r * Math.sin(theta) * Math.sin(phi + Math.PI);
+
+      const flashGeo = new THREE.SphereGeometry(0.3 + Math.random() * 0.3, 8, 8);
+      const flashMat = new THREE.MeshBasicMaterial({
+        color: 0x8888ff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      });
+      const flash = new THREE.Mesh(flashGeo, flashMat);
+      flash.position.set(x, y, z);
+      this.jupiterGroup.add(flash);
+      this.lightningFlashes.push({
+        mesh: flash,
+        timer: 0,
+        cooldown: 100 + Math.random() * 400 // frames between flashes
+      });
+    }
+  }
+
+  private updateLightning() {
+    this.lightningFlashes.forEach(lf => {
+      lf.timer++;
+      if (lf.timer >= lf.cooldown) {
+        // Flash! Quick bright burst then rapid decay
+        const mat = lf.mesh.material as THREE.MeshBasicMaterial;
+        const flashDuration = 4 + Math.random() * 6;
+        const flashAge = lf.timer - lf.cooldown;
+
+        if (flashAge < flashDuration) {
+          // Flash on — random flicker pattern like real lightning
+          const flicker = Math.random() > 0.3 ? 1 : 0.2;
+          mat.opacity = flicker * (1 - flashAge / flashDuration) * 0.8;
+        } else {
+          mat.opacity = 0;
+          lf.timer = 0;
+          lf.cooldown = 100 + Math.random() * 400;
+          // Reposition for next flash
+          const theta = Math.random() * Math.PI * 0.6 + Math.PI * 0.2;
+          const phi = Math.random() * Math.PI - Math.PI * 0.5;
+          const r = 10.05;
+          lf.mesh.position.set(
+            r * Math.sin(theta) * Math.cos(phi + Math.PI),
+            r * Math.cos(theta),
+            r * Math.sin(theta) * Math.sin(phi + Math.PI)
+          );
+        }
+      }
+    });
+  }
+
+  private createIoPlasmaTorus() {
+    // Io's volcanic activity ejects sulfur dioxide which gets ionized by Jupiter's
+    // magnetosphere, forming a plasma torus along Io's orbital path
+    // Io orbits at distance 14 in our scene
+    const torusGeo = new THREE.TorusGeometry(14, 1.2, 24, 96);
+    const torusMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vPos;
+        void main() {
+          vUv = uv;
+          vPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        varying vec3 vPos;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        void main() {
+          // Patchy sulfur-yellow-orange glow
+          float noise = hash(vUv * 20.0 + uTime * 0.05);
+          float wave = sin(vUv.x * 40.0 + uTime * 2.0) * 0.5 + 0.5;
+          float density = (noise * 0.5 + wave * 0.5) * smoothstep(0.0, 0.3, vUv.y) * smoothstep(1.0, 0.7, vUv.y);
+          // Io plasma is characterized by orange/yellow sulfur emission
+          vec3 color = mix(vec3(0.8, 0.5, 0.1), vec3(1.0, 0.8, 0.2), wave);
+          gl_FragColor = vec4(color, density * 0.07);
+        }
+      `,
+      transparent: true, side: THREE.DoubleSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.ioPlasmaTorusMesh = new THREE.Mesh(torusGeo, torusMat);
+    this.ioPlasmaTorusMesh.rotation.x = Math.PI / 2; // Flat in orbital plane
+    this.jupiterGroup.add(this.ioPlasmaTorusMesh);
+  }
+
+  private createEuropaPlumes() {
+    // Europa's water plumes — geysers of water vapor shooting from the icy surface
+    // Discovered by Hubble Space Telescope, up to 200 km high
+    // Europa is moon index 1, size 0.26 → plumes extend ~2x moon radius
+    const plumeCount = 60;
+    const plumeGeo = new THREE.BufferGeometry();
+    const plumePos = new Float32Array(plumeCount * 3);
+    const plumeSpeeds = new Float32Array(plumeCount);
+
+    for (let i = 0; i < plumeCount; i++) {
+      // Cluster around the south pole region (where plumes were observed)
+      const spread = 0.15;
+      plumePos[i * 3] = (Math.random() - 0.5) * spread;
+      plumePos[i * 3 + 1] = -(0.26 + Math.random() * 0.6); // below moon, shooting down
+      plumePos[i * 3 + 2] = (Math.random() - 0.5) * spread;
+      plumeSpeeds[i] = 0.5 + Math.random() * 1.5;
+    }
+    plumeGeo.setAttribute('position', new THREE.Float32BufferAttribute(plumePos, 3));
+    plumeGeo.setAttribute('speed', new THREE.Float32BufferAttribute(plumeSpeeds, 1));
+
+    this.europaPlume = new THREE.Points(plumeGeo, new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        attribute float speed;
+        uniform float uTime;
+        varying float vAlpha;
+        void main() {
+          float cycle = mod(uTime * speed * 0.5, 2.0);
+          vec3 pos = position;
+          pos.y -= cycle * 0.3;
+          vAlpha = smoothstep(2.0, 0.0, cycle) * 0.6;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = 1.5 * (50.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vAlpha;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          gl_FragColor = vec4(0.7, 0.85, 1.0, smoothstep(0.5, 0.0, d) * vAlpha);
+        }
+      `,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    }));
+
+    // Attached to Europa's mesh (galileanMoons[1])
+    if (this.galileanMoons[1]) {
+      this.galileanMoons[1].mesh.add(this.europaPlume);
+    }
+  }
+
+  private updateEuropaPlumes(time: number) {
+    if (this.europaPlume) {
+      (this.europaPlume.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
+    }
+  }
+
+  private createSolarWind() {
+    // Solar wind: charged particles streaming from the Sun toward Jupiter
+    // Sun at (-50, 10, 30), Jupiter at (12, 0, -15)
+    const count = 400;
+    const geo = new THREE.BufferGeometry();
+    this.solarWindPositions = new Float32Array(count * 3);
+    const sizes = new Float32Array(count);
+
+    const sunPos = new THREE.Vector3(-50, 10, 30);
+    const jupPos = new THREE.Vector3(12, 0, -15);
+    const dir = jupPos.clone().sub(sunPos);
+
+    for (let i = 0; i < count; i++) {
+      const t = Math.random();
+      const spread = 8 + t * 15; // widens as it travels
+      this.solarWindPositions[i * 3] = sunPos.x + dir.x * t + (Math.random() - 0.5) * spread;
+      this.solarWindPositions[i * 3 + 1] = sunPos.y + dir.y * t + (Math.random() - 0.5) * spread;
+      this.solarWindPositions[i * 3 + 2] = sunPos.z + dir.z * t + (Math.random() - 0.5) * spread;
+      sizes[i] = 0.3 + Math.random() * 0.5;
+    }
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(this.solarWindPositions, 3));
+    geo.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1));
+
+    this.solarWind = new THREE.Points(geo, new THREE.ShaderMaterial({
+      vertexShader: `
+        attribute float aSize;
+        varying float vAlpha;
+        void main() {
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * (80.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+          vAlpha = 1.0;
+        }
+      `,
+      fragmentShader: `
+        varying float vAlpha;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float a = smoothstep(0.5, 0.0, d) * 0.08;
+          gl_FragColor = vec4(1.0, 0.95, 0.7, a);
+        }
+      `,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    }));
+    this.scene.add(this.solarWind);
+  }
+
+  private updateSolarWind() {
+    if (!this.solarWind) return;
+    const sunPos = new THREE.Vector3(-50, 10, 30);
+    const jupPos = new THREE.Vector3(12, 0, -15);
+    const dir = jupPos.clone().sub(sunPos).normalize();
+    const speed = 0.3;
+    const pos = this.solarWind.geometry.attributes['position'] as THREE.BufferAttribute;
+
+    for (let i = 0; i < pos.count; i++) {
+      let x = pos.getX(i) + dir.x * speed;
+      let y = pos.getY(i) + dir.y * speed;
+      let z = pos.getZ(i) + dir.z * speed;
+
+      // Reset if past Jupiter
+      const t = new THREE.Vector3(x, y, z).sub(sunPos).dot(dir) / sunPos.distanceTo(jupPos);
+      if (t > 1.2) {
+        const spread = 8;
+        x = sunPos.x + (Math.random() - 0.5) * spread;
+        y = sunPos.y + (Math.random() - 0.5) * spread;
+        z = sunPos.z + (Math.random() - 0.5) * spread;
+      }
+      pos.setXYZ(i, x, y, z);
+    }
+    pos.needsUpdate = true;
+  }
+
+  private createRadiationBelts() {
+    // Jupiter's radiation belts are the most intense in the solar system
+    // Charged particles trapped by the magnetic field form toroidal belts
+    const beltGeo = new THREE.TorusGeometry(16, 5, 32, 96);
+    const beltMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec3 vPos;
+        varying vec2 vUv;
+        void main() {
+          vPos = position;
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec3 vPos;
+        varying vec2 vUv;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        void main() {
+          float noise = hash(vUv * 30.0 + uTime * 0.02);
+          float edge = smoothstep(0.0, 0.35, vUv.y) * smoothstep(1.0, 0.65, vUv.y);
+          float swirl = sin(vUv.x * 60.0 + uTime * 1.5 + noise * 5.0) * 0.5 + 0.5;
+          float alpha = edge * (noise * 0.3 + swirl * 0.2) * 0.04;
+          // Cyan-blue radiation glow
+          vec3 color = mix(vec3(0.2, 0.5, 1.0), vec3(0.6, 0.3, 1.0), swirl);
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true, side: THREE.DoubleSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.radiationBelt = new THREE.Mesh(beltGeo, beltMat);
+    this.radiationBelt.rotation.x = Math.PI / 2;
+    // Slight tilt relative to rotation axis (Jupiter's magnetic axis is tilted ~10°)
+    this.radiationBelt.rotation.z = 0.175; // ~10 degrees
+    this.jupiterGroup.add(this.radiationBelt);
+  }
+
+  private createTrojanAsteroids() {
+    // Jupiter's Trojan asteroids orbit the Sun at L4 (60° ahead) and L5 (60° behind)
+    // Jupiter is at (12, 0, -15) scene coords, Sun at (-50, 10, 30)
+    // We place clusters at ~60° ahead and behind in Jupiter's orbit
+    const jupPos = new THREE.Vector3(12, 0, -15);
+    const sunPos = new THREE.Vector3(-50, 10, 30);
+    const toSun = sunPos.clone().sub(jupPos).normalize();
+    const orbitRadius = jupPos.distanceTo(sunPos);
+
+    // L4: 60° ahead in orbit (counterclockwise)
+    const angleL4 = Math.atan2(jupPos.z - sunPos.z, jupPos.x - sunPos.x) + Math.PI / 3;
+    const l4Center = new THREE.Vector3(
+      sunPos.x + orbitRadius * Math.cos(angleL4),
+      0,
+      sunPos.z + orbitRadius * Math.sin(angleL4)
+    );
+
+    // L5: 60° behind
+    const angleL5 = Math.atan2(jupPos.z - sunPos.z, jupPos.x - sunPos.x) - Math.PI / 3;
+    const l5Center = new THREE.Vector3(
+      sunPos.x + orbitRadius * Math.cos(angleL5),
+      0,
+      sunPos.z + orbitRadius * Math.sin(angleL5)
+    );
+
+    const count = 120;
+    const rockGeo = new THREE.IcosahedronGeometry(0.15, 0);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x777766, roughness: 1, metalness: 0.15 });
+
+    // L4 cluster
+    this.trojanL4 = new THREE.InstancedMesh(rockGeo, rockMat, count);
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < count; i++) {
+      dummy.position.set(
+        l4Center.x + (Math.random() - 0.5) * 20,
+        (Math.random() - 0.5) * 6,
+        l4Center.z + (Math.random() - 0.5) * 20
+      );
+      const s = 0.3 + Math.random() * 1.2;
+      dummy.scale.set(s, s * (0.5 + Math.random()), s);
+      dummy.rotation.set(Math.random() * 6, Math.random() * 6, 0);
+      dummy.updateMatrix();
+      this.trojanL4.setMatrixAt(i, dummy.matrix);
+    }
+    this.scene.add(this.trojanL4);
+
+    // L5 cluster
+    this.trojanL5 = new THREE.InstancedMesh(rockGeo, rockMat, count);
+    for (let i = 0; i < count; i++) {
+      dummy.position.set(
+        l5Center.x + (Math.random() - 0.5) * 20,
+        (Math.random() - 0.5) * 6,
+        l5Center.z + (Math.random() - 0.5) * 20
+      );
+      const s = 0.3 + Math.random() * 1.2;
+      dummy.scale.set(s, s * (0.5 + Math.random()), s);
+      dummy.rotation.set(Math.random() * 6, Math.random() * 6, 0);
+      dummy.updateMatrix();
+      this.trojanL5.setMatrixAt(i, dummy.matrix);
+    }
+    this.scene.add(this.trojanL5);
+  }
+
+  private createZodiacalLight() {
+    // Zodiacal light: faint glow of sunlight scattered by interplanetary dust
+    // along the ecliptic plane. Visible as a triangular glow cone from the sun.
+    const zlGeo = new THREE.ConeGeometry(40, 80, 32, 1, true);
+    const zlMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec2 vUv;
+        void main() {
+          // Fade from bright near sun to invisible at edges
+          float falloff = smoothstep(1.0, 0.0, vUv.y); // bright at base (sun end)
+          float edge = smoothstep(0.0, 0.3, vUv.x) * smoothstep(1.0, 0.7, vUv.x);
+          float alpha = falloff * falloff * edge * 0.025;
+          vec3 color = vec3(1.0, 0.95, 0.8); // warm sunlit dust
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true, side: THREE.DoubleSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.zodiacalLight = new THREE.Mesh(zlGeo, zlMat);
+    // Emanates from the sun position along the ecliptic
+    this.zodiacalLight.position.set(-50, 10, 30);
+    // Point toward Jupiter
+    this.zodiacalLight.lookAt(12, 0, -15);
+    this.zodiacalLight.rotateX(Math.PI / 2);
+    this.scene.add(this.zodiacalLight);
+  }
+
   private createDistanceBeam() {
     const group = new THREE.Group();
 
@@ -2248,6 +2721,31 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     if (this.auroraBottom) {
       (this.auroraBottom.material as THREE.ShaderMaterial).uniforms['uTime'].value = time + 5;
+    }
+
+    // Lightning flashes on Jupiter's night side
+    this.updateLightning();
+
+    // Io plasma torus animation
+    if (this.ioPlasmaTorusMesh) {
+      (this.ioPlasmaTorusMesh.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
+    }
+
+    // Europa plume animation
+    this.updateEuropaPlumes(time);
+
+    // Solar wind streaming
+    this.updateSolarWind();
+
+    // Radiation belt animation
+    if (this.radiationBelt) {
+      (this.radiationBelt.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
+    }
+
+    // Sun corona pulse
+    if (this.sunMesh) {
+      const coronaScale = 1 + Math.sin(time * 0.5) * 0.02;
+      this.sunMesh.children[0]?.scale.set(coronaScale, coronaScale, coronaScale);
     }
 
     this.renderer.autoClear = false;

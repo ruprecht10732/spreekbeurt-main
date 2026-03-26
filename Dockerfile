@@ -8,9 +8,6 @@ RUN npm ci
 
 COPY . .
 
-ARG GEMINI_API_KEY
-RUN sed -i "s|'YOUR_GEMINI_API_KEY'|'${GEMINI_API_KEY}'|g" angular.json
-
 RUN npx ng build --configuration production
 
 # Stage 2: Production runtime

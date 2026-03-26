@@ -14,7 +14,7 @@ RUN npx ng build --configuration production
 FROM node:22-alpine AS production
 
 ENV NODE_ENV=production
-ENV PORT=4000
+ENV PORT=3000
 
 WORKDIR /app
 
@@ -28,6 +28,6 @@ RUN npm ci --omit=dev && npm cache clean --force
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-EXPOSE 4000
+EXPOSE 3000
 
 CMD ["node", "dist/app/server/server.mjs"]

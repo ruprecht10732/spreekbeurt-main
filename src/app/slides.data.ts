@@ -46,9 +46,10 @@ export const SLIDES: Slide[] = [
     content: [
       '• Geen steen of zand',
       '• Reusachtige gasbol',
-      '• 90% Waterstof, 10% Helium',
+      '• 90% Waterstof (H₂), 10% Helium (He)',
       '• Dampkring is 1000 km dik',
-      '• Geen vaste grond om te landen'
+      '• Geen vaste grond om te landen',
+      '• Massa: 1,898 × 10²⁷ kg'
     ]
   },
   {
@@ -77,8 +78,9 @@ export const SLIDES: Slide[] = [
     title: '3. Hoe ver is Jupiter weg?',
     content: [
       '• Afstand verandert constant',
-      '• Dichtstbij: 588 miljoen km',
-      '• Verste weg: 968 miljoen km',
+      '• Dichtstbij: 588 miljoen km (3,95 AU)',
+      '• Verste weg: 968 miljoen km (6,47 AU)',
+      '• Licht doet er ~33–54 minuten over (c = 299.792 km/s)',
       '• Met de auto: honderden jaren rijden!'
     ]
   },
@@ -86,7 +88,7 @@ export const SLIDES: Slide[] = [
     id: 'h4',
     title: '4. Hoe oud is Jupiter?',
     content: [
-      '• Ongeveer 4,5 miljard jaar oud',
+      '• Ongeveer 4,503 × 10⁹ jaar oud',
       '• Oudste planeet in ons zonnestelsel',
       '• Razendsnel gevormd (binnen 1 miljoen jaar)',
       '• Ontstaan uit gas en stof'
@@ -97,9 +99,10 @@ export const SLIDES: Slide[] = [
     title: '5. Is Jupiter een normale planeet?',
     content: [
       '• Allergrootste planeet (Gasreus)',
-      '• 300x zwaarder dan de aarde',
+      '• 318× zwaarder dan de aarde (M = 1,898 × 10²⁷ kg)',
       '• Draait super snel om zijn as',
-      '• Eén dag duurt nog geen 10 uur!'
+      '• Eén dag duurt maar 9 uur en 55 min',
+      '• Zwaartekracht: g = 24,79 m/s² (2,5× aarde)'
     ],
     video: 'Jupiter_Size_Comparison_Video.mp4',
     experiment: {
@@ -117,8 +120,9 @@ export const SLIDES: Slide[] = [
     title: 'Extra: Kunnen we op Jupiter wonen?',
     content: [
       '• Nee: Geen grond, enorme druk, harde wind',
-      '• Maar... Jupiter heeft 95 manen! (bijv. Europa)',
-      '• Manen hebben mogelijk oceanen onder ijs',
+      '• Maar... Jupiter heeft 95 manen!',
+      '• Europa: mogelijk oceaan onder ijs',
+      '• Getijdenkracht (F = GMm/r²) creëert warmte op Io',
       '• Misschien daar ooit leven te vinden?'
     ]
   },
@@ -158,7 +162,7 @@ export const SLIDES: Slide[] = [
       },
       {
         question: '5. Is Jupiter zwaarder of lichter dan de aarde?',
-        options: ['A: 300x zwaarder', 'B: 10x lichter'],
+        options: ['A: 318× zwaarder', 'B: 10× lichter'],
         correctOptionIndex: 0,
         explanation: 'Jupiter is de zwaarste planeet van ons hele zonnestelsel.'
       }

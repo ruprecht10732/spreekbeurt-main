@@ -107,6 +107,9 @@ import confetti from 'canvas-confetti';
                   <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_30px_rgba(255,232,31,0.5)]">{{ currentDistance() }}</span>
                   <span class="text-lg md:text-2xl text-[var(--color-starwars-yellow)]/60 font-starwars tracking-wider">MILJOEN KM</span>
                 </div>
+                <div class="mt-2 text-xs text-[var(--color-starwars-yellow)]/40 font-mono tracking-wider">
+                  t = d/c ≈ {{ lightTravelMinutes() }} min &nbsp;·&nbsp; {{ lightTravelAU() }} AU
+                </div>
               </div>
             </div>
           }
@@ -357,6 +360,10 @@ export class App implements AfterViewInit {
   selectedQuizOption = signal(-1);
   sceneLoaded = signal(false);
   currentDistance = signal(0);
+  // t = d/c: light-travel time in minutes (c = 299,792 km/s)
+  lightTravelMinutes = computed(() => (this.currentDistance() * 1_000_000 / 299_792 / 60).toFixed(1));
+  // 1 AU = 149,597,870.7 km
+  lightTravelAU = computed(() => (this.currentDistance() * 1_000_000 / 149_597_870.7).toFixed(2));
   private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
   private bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
   private isBrowser: boolean;

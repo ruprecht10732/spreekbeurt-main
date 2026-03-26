@@ -577,7 +577,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Group for Jupiter and Atmosphere
     this.jupiterGroup = new THREE.Group();
     this.jupiterGroup.position.set(12, 0, -15);
-    this.jupiterGroup.rotation.z = 0.05; // Slight tilt
+    this.jupiterGroup.rotation.z = 0.0546; // Jupiter axial tilt: 3.13°
     this.scene.add(this.jupiterGroup);
 
     // Jupiter Texture Generation — High-fidelity procedural with Perlin noise bands
@@ -848,12 +848,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(10.3, 128, 128), atmosphereMaterial);
     this.jupiterGroup.add(this.atmosphere);
 
-    // The 4 Galilean Moons
+    // The 4 Galilean Moons — Kepler's 3rd law: T² ∝ a³, so ω ∝ a^(-3/2)
+    // Real orbital periods: Io=1.769d, Europa=3.551d, Ganymede=7.155d, Callisto=16.689d
+    // Speed ratios = inverse period ratios (ω = 2π/T)
+    // Sizes proportional to real radii: Io=1821km, Europa=1561km, Ganymede=2634km, Callisto=2410km
     const galileanConfigs = [
-      { name: 'Io', color: 0xddaa33, size: 0.3, distance: 14, speed: 0.008 },
-      { name: 'Europa', color: 0xeeeeee, size: 0.25, distance: 18, speed: 0.006 },
-      { name: 'Ganymede', color: 0xaaaaaa, size: 0.4, distance: 24, speed: 0.004 },
-      { name: 'Callisto', color: 0x666666, size: 0.35, distance: 32, speed: 0.002 }
+      { name: 'Io', color: 0xddaa33, size: 0.30, distance: 14, speed: 0.008 },
+      { name: 'Europa', color: 0xeeeeee, size: 0.26, distance: 18, speed: 0.00398 },
+      { name: 'Ganymede', color: 0xaaaaaa, size: 0.43, distance: 24, speed: 0.00198 },
+      { name: 'Callisto', color: 0x666666, size: 0.40, distance: 32, speed: 0.000848 }
     ];
 
     galileanConfigs.forEach(config => {
@@ -1629,6 +1632,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private updateEarthOrbit() {
+    // Earth orbital velocity: compressed visualization
+    // Real ratio: Earth orbit (1 AU) / Jupiter orbit (5.2 AU) ≈ 1:5.2
+    // Scene: Earth orbit r=12, Jupiter-Sun distance ≈ 42 → ratio ~1:3.5 (compressed)
     this.earthOrbitAngle += 0.002;
     const sunX = -25, sunZ = 5;
     const r = 12;
@@ -1672,8 +1678,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     pp.needsUpdate = true;
 
     // Map 3D distance to real km range (588-968 million km)
+    // Min: Earth at opposition (closest to Jupiter) ≈ 3.93 AU = 588M km
+    // Max: Earth at conjunction (farthest) ≈ 6.47 AU = 968M km
     const dist3D = ep.distanceTo(jp);
-    const minDist3D = 27, maxDist3D = 51;
+    const minDist3D = 30, maxDist3D = 54;
     const frac = Math.max(0, Math.min(1, (dist3D - minDist3D) / (maxDist3D - minDist3D)));
     const km = Math.round(588 + frac * (968 - 588));
     if (km !== this.lastEmittedKm) {

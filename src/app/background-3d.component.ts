@@ -853,10 +853,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Speed ratios = inverse period ratios (ω = 2π/T)
     // Sizes proportional to real radii: Io=1821km, Europa=1561km, Ganymede=2634km, Callisto=2410km
     const galileanConfigs = [
-      { name: 'Io', color: 0xddaa33, size: 0.30, distance: 14, speed: 0.008 },
+      { name: 'Io', color: 0xddaa33, size: 0.3, distance: 14, speed: 0.008 },
       { name: 'Europa', color: 0xeeeeee, size: 0.26, distance: 18, speed: 0.00398 },
       { name: 'Ganymede', color: 0xaaaaaa, size: 0.43, distance: 24, speed: 0.00198 },
-      { name: 'Callisto', color: 0x666666, size: 0.40, distance: 32, speed: 0.000848 }
+      { name: 'Callisto', color: 0x666666, size: 0.4, distance: 32, speed: 0.000848 }
     ];
 
     galileanConfigs.forEach(config => {

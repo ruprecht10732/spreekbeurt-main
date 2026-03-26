@@ -22,7 +22,7 @@ export const SLIDES: Slide[] = [
     id: 'title',
     title: 'Spreekbeurt over Jupiter',
     content: [
-      'Gemaakt door: Jorn Oost',
+      'Gemaakt door: Asbjørn Oost',
       'Klas: Groep 7'
     ],
     isTitleSlide: true

@@ -78,118 +78,239 @@ import confetti from 'canvas-confetti';
           </div>
         </div>
       } @else {
-        <!-- Cinematic gradient overlay on the left -->
-        <div class="absolute inset-0 bg-gradient-to-r from-black/70 via-black/30 to-transparent pointer-events-none"></div>
+        <!-- Subtle gradient — just enough for text readability -->
+        <div class="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent pointer-events-none"></div>
 
-        <!-- Regular Slide Content — glassmorphism panel -->
-        <div #slideContainer class="relative w-full h-full flex flex-col justify-center pl-8 md:pl-16 pr-[50%] pointer-events-auto">
-          
-          <div class="slide-panel bg-black/30 backdrop-blur-md rounded-2xl border border-white/[0.06] p-8 md:p-12 shadow-[0_8px_60px_rgba(0,0,0,0.5)]">
-            <!-- Accent line + Title -->
-            <div class="mb-8">
-              <div class="accent-line w-20 h-[3px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-[var(--color-starwars-yellow)]/30 mb-5 rounded-full shadow-[0_0_16px_rgba(255,232,31,0.5)] origin-left"></div>
-              <h2 class="slide-title text-3xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_24px_rgba(255,232,31,0.3)]">
-                {{ currentSlide().title }}
-              </h2>
-            </div>
-            
-            <!-- Content items with left accent -->
-            <div class="space-y-3 text-base md:text-xl font-sans text-gray-200 leading-relaxed pl-5 border-l-2 border-[var(--color-starwars-yellow)]/15">
-              @for (line of currentSlide().content; track $index) {
-                <p class="slide-item drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] text-gray-100/90">{{ line }}</p>
-              }
-            </div>
+        <div #slideContainer class="relative w-full h-full pointer-events-auto">
 
-          @if (currentSlide().id === 'h3' && currentDistance() > 0) {
-            <div class="mt-6 slide-item">
-              <div class="inline-block bg-black/30 backdrop-blur-sm rounded-xl px-6 py-4 border border-[var(--color-starwars-yellow)]/15">
-                <span class="text-xs text-[var(--color-starwars-yellow)]/60 font-starwars tracking-[0.3em] block mb-1">HUIDIGE AFSTAND</span>
-                <div class="flex items-baseline gap-2">
-                  <span class="text-4xl md:text-6xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
-                  <span class="text-base md:text-xl text-[var(--color-starwars-yellow)]/50 font-starwars tracking-wider">MILJOEN KM</span>
+          <!-- Floating title — top-left -->
+          <div class="absolute top-10 left-10 md:left-14 z-10">
+            <div class="accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_12px_rgba(255,232,31,0.4)] origin-left"></div>
+            <h2 class="slide-title text-2xl md:text-4xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_20px_rgba(255,232,31,0.3)]">
+              {{ currentSlide().title }}
+            </h2>
+          </div>
+
+          <!-- ═══ H1: COMPOSITION — floating data around the planet ═══ -->
+          @if (currentSlide().id === 'h1') {
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="slide-item absolute top-[14%] right-[16%] text-right">
+                <div class="text-[10px] font-mono text-cyan-400/40 tracking-[0.3em] mb-1">CLASSIFICATIE</div>
+                <div class="text-3xl md:text-5xl font-starwars text-cyan-300/80 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GASREUS</div>
+                <div class="text-xs text-white/30 mt-1">Geen steen of zand zoals de aarde</div>
+              </div>
+              <div class="slide-item absolute top-[38%] right-[6%] md:right-[10%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_30px_rgba(255,232,31,0.4)] tabular-nums">90</span>
+                  <span class="text-xl text-[var(--color-starwars-yellow)]/40 font-starwars">%</span>
                 </div>
-                <div class="mt-2 text-xs text-[var(--color-starwars-yellow)]/40 font-mono tracking-wider">
-                  ☀️ Licht doet er {{ lightTravelMinutes() }} minuten over!
+                <div class="text-xs text-white/35 tracking-wider">WATERSTOF (H₂)</div>
+              </div>
+              <div class="slide-item absolute top-[55%] right-[18%] md:right-[22%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-3xl md:text-5xl font-starwars text-orange-300/70 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">10</span>
+                  <span class="text-lg text-orange-300/30 font-starwars">%</span>
+                </div>
+                <div class="text-xs text-white/30 tracking-wider">HELIUM (He)</div>
+              </div>
+              <div class="slide-item absolute bottom-[28%] right-[10%] md:right-[14%]">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-px bg-gradient-to-r from-transparent to-cyan-400/30"></div>
+                  <div>
+                    <div class="flex items-baseline gap-1">
+                      <span class="text-2xl md:text-3xl font-starwars text-cyan-200/60 tabular-nums">1000</span>
+                      <span class="text-[10px] text-cyan-200/25 tracking-wider">KM</span>
+                    </div>
+                    <div class="text-[10px] text-white/20 tracking-wider">DAMPKRING DIKTE</div>
+                  </div>
+                </div>
+              </div>
+              <div class="slide-item absolute bottom-[16%] right-[22%]">
+                <div class="text-xs text-red-300/40 italic flex items-center gap-2">
+                  <div class="w-1 h-1 rounded-full bg-red-400/30"></div>
+                  Geen vaste grond om op te landen
                 </div>
               </div>
             </div>
-          }
 
-
-          @if (currentSlide().experiment) {
-            <div class="mt-10 pl-5 border-l-2 border-green-500/40 slide-item">
-              <h3 class="text-2xl font-starwars text-green-400 mb-3 flex items-center gap-3 drop-shadow-[0_0_10px_rgba(74,222,128,0.4)]">
-                <mat-icon>science</mat-icon> {{ currentSlide().experiment?.title }}
-              </h3>
-              <p class="text-green-200/80 mb-3 text-sm md:text-base">{{ currentSlide().experiment?.description }}</p>
-              <ul class="space-y-2 text-green-100">
-                @for (instruction of currentSlide().experiment?.instructions; track $index) {
-                  <li class="flex items-start gap-2">
-                    <span class="text-green-500 mt-1">&#9656;</span>
-                    <span>{{ instruction }}</span>
-                  </li>
-                }
-              </ul>
+          <!-- ═══ H5: SIZE / GRAVITY — floating comparison stats ═══ -->
+          } @else if (currentSlide().id === 'h5') {
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="slide-item absolute top-[12%] right-[14%] text-right">
+                <div class="text-[10px] font-mono text-purple-400/40 tracking-[0.3em] mb-1">MASSA</div>
+                <div class="flex items-baseline gap-1 justify-end">
+                  <span class="text-4xl md:text-6xl font-starwars text-purple-300/80 drop-shadow-[0_0_25px_rgba(180,130,255,0.4)] tabular-nums">300</span>
+                  <span class="text-lg text-purple-300/40 font-starwars">×</span>
+                </div>
+                <div class="text-xs text-white/30">zwaarder dan de aarde</div>
+              </div>
+              <div class="slide-item absolute top-[35%] right-[6%] md:right-[8%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-3xl md:text-4xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_20px_rgba(255,232,31,0.3)] tabular-nums">9u 55m</span>
+                </div>
+                <div class="text-xs text-white/30 tracking-wider">ÉÉN DAG OP JUPITER</div>
+              </div>
+              <div class="slide-item absolute top-[52%] right-[16%] md:right-[20%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-4xl md:text-5xl font-starwars text-orange-300/70 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">2.5</span>
+                  <span class="text-lg text-orange-300/30 font-starwars">×</span>
+                </div>
+                <div class="text-xs text-white/30 tracking-wider">ZWAARTEKRACHT</div>
+                <div class="text-[10px] text-white/20 mt-0.5">Je weegt er flink meer!</div>
+              </div>
+              <div class="slide-item absolute bottom-[25%] right-[12%]">
+                <div class="text-xs text-cyan-300/35 flex items-center gap-2">
+                  <div class="w-8 h-px bg-gradient-to-r from-transparent to-cyan-400/20"></div>
+                  Allergrootste planeet — een gasreus
+                </div>
+              </div>
             </div>
-          }
+            @if (currentSlide().experiment) {
+              <div class="absolute bottom-24 left-10 md:left-14 max-w-[32%] slide-item">
+                <div class="pl-4 border-l-2 border-green-500/20">
+                  <h3 class="text-base font-starwars text-green-400/70 mb-2 flex items-center gap-2">
+                    <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
+                  </h3>
+                  <p class="text-green-200/40 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1 text-green-100/50 text-xs">
+                    @for (instruction of currentSlide().experiment?.instructions; track $index) {
+                      <li class="flex items-start gap-1.5">
+                        <span class="text-green-500/40 mt-0.5 text-[10px]">▶</span>
+                        <span>{{ instruction }}</span>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              </div>
+            }
 
-          @if (currentSlide().quiz) {
+          <!-- ═══ EXTRA: MOONS — floating moon data ═══ -->
+          } @else if (currentSlide().id === 'extra') {
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="slide-item absolute top-[12%] right-[18%] text-right">
+                <div class="text-[10px] font-mono text-blue-400/40 tracking-[0.3em] mb-1">MAANSYSTEEM</div>
+                <div class="flex items-baseline gap-1 justify-end">
+                  <span class="text-5xl md:text-7xl font-starwars text-blue-300/80 drop-shadow-[0_0_30px_rgba(100,150,255,0.4)] tabular-nums">95</span>
+                </div>
+                <div class="text-xs text-white/30">manen in een baan om Jupiter</div>
+              </div>
+              <div class="slide-item absolute top-[38%] right-[6%] md:right-[8%]">
+                <div class="text-lg font-starwars text-cyan-200/70 drop-shadow-[0_0_15px_rgba(100,210,255,0.3)]">EUROPA</div>
+                <div class="text-xs text-white/30 mt-0.5 max-w-[180px]">Oceaan onder het ijs — misschien leven?</div>
+              </div>
+              <div class="slide-item absolute top-[56%] right-[18%] md:right-[22%]">
+                <div class="text-lg font-starwars text-yellow-300/70 drop-shadow-[0_0_15px_rgba(255,200,50,0.3)]">IO</div>
+                <div class="text-xs text-white/30 mt-0.5 max-w-[170px]">Vulkanen door Jupiters zwaartekracht</div>
+              </div>
+              <div class="slide-item absolute bottom-[22%] right-[14%]">
+                <div class="text-xs text-red-300/35 italic flex items-center gap-2">
+                  <div class="w-1 h-1 rounded-full bg-red-400/30"></div>
+                  Extreme druk, wind en geen grond
+                </div>
+              </div>
+            </div>
+
+          <!-- ═══ QUIZ — interactive layout ═══ -->
+          } @else if (currentSlide().quiz) {
             @let quiz = currentSlide().quiz!;
-            <div class="mt-10 slide-item">
+            <div class="absolute top-28 left-10 md:left-14 bottom-24 max-w-[42%] overflow-y-auto">
               @if (currentQuizQuestionIndex() < quiz.length) {
                 @let q = quiz[currentQuizQuestionIndex()];
-                <div>
-                  <span class="text-blue-400/80 font-starwars text-lg tracking-widest mb-4 block">Vraag {{ currentQuizQuestionIndex() + 1 }} / {{ quiz.length }}</span>
-                  
-                  <p class="text-2xl md:text-3xl text-white font-medium mb-8 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)]">{{ q.question }}</p>
-                  
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-8">
+                <div class="slide-item">
+                  <span class="text-blue-400/60 font-starwars text-sm tracking-widest mb-3 block">Vraag {{ currentQuizQuestionIndex() + 1 }} / {{ quiz.length }}</span>
+                  <p class="text-xl md:text-2xl text-white/90 font-medium mb-6 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ q.question }}</p>
+                  <div class="grid grid-cols-1 gap-2 mb-6">
                     @for (option of q.options; track $index) {
                       <div (click)="!isAnswerRevealed() && selectQuizOption($index)"
-                           class="quiz-option px-5 py-4 rounded-lg transition-all duration-300 flex items-center text-lg md:text-xl font-semibold"
+                           class="quiz-option px-4 py-3 rounded-lg transition-all duration-300 flex items-center text-base md:text-lg font-semibold backdrop-blur-sm"
                            [class]="isAnswerRevealed() 
                                     ? ($index === q.correctOptionIndex 
-                                        ? 'bg-green-500/20 border-l-4 border-green-400 text-white shadow-[0_0_20px_rgba(74,222,128,0.3)] scale-[1.02]' 
-                                        : 'bg-white/5 border-l-4 border-red-500/30 text-gray-500 opacity-50 scale-[0.98]')
+                                        ? 'bg-green-500/15 border-l-3 border-green-400 text-white shadow-[0_0_15px_rgba(74,222,128,0.2)]' 
+                                        : 'bg-white/[0.03] border-l-3 border-red-500/20 text-gray-500 opacity-40')
                                     : selectedQuizOption() === $index
-                                      ? 'bg-[var(--color-starwars-yellow)]/15 border-l-4 border-[var(--color-starwars-yellow)] text-white cursor-pointer'
-                                      : 'bg-white/5 border-l-4 border-blue-400/40 text-blue-50 hover:bg-white/10 cursor-pointer hover:border-blue-300/60'">
-                        <span class="mr-3 text-sm opacity-50 font-starwars">{{ ['A','B','C','D'][$index] }}</span>
+                                      ? 'bg-[var(--color-starwars-yellow)]/10 border-l-3 border-[var(--color-starwars-yellow)] text-white cursor-pointer'
+                                      : 'bg-white/[0.03] border-l-3 border-white/10 text-white/70 hover:bg-white/[0.06] cursor-pointer hover:border-white/20'">
+                        <span class="mr-3 text-xs opacity-40 font-starwars">{{ ['A','B','C','D'][$index] }}</span>
                         {{ option }}
                       </div>
                     }
                   </div>
-
                   @if (isAnswerRevealed()) {
-                    <div class="mb-8 pl-5 border-l-2 border-green-500/40 animate-fade-in">
-                      <p class="text-green-200/90 text-lg">{{ q.explanation }}</p>
+                    <div class="mb-6 pl-4 border-l-2 border-green-500/25 animate-fade-in">
+                      <p class="text-green-200/70 text-sm">{{ q.explanation }}</p>
                     </div>
                   }
-
-                  <div class="flex justify-start gap-4">
+                  <div class="flex justify-start gap-3">
                     @if (!isAnswerRevealed()) {
                       <button (click)="revealAnswer()" 
                               [disabled]="selectedQuizOption() === -1"
-                              class="px-6 py-3 bg-[var(--color-starwars-yellow)] text-black font-starwars tracking-widest rounded-lg hover:bg-yellow-400 transition-all shadow-[0_0_20px_rgba(255,232,31,0.3)] disabled:opacity-30 disabled:hover:bg-[var(--color-starwars-yellow)] disabled:cursor-not-allowed">
+                              class="px-5 py-2.5 bg-[var(--color-starwars-yellow)]/90 text-black font-starwars text-sm tracking-widest rounded-lg hover:bg-[var(--color-starwars-yellow)] transition-all disabled:opacity-20 disabled:cursor-not-allowed">
                         {{ selectedQuizOption() === -1 ? 'Kies een antwoord' : 'Toon Antwoord' }}
                       </button>
                     } @else {
-                      <button (click)="nextQuizQuestion()" class="px-6 py-3 bg-blue-500/80 text-white font-starwars tracking-widest rounded-lg hover:bg-blue-400 transition-colors">
+                      <button (click)="nextQuizQuestion()" class="px-5 py-2.5 bg-blue-500/50 text-white font-starwars text-sm tracking-widest rounded-lg hover:bg-blue-400/50 transition-colors">
                         {{ currentQuizQuestionIndex() === quiz.length - 1 ? 'Einde Afvalrace' : 'Volgende Vraag' }}
                       </button>
                     }
                   </div>
                 </div>
               } @else {
-                <div class="text-left quiz-complete">
-                  <mat-icon class="text-6xl text-[var(--color-starwars-yellow)] mb-4 drop-shadow-[0_0_20px_rgba(255,232,31,0.5)] trophy-bounce" style="height: 60px; width: 60px; font-size: 60px;">emoji_events</mat-icon>
-                  <h3 class="text-4xl font-starwars text-[var(--color-starwars-yellow)] mb-4 tracking-widest title-shimmer">Gefeliciteerd!</h3>
-                  <p class="text-2xl text-green-100">Jullie zijn de ultieme Jupiter-experts!</p>
+                <div class="text-left quiz-complete slide-item">
+                  <mat-icon class="text-5xl text-[var(--color-starwars-yellow)] mb-3 drop-shadow-[0_0_15px_rgba(255,232,31,0.4)] trophy-bounce" style="height: 50px; width: 50px; font-size: 50px;">emoji_events</mat-icon>
+                  <h3 class="text-3xl font-starwars text-[var(--color-starwars-yellow)] mb-3 tracking-widest title-shimmer">Gefeliciteerd!</h3>
+                  <p class="text-xl text-green-100/70">Jullie zijn de ultieme Jupiter-experts!</p>
+                </div>
+              }
+            </div>
+            <div class="absolute bottom-24 left-10 md:left-14 max-w-[35%]">
+              <div class="space-y-1.5">
+                @for (line of currentSlide().content; track $index) {
+                  <p class="slide-item text-xs text-white/35 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                }
+              </div>
+            </div>
+
+          <!-- ═══ DEFAULT: subtle content bottom-left ═══ -->
+          } @else {
+            <div class="absolute bottom-28 left-10 md:left-14 max-w-[35%] flex flex-col gap-6">
+              <div class="space-y-2.5">
+                @for (line of currentSlide().content; track $index) {
+                  <p class="slide-item text-sm md:text-base text-white/65 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                }
+              </div>
+              @if (currentSlide().experiment) {
+                <div class="slide-item pl-4 border-l-2 border-green-500/20">
+                  <h3 class="text-base font-starwars text-green-400/70 mb-2 flex items-center gap-2">
+                    <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
+                  </h3>
+                  <p class="text-green-200/40 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1 text-green-100/50 text-xs">
+                    @for (instruction of currentSlide().experiment?.instructions; track $index) {
+                      <li class="flex items-start gap-1.5">
+                        <span class="text-green-500/40 mt-0.5 text-[10px]">▶</span>
+                        <span>{{ instruction }}</span>
+                      </li>
+                    }
+                  </ul>
                 </div>
               }
             </div>
           }
-          </div><!-- /slide-panel -->
+
+          <!-- Distance counter (h3) — floating near the beam -->
+          @if (currentSlide().id === 'h3' && currentDistance() > 0) {
+            <div class="absolute right-[10%] top-1/2 -translate-y-1/2 slide-item text-right pointer-events-none">
+              <div class="text-[10px] text-[var(--color-starwars-yellow)]/40 font-starwars tracking-[0.3em] mb-1">HUIDIGE AFSTAND</div>
+              <div class="flex items-baseline gap-1 justify-end">
+                <span class="text-4xl md:text-6xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
+                <span class="text-xs text-[var(--color-starwars-yellow)]/35 font-starwars tracking-wider">M KM</span>
+              </div>
+              <div class="mt-1 text-[10px] text-[var(--color-starwars-yellow)]/25 font-mono tracking-wider">
+                ☀️ Licht: {{ lightTravelMinutes() }} min
+              </div>
+            </div>
+          }
+
         </div>
       }
 
@@ -336,13 +457,17 @@ import confetti from 'canvas-confetti';
     .animate-fade-in {
       animation: fadeIn 0.5s ease-out forwards;
     }
-    .slide-panel {
-      animation: panelSlideIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    @keyframes annotationFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
     }
-    @keyframes panelSlideIn {
-      from { opacity: 0; transform: translateX(-30px); }
-      to { opacity: 1; transform: translateX(0); }
+    .annotation-layer > div {
+      animation: annotationFloat 6s ease-in-out infinite;
     }
+    .annotation-layer > div:nth-child(2) { animation-delay: -1s; }
+    .annotation-layer > div:nth-child(3) { animation-delay: -2s; }
+    .annotation-layer > div:nth-child(4) { animation-delay: -3s; }
+    .annotation-layer > div:nth-child(5) { animation-delay: -4s; }
     .perspective-1000 { perspective: 1000px; }
     .transform-style-3d { transform-style: preserve-3d; }
     .backface-hidden { backface-visibility: hidden; }

@@ -519,6 +519,43 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }, 4000);
     });
 
+    // Milky Way skybox — immersive backdrop sphere
+    const skyGeo = new THREE.SphereGeometry(500, 32, 32);
+    const skyMat = new THREE.MeshBasicMaterial({
+      color: 0x111122,
+      side: THREE.BackSide,
+      fog: false,
+      depthWrite: false
+    });
+    this.scene.add(new THREE.Mesh(skyGeo, skyMat));
+    // Load milky way texture onto skybox
+    this.textureLoader = new THREE.TextureLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_stars_milky_way.jpg', (tex) => {
+        skyMat.map = tex;
+        skyMat.color.setHex(0x444466); // slightly tinted to not overpower scene
+        skyMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
+
+    // Foreground space dust — slow drifting motes near camera for depth parallax
+    const fgDustCount = 150;
+    const fgDustGeo = new THREE.BufferGeometry();
+    const fgDustPos = new Float32Array(fgDustCount * 3);
+    for (let i = 0; i < fgDustCount; i++) {
+      fgDustPos[i * 3] = (Math.random() - 0.5) * 80;
+      fgDustPos[i * 3 + 1] = (Math.random() - 0.5) * 80;
+      fgDustPos[i * 3 + 2] = (Math.random() - 0.5) * 80;
+    }
+    fgDustGeo.setAttribute('position', new THREE.Float32BufferAttribute(fgDustPos, 3));
+    const fgDust = new THREE.Points(fgDustGeo, new THREE.PointsMaterial({
+      color: 0x6688cc, transparent: true, opacity: 0.12,
+      size: 0.15, sizeAttenuation: true,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    }));
+    this.scene.add(fgDust);
+
     // Stars - Multi-colored with size variation and twinkle
     const starsGeometry = new THREE.BufferGeometry();
     const starsVertices = [];
@@ -717,7 +754,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.jupiter);
 
     // Load NASA HST OPAL high-res Jupiter map from local assets
-    this.textureLoader = new THREE.TextureLoader();
     const textureLoader = this.textureLoader;
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load(

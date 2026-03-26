@@ -4,7 +4,6 @@ import { MatIconModule } from '@angular/material/icon';
 import { Background3DComponent } from './background-3d.component';
 import { SLIDES } from './slides.data';
 import { animate, stagger, cubicBezier } from 'motion';
-import confetti from 'canvas-confetti';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -14,6 +13,9 @@ import confetti from 'canvas-confetti';
     <!-- Background audio for entire presentation -->
     <audio #bgAudio [src]="bgAudioSrc" loop preload="auto" class="hidden"></audio>
 
+    <!-- Space celebration canvas -->
+    <canvas #celebrationCanvas class="fixed inset-0 w-full h-full z-[15] pointer-events-none" [class.hidden]="!celebrationActive()"></canvas>
+
     <!-- Full-screen video background (behind 3D, revealed on zoom) -->
     @if (currentSlide().video) {
       <video #bgVideo
@@ -22,6 +24,10 @@ import confetti from 'canvas-confetti';
         [src]="currentSlide().video"
         loop playsinline autoplay>
       </video>
+      <!-- Video scrim overlay for readability -->
+      @if (videoRevealed()) {
+        <div class="fixed inset-0 z-[2] pointer-events-none video-scrim"></div>
+      }
     }
 
     <app-background-3d 
@@ -78,8 +84,11 @@ import confetti from 'canvas-confetti';
           </div>
         </div>
       } @else {
-        <!-- Subtle gradient — just enough for text readability -->
-        <div class="absolute inset-0 bg-gradient-to-r from-black/40 via-transparent to-transparent pointer-events-none"></div>
+        <!-- Gradient overlays for text readability -->
+        <div class="absolute inset-0 pointer-events-none" [class]="videoRevealed() ? 'video-readability-overlay' : ''">
+          <div class="absolute inset-0 bg-gradient-to-r from-black/50 via-black/15 to-transparent"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+        </div>
 
         <div #slideContainer class="relative w-full h-full pointer-events-auto">
 
@@ -478,6 +487,22 @@ import confetti from 'canvas-confetti';
     .rotate-x-\\[20deg\\] {
       transform: rotateX(20deg);
     }
+    /* Video background scrim — cinematic vignette for readability */
+    .video-scrim {
+      background:
+        radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%),
+        linear-gradient(to right, rgba(0,0,0,0.5) 0%, transparent 40%, transparent 70%, rgba(0,0,0,0.3) 100%),
+        linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 30%);
+      animation: scrimFadeIn 1.2s ease-out forwards;
+    }
+    @keyframes scrimFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    /* Extra readability overlay when video plays behind text */
+    .video-readability-overlay > div:first-child {
+      background: linear-gradient(to right, rgba(0,0,0,0.65) 0%, rgba(0,0,0,0.25) 45%, transparent 100%) !important;
+    }
   `]
 })
 export class App implements AfterViewInit {
@@ -494,6 +519,7 @@ export class App implements AfterViewInit {
   selectedQuizOption = signal(-1);
   sceneLoaded = signal(false);
   currentDistance = signal(0);
+  celebrationActive = signal(false);
   // t = d/c: light-travel time in minutes (c = 299,792 km/s)
   lightTravelMinutes = computed(() => (this.currentDistance() * 1_000_000 / 299_792 / 60).toFixed(1));
   // 1 AU = 149,597,870.7 km
@@ -510,6 +536,8 @@ export class App implements AfterViewInit {
   @ViewChild('crawlContainer') crawlContainer?: ElementRef<HTMLDivElement>;
   @ViewChild('bgVideo') bgVideo?: ElementRef<HTMLVideoElement>;
   @ViewChild('bgAudio') bgAudio?: ElementRef<HTMLAudioElement>;
+  @ViewChild('celebrationCanvas') celebrationCanvas?: ElementRef<HTMLCanvasElement>;
+  private celebrationAnimId: number | null = null;
 
   bgAudioSrc = 'Interstellar Main Theme - Extra Extended - Soundtrack by Hans Zimmer - Cinémavore.mp3';
 
@@ -525,9 +553,9 @@ export class App implements AfterViewInit {
         this.selectedQuizOption.set(-1);
       }
 
-      // Fire confetti on the "Einde" slide
+      // Fire space celebration on the "Einde" slide
       if (current.id === 'afsluiting' && this.isBrowser) {
-        setTimeout(() => this.fireFinaleConfetti(), 600);
+        setTimeout(() => this.fireSpaceCelebration('finale'), 600);
       }
       
       // Animate new slide content
@@ -756,10 +784,7 @@ export class App implements AfterViewInit {
   revealAnswer() {
     this.isAnswerRevealed.set(true);
     if (this.isBrowser) {
-      const colors = ['#ffe81f', '#0044ff', '#ff3300', '#4ade80', '#a855f7'];
-      confetti({ particleCount: 80, spread: 60, origin: { x: 0.25, y: 0.6 }, colors, startVelocity: 45 });
-      setTimeout(() => confetti({ particleCount: 150, spread: 100, origin: { x: 0.5, y: 0.4 }, colors, startVelocity: 55 }), 150);
-      setTimeout(() => confetti({ particleCount: 80, spread: 120, origin: { x: 0.75, y: 0.5 }, colors, startVelocity: 40 }), 350);
+      this.fireSpaceCelebration('answer');
     }
   }
 
@@ -769,9 +794,9 @@ export class App implements AfterViewInit {
     const quiz = this.currentSlide().quiz;
     const nextIdx = this.currentQuizQuestionIndex() + 1;
     this.currentQuizQuestionIndex.set(nextIdx);
-    // Fire grand confetti when quiz is completed
+    // Fire grand space celebration when quiz is completed
     if (quiz && nextIdx >= quiz.length && this.isBrowser) {
-      setTimeout(() => this.fireFinaleConfetti(), 300);
+      setTimeout(() => this.fireSpaceCelebration('finale'), 300);
     }
   }
 
@@ -798,11 +823,195 @@ export class App implements AfterViewInit {
     }, 50);
   }
 
-  private fireFinaleConfetti() {
-    const colors = ['#ffe81f', '#0044ff', '#ff3300', '#4ade80', '#a855f7', '#ff69b4'];
-    confetti({ particleCount: 100, spread: 70, origin: { x: 0.2, y: 0.7 }, colors, startVelocity: 50 });
-    setTimeout(() => confetti({ particleCount: 200, spread: 120, origin: { x: 0.5, y: 0.5 }, colors, startVelocity: 60 }), 200);
-    setTimeout(() => confetti({ particleCount: 100, spread: 70, origin: { x: 0.8, y: 0.7 }, colors, startVelocity: 50 }), 400);
-    setTimeout(() => confetti({ particleCount: 150, spread: 160, origin: { x: 0.5, y: 0.3 }, colors, startVelocity: 45, gravity: 0.8 }), 700);
+  private meteorEdgeX(W: number) { return Math.random() > 0.5 ? -20 : W + 20; }
+  private meteorSideAngle() { return Math.random() > 0.5 ? Math.PI / 6 : Math.PI * 5 / 6; }
+
+  /** Spectacular space-themed celebration: shooting stars, nova bursts, sparkling stars */
+  private fireSpaceCelebration(type: 'answer' | 'finale') {
+    const canvas = this.celebrationCanvas?.nativeElement;
+    if (!canvas) return;
+    this.celebrationActive.set(true);
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d')!;
+    const W = canvas.width, H = canvas.height;
+    const isFinale = type === 'finale';
+
+    interface Star { x: number; y: number; r: number; alpha: number; decay: number; color: string; pulse: number; }
+    interface Meteor { x: number; y: number; vx: number; vy: number; len: number; alpha: number; decay: number; color: string; trail: { x: number; y: number }[]; }
+    interface Nova { x: number; y: number; r: number; maxR: number; alpha: number; color: string; ring: number; }
+    interface Spark { x: number; y: number; vx: number; vy: number; alpha: number; decay: number; size: number; color: string; }
+
+    const stars: Star[] = [];
+    const meteors: Meteor[] = [];
+    const novas: Nova[] = [];
+    const sparks: Spark[] = [];
+
+    const colors = ['#ffe81f', '#88bbff', '#ff6644', '#4ade80', '#c084fc', '#38bdf8', '#fbbf24', '#f472b6'];
+    const pick = () => colors[Math.floor(Math.random() * colors.length)];
+
+    // Spawn initial stars
+    const starCount = isFinale ? 120 : 50;
+    for (let i = 0; i < starCount; i++) {
+      stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 2.5 + 0.5, alpha: 0, decay: 0.003 + Math.random() * 0.006, color: pick(), pulse: Math.random() * Math.PI * 2 });
+    }
+
+    // Spawn meteors in waves
+    const spawnMeteor = () => {
+      const fromTop = Math.random() > 0.3;
+      const x = fromTop ? Math.random() * W : this.meteorEdgeX(W);
+      const y = fromTop ? -20 : Math.random() * H * 0.4;
+      const angle = fromTop ? (Math.PI / 4 + Math.random() * Math.PI / 4) : this.meteorSideAngle();
+      const speed = 6 + Math.random() * 8;
+      meteors.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, len: 40 + Math.random() * 80, alpha: 1, decay: 0.008 + Math.random() * 0.005, color: pick(), trail: [] });
+    };
+
+    // Spawn novas (expanding ring flashes)
+    const spawnNova = (cx?: number, cy?: number) => {
+      novas.push({ x: cx ?? Math.random() * W, y: cy ?? Math.random() * H, r: 0, maxR: 60 + Math.random() * (isFinale ? 120 : 60), alpha: 1, color: pick(), ring: 0 });
+    };
+
+    // Spawn sparks radiating from a point
+    const spawnSparks = (cx: number, cy: number, count: number) => {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 4;
+        sparks.push({ x: cx, y: cy, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, alpha: 1, decay: 0.015 + Math.random() * 0.02, size: Math.random() * 2.5 + 0.5, color: pick() });
+      }
+    };
+
+    // Schedule waves
+    const meteorCount = isFinale ? 30 : 10;
+    for (let i = 0; i < meteorCount; i++) setTimeout(spawnMeteor, i * (isFinale ? 80 : 150) + Math.random() * 200);
+    const novaCount = isFinale ? 8 : 3;
+    for (let i = 0; i < novaCount; i++) setTimeout(() => { const nx = Math.random() * W; const ny = Math.random() * H; spawnNova(nx, ny); spawnSparks(nx, ny, isFinale ? 30 : 12); }, 200 + i * (isFinale ? 300 : 500));
+    if (isFinale) {
+      // Massive center nova starburst
+      setTimeout(() => { spawnNova(W / 2, H / 2); spawnSparks(W / 2, H / 2, 60); }, 800);
+      // Extra meteors in second wave
+      for (let i = 0; i < 20; i++) setTimeout(spawnMeteor, 1500 + i * 60);
+    }
+
+    let frame = 0;
+    const maxFrames = isFinale ? 300 : 180; // ~5s or ~3s at 60fps
+
+    const renderFrame = () => {
+      frame++;
+      ctx.clearRect(0, 0, W, H);
+
+      // Twinkling stars — fade in then hold
+      for (const s of stars) {
+        if (s.alpha < 1 && frame < maxFrames * 0.6) s.alpha = Math.min(1, s.alpha + 0.03);
+        if (frame > maxFrames * 0.7) s.alpha = Math.max(0, s.alpha - 0.02);
+        const twinkle = 0.5 + 0.5 * Math.sin(frame * 0.08 + s.pulse);
+        ctx.globalAlpha = s.alpha * twinkle;
+        // Draw star with glow
+        const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 4);
+        grad.addColorStop(0, s.color);
+        grad.addColorStop(0.3, s.color + '88');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r * 4, 0, Math.PI * 2);
+        ctx.fill();
+        // Core
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Meteors with trails
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        m.trail.push({ x: m.x, y: m.y });
+        if (m.trail.length > 20) m.trail.shift();
+        m.x += m.vx;
+        m.y += m.vy;
+        // Draw trail
+        for (let t = 0; t < m.trail.length; t++) {
+          const frac = t / m.trail.length;
+          ctx.globalAlpha = m.alpha * frac * 0.6;
+          ctx.fillStyle = m.color;
+          ctx.beginPath();
+          ctx.arc(m.trail[t].x, m.trail[t].y, (1 + frac * 2), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Head glow
+        ctx.globalAlpha = m.alpha;
+        const headGrad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 8);
+        headGrad.addColorStop(0, '#fff');
+        headGrad.addColorStop(0.3, m.color);
+        headGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = headGrad;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        // Fade and remove
+        if (m.x < -50 || m.x > W + 50 || m.y > H + 50) { meteors.splice(i, 1); continue; }
+        m.alpha -= m.decay;
+        if (m.alpha <= 0) meteors.splice(i, 1);
+      }
+
+      // Nova bursts — expanding rings of light
+      for (let i = novas.length - 1; i >= 0; i--) {
+        const n = novas[i];
+        n.r += (n.maxR - n.r) * 0.08;
+        n.alpha *= 0.96;
+        n.ring += 2;
+        // Outer ring
+        ctx.globalAlpha = n.alpha * 0.6;
+        ctx.strokeStyle = n.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner glow fill
+        ctx.globalAlpha = n.alpha * 0.15;
+        const novaGrad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+        novaGrad.addColorStop(0, n.color);
+        novaGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = novaGrad;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+        if (n.alpha < 0.02) novas.splice(i, 1);
+      }
+
+      // Sparks
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const sp = sparks[i];
+        sp.x += sp.vx;
+        sp.y += sp.vy;
+        sp.vx *= 0.98;
+        sp.vy *= 0.98;
+        sp.alpha -= sp.decay;
+        if (sp.alpha <= 0) { sparks.splice(i, 1); continue; }
+        ctx.globalAlpha = sp.alpha;
+        ctx.fillStyle = sp.color;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Tiny glow
+        ctx.globalAlpha = sp.alpha * 0.3;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.size * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+
+      if (frame < maxFrames) {
+        this.celebrationAnimId = requestAnimationFrame(renderFrame);
+      } else {
+        ctx.clearRect(0, 0, W, H);
+        this.celebrationActive.set(false);
+        this.celebrationAnimId = null;
+      }
+    };
+
+    // Cancel any running celebration
+    if (this.celebrationAnimId) cancelAnimationFrame(this.celebrationAnimId);
+    this.celebrationAnimId = requestAnimationFrame(renderFrame);
   }
 }

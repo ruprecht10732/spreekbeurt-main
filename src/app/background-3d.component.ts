@@ -494,6 +494,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.1;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -1026,24 +1028,26 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     this.jupiterGroup.add(this.smallMoons);
 
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0x111111);
+    // Lighting — physically motivated but cinematic
+    // Deep space has virtually no ambient light; we keep a tiny amount for fill
+    const ambientLight = new THREE.AmbientLight(0x080810, 0.8);
     this.scene.add(ambientLight);
 
-    // Main sun light (Warmer and brighter for cinematic contrast)
-    const sunLight = new THREE.DirectionalLight(0xffeedd, 4);
+    // Main sun light — warm white (5778K blackbody close to 0xfff5e0)
+    // At Jupiter's distance (5.2 AU) sunlight is ~27× weaker than at Earth,
+    // but we boost for visual clarity. Directional to simulate parallel sun rays.
+    const sunLight = new THREE.DirectionalLight(0xfff5e0, 3.2);
     sunLight.position.set(-50, 10, 30);
     this.scene.add(sunLight);
 
-    // Subtle rim light for cinematic effect (Menacing Sith/Empire fiery orange rim)
-    const rimLight = new THREE.DirectionalLight(0xff3300, 3.5);
-    rimLight.position.set(50, -20, -30);
-    this.scene.add(rimLight);
-
-    // Deep space blue fill light for cinematic teal/orange contrast
-    const fillLight = new THREE.DirectionalLight(0x0044ff, 0.8);
-    fillLight.position.set(0, 20, 20);
+    // Dim blue-ish fill from opposite side — scattered light in the solar system
+    const fillLight = new THREE.DirectionalLight(0x1a2a44, 0.6);
+    fillLight.position.set(50, -10, -30);
     this.scene.add(fillLight);
+
+    // Subtle overhead hemisphere fill for readability (no harsh rim)
+    const hemiLight = new THREE.HemisphereLight(0x111122, 0x000000, 0.3);
+    this.scene.add(hemiLight);
 
     // Cinematic Anamorphic Lens Flare
     const flareGeo = new THREE.PlaneGeometry(120, 120);
@@ -2337,32 +2341,85 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.sunMesh);
   }
 
+  /** Random polar-region theta angle (favoring north/south poles per Juno data) */
+  private polarTheta(): number {
+    return Math.random() > 0.5 ? Math.random() * 0.5 : Math.PI - Math.random() * 0.5;
+  }
+
   private createLightning() {
-    // Jupiter has real lightning, discovered by Voyager 1
-    // Blue-white flashes on the night side (opposite sun direction)
-    // Sun is at (-50, 10, 30) → night side faces roughly (+x, -y, -z)
-    for (let i = 0; i < 6; i++) {
-      // Random positions on the night-side hemisphere
-      const theta = Math.random() * Math.PI * 0.6 + Math.PI * 0.2; // latitude band
-      const phi = Math.random() * Math.PI - Math.PI * 0.5; // night-side longitude
-      const r = 10.05; // just above Jupiter surface
+    // Jupiter has real lightning, discovered by Voyager 1 (1979), confirmed by Juno (2018)
+    // Juno found lightning is more frequent near poles and occurs in ammonia-water clouds
+    // Color: blue-white (similar to Earth but in hydrogen atmosphere)
+    // Sun at (-50, 10, 30) → night side faces roughly (+x, -y, -z)
+
+    for (let i = 0; i < 8; i++) {
+      // Random positions on the night-side hemisphere, concentrated near poles (Juno finding)
+      const isPolar = Math.random() > 0.4;
+      const theta = isPolar
+        ? this.polarTheta()
+        : Math.random() * Math.PI * 0.6 + Math.PI * 0.2; // mid-latitude
+      const phi = Math.random() * Math.PI - Math.PI * 0.5;
+      const r = 10.05;
 
       const x = r * Math.sin(theta) * Math.cos(phi + Math.PI);
       const y = r * Math.cos(theta);
       const z = r * Math.sin(theta) * Math.sin(phi + Math.PI);
 
-      const flashGeo = new THREE.SphereGeometry(0.3 + Math.random() * 0.3, 8, 8);
-      const flashMat = new THREE.MeshBasicMaterial({
-        color: 0x8888ff, transparent: true, opacity: 0,
-        blending: THREE.AdditiveBlending, depthWrite: false
+      // Branching bolt geometry — line segments forming a jagged bolt
+      const boltGroup = new THREE.Group();
+      boltGroup.position.set(x, y, z);
+
+      // Orient bolt outward from Jupiter center
+      boltGroup.lookAt(x * 2, y * 2, z * 2);
+
+      // Main bolt + 2-3 branches
+      const branchCount = 1 + Math.floor(Math.random() * 3);
+      for (let b = 0; b < branchCount; b++) {
+        const points: THREE.Vector3[] = [];
+        const segments = 6 + Math.floor(Math.random() * 4);
+        let px = (b === 0) ? 0 : (Math.random() - 0.5) * 0.3;
+        let py = (b === 0) ? 0 : (Math.random() - 0.5) * 0.3;
+        let pz = 0;
+        const boltLen = (b === 0) ? 0.6 + Math.random() * 0.4 : 0.2 + Math.random() * 0.3;
+        for (let s = 0; s <= segments; s++) {
+          points.push(new THREE.Vector3(px, py, pz));
+          px += (Math.random() - 0.5) * 0.15;
+          py += (Math.random() - 0.5) * 0.15;
+          pz += boltLen / segments;
+        }
+        const boltGeo = new THREE.BufferGeometry().setFromPoints(points);
+        const boltMat = new THREE.LineBasicMaterial({
+          color: b === 0 ? 0xaaccff : 0x6688dd,
+          transparent: true,
+          opacity: 0,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+          linewidth: 1
+        });
+        boltGroup.add(new THREE.Line(boltGeo, boltMat));
+      }
+
+      // Cloud illumination glow sphere under the bolt
+      const glowGeo = new THREE.SphereGeometry(0.6 + Math.random() * 0.4, 12, 12);
+      const glowMat = new THREE.MeshBasicMaterial({
+        color: 0x8899cc,
+        transparent: true,
+        opacity: 0,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false
       });
-      const flash = new THREE.Mesh(flashGeo, flashMat);
-      flash.position.set(x, y, z);
-      this.jupiterGroup.add(flash);
+      const glowMesh = new THREE.Mesh(glowGeo, glowMat);
+      boltGroup.add(glowMesh);
+
+      // Small point light for illuminating nearby clouds
+      const boltLight = new THREE.PointLight(0x88aaff, 0, 3);
+      boltGroup.add(boltLight);
+
+      this.jupiterGroup.add(boltGroup);
       this.lightningFlashes.push({
-        mesh: flash,
+        mesh: boltGroup as unknown as THREE.Mesh, // group stored in mesh field
         timer: 0,
-        cooldown: 100 + Math.random() * 400 // frames between flashes
+        cooldown: 80 + Math.random() * 300
       });
     }
   }
@@ -2371,28 +2428,72 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.lightningFlashes.forEach(lf => {
       lf.timer++;
       if (lf.timer >= lf.cooldown) {
-        // Flash! Quick bright burst then rapid decay
-        const mat = lf.mesh.material as THREE.MeshBasicMaterial;
-        const flashDuration = 4 + Math.random() * 6;
+        const flashDuration = 6 + Math.random() * 10;
         const flashAge = lf.timer - lf.cooldown;
+        const group = lf.mesh as unknown as THREE.Group;
 
         if (flashAge < flashDuration) {
-          // Flash on — random flicker pattern like real lightning
-          const flicker = Math.random() > 0.3 ? 1 : 0.2;
-          mat.opacity = flicker * (1 - flashAge / flashDuration) * 0.8;
+          // Realistic multi-stroke flicker pattern
+          // Real lightning has a leader + 2-4 return strokes within ~0.2s
+          const strokePhase = flashAge / flashDuration;
+          const isReturnStroke = Math.sin(strokePhase * Math.PI * 8) > 0;
+          const baseIntensity = (1 - strokePhase) * (isReturnStroke ? 1 : 0.15);
+          const flicker = baseIntensity * (0.5 + Math.random() * 0.5);
+
+          // Update bolt lines
+          group.children.forEach(child => {
+            if (child instanceof THREE.Line) {
+              (child.material as THREE.LineBasicMaterial).opacity = flicker * 0.9;
+            } else if (child instanceof THREE.Mesh) {
+              (child.material as THREE.MeshBasicMaterial).opacity = flicker * 0.4;
+            } else if (child instanceof THREE.PointLight) {
+              child.intensity = flicker * 8;
+            }
+          });
         } else {
-          mat.opacity = 0;
+          // All off
+          group.children.forEach(child => {
+            if (child instanceof THREE.Line) {
+              (child.material as THREE.LineBasicMaterial).opacity = 0;
+            } else if (child instanceof THREE.Mesh) {
+              (child.material as THREE.MeshBasicMaterial).opacity = 0;
+            } else if (child instanceof THREE.PointLight) {
+              child.intensity = 0;
+            }
+          });
           lf.timer = 0;
-          lf.cooldown = 100 + Math.random() * 400;
-          // Reposition for next flash
-          const theta = Math.random() * Math.PI * 0.6 + Math.PI * 0.2;
+          lf.cooldown = 80 + Math.random() * 300;
+          // Regenerate bolt geometry for next flash (different path)
+          group.children.forEach(child => {
+            if (child instanceof THREE.Line) {
+              const points: THREE.Vector3[] = [];
+              const segments = 6 + Math.floor(Math.random() * 4);
+              let px = (Math.random() - 0.5) * 0.3;
+              let py = (Math.random() - 0.5) * 0.3;
+              let pz = 0;
+              const boltLen = 0.3 + Math.random() * 0.5;
+              for (let s = 0; s <= segments; s++) {
+                points.push(new THREE.Vector3(px, py, pz));
+                px += (Math.random() - 0.5) * 0.15;
+                py += (Math.random() - 0.5) * 0.15;
+                pz += boltLen / segments;
+              }
+              child.geometry.dispose();
+              child.geometry = new THREE.BufferGeometry().setFromPoints(points);
+            }
+          });
+          // Reposition on night side
+          const isPolar = Math.random() > 0.4;
+          const theta = isPolar
+            ? this.polarTheta()
+            : Math.random() * Math.PI * 0.6 + Math.PI * 0.2;
           const phi = Math.random() * Math.PI - Math.PI * 0.5;
           const r = 10.05;
-          lf.mesh.position.set(
-            r * Math.sin(theta) * Math.cos(phi + Math.PI),
-            r * Math.cos(theta),
-            r * Math.sin(theta) * Math.sin(phi + Math.PI)
-          );
+          const nx = r * Math.sin(theta) * Math.cos(phi + Math.PI);
+          const ny = r * Math.cos(theta);
+          const nz = r * Math.sin(theta) * Math.sin(phi + Math.PI);
+          group.position.set(nx, ny, nz);
+          group.lookAt(nx * 2, ny * 2, nz * 2);
         }
       }
     });

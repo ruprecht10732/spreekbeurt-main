@@ -85,28 +85,34 @@ import { animate, stagger, cubicBezier } from 'motion';
             }
           </div>
         </div>
-        <!-- Planet Tour Overlay -->
+        <!-- Planet Tour Overlay — stat cards styled like slide floating data widgets -->
         @if (tourMode() && tourCurrentPlanet() && planetFacts[tourCurrentPlanet()]) {
+          @let pf = planetFacts[tourCurrentPlanet()];
           <div class="absolute inset-0 pointer-events-none">
-            <!-- Subtle gradient for readability -->
-            <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent"></div>
-            <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
-            <!-- Planet facts card — bottom left -->
-            <div class="absolute bottom-28 left-10 md:left-14 max-w-[38%] tour-facts-card">
-              <div class="tour-accent-line w-20 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_12px_rgba(255,232,31,0.4)]"></div>
-              <div class="flex items-center gap-3 mb-4">
-                <span class="text-4xl">{{ planetFacts[tourCurrentPlanet()].icon }}</span>
-                <h2 class="text-3xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">
-                  {{ planetFacts[tourCurrentPlanet()].title }}
-                </h2>
+            <!-- Readability gradients -->
+            <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/10 to-transparent"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/15"></div>
+            <!-- Tour stats panel — bottom left -->
+            <div class="absolute bottom-16 left-8 md:left-12 tour-facts-card">
+              <!-- Accent bar + planet name -->
+              <div class="tour-accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_10px_rgba(255,232,31,0.35)]"></div>
+              <div class="flex items-center gap-2.5 mb-5">
+                <span class="text-3xl leading-none">{{ pf.icon }}</span>
+                <h2 class="text-2xl md:text-4xl font-starwars uppercase tracking-wider drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]"
+                    [style.color]="pf.color">{{ pf.title }}</h2>
               </div>
-              <div class="space-y-2.5">
-                @for (fact of planetFacts[tourCurrentPlanet()].facts; track $index) {
-                  <p class="tour-fact-item text-sm md:text-base text-white/85 flex items-start gap-2"
-                     [style.animation-delay]="($index * 200 + 300) + 'ms'">
-                    <span class="text-[var(--color-starwars-yellow)]/60 mt-0.5 text-xs">✦</span>
-                    <span>{{ fact }}</span>
-                  </p>
+              <!-- 2x2 stat card grid -->
+              <div class="grid grid-cols-2 gap-x-8 gap-y-5">
+                @for (stat of pf.stats; track $index) {
+                  <div class="tour-stat-card" [style.animation-delay]="($index * 130 + 150) + 'ms'">
+                    <div class="text-[10px] font-mono tracking-[0.25em] mb-0.5 text-white/50">{{ stat.label }}</div>
+                    <div class="text-2xl md:text-3xl font-starwars tabular-nums leading-tight"
+                         [style.color]="pf.color"
+                         [style.text-shadow]="'0 0 16px ' + pf.color">{{ stat.value }}</div>
+                    @if (stat.sub) {
+                      <div class="text-[11px] text-white/45 mt-0.5 max-w-[130px]">{{ stat.sub }}</div>
+                    }
+                  </div>
                 }
               </div>
             </div>
@@ -696,21 +702,92 @@ export class App implements AfterViewInit {
     this.tourCurrentPlanet.set(planetName);
   }
 
-  // Planet facts for the tour (Dutch, kid-friendly)
-  readonly planetFacts: Record<string, { title: string; icon: string; facts: string[] }> = {
-    'jupiter': { title: 'Jupiter', icon: '🪐', facts: ['De allergrootste planeet!', '90% waterstof, 10% helium', '95 manen draaien eromheen', 'De Grote Rode Vlek is een superstorm'] },
-    'zon': { title: 'De Zon', icon: '☀️', facts: ['Onze eigen ster!', '5.500°C aan de buitenkant', '1,3 miljoen keer zo groot als de aarde', 'Geeft licht en warmte aan alle planeten'] },
-    'mercurius': { title: 'Mercurius', icon: '🟤', facts: ['De kleinste planeet', 'Het dichtst bij de zon', 'Overdag 430°C, \'s nachts -180°C', 'Geen dampkring, vol kraters'] },
-    'venus': { title: 'Venus', icon: '🟡', facts: ['De heetste planeet: 465°C!', 'Dikke wolken van zwavelzuur', 'Draait de verkeerde kant op', 'Bijna net zo groot als de aarde'] },
-    'aarde': { title: 'De Aarde', icon: '🌍', facts: ['Ons thuis!', 'De enige planeet met vloeibaar water', 'Kijk! Een SpaceX Falcon 9 vertrekt naar Mars! 🚀', 'SpaceX wil mensen naar Mars sturen'] },
-    'mars': { title: 'Mars', icon: '🔴', facts: ['De rode planeet', 'Heeft de hoogste berg: Olympus Mons', 'Robots rijden er al rond!', 'Misschien ooit water gehad'] },
-    'saturnus': { title: 'Saturnus', icon: '🪐', facts: ['Beroemd om z\'n prachtige ringen!', 'De ringen zijn van ijs en rots', 'Zo licht dat het zou drijven op water', '146 manen, waaronder Titan'] },
-    'uranus': { title: 'Uranus', icon: '🔵', facts: ['Draait op z\'n zij! (98° kantel)', 'IJskoud: -224°C', 'Blauw-groen door methaan', '27 manen die eromheen draaien'] },
-    'neptunus': { title: 'Neptunus', icon: '🔵', facts: ['De verste planeet', 'Windsnelheden tot 2.100 km/u!', 'Prachtig diepblauw van kleur', 'Eén omloop duurt 165 jaar'] },
-    'jupiter-einde': { title: 'Terug bij Jupiter', icon: '✨', facts: ['De koning van de planeten', 'Beschermt de aarde tegen kometen', 'Een echte gasreus!', 'Bedankt voor het kijken!'] }
+  // Planet facts for the tour — each planet has 4 stat cards (value + label + sub)
+  // styled like the slide floating data widgets for visual consistency.
+  readonly planetFacts: Record<string, {
+    title: string; icon: string; color: string;
+    stats: { value: string; label: string; sub?: string }[];
+  }> = {
+    'jupiter': { title: 'Jupiter', icon: '🪐', color: 'rgba(255,232,31,0.92)',
+      stats: [
+        { value: '95', label: 'MANEN', sub: 'in baan om Jupiter' },
+        { value: '300×', label: 'MASSA', sub: 'zwaarder dan de Aarde' },
+        { value: '90%', label: 'WATERSTOF', sub: '+ 10% helium' },
+        { value: 'GRS', label: 'SUPERSTORM', sub: 'Grote Rode Vlek' },
+      ]},
+    'zon': { title: 'De Zon', icon: '☀️', color: 'rgba(255,200,60,0.92)',
+      stats: [
+        { value: '5.500°C', label: 'BUITENKANT', sub: 'kern: 15 mln °C' },
+        { value: '1,3 MLN×', label: 'VOLUME', sub: 'groter dan de Aarde' },
+        { value: '8 min', label: 'LICHT REISTIJD', sub: 'zon → aarde' },
+        { value: 'G2V', label: 'STERTYPE', sub: 'gele dwergster' },
+      ]},
+    'mercurius': { title: 'Mercurius', icon: '🪨', color: 'rgba(210,195,175,0.90)',
+      stats: [
+        { value: '430°C', label: 'OVERDAG', sub: '-180°C \'s nachts' },
+        { value: '88d', label: 'EEN JAAR', sub: 'kortste omloop' },
+        { value: '0', label: 'MANEN', sub: 'geheel alleen' },
+        { value: '0.4×', label: 'GROOTTE', sub: 'vs. Aarde' },
+      ]},
+    'venus': { title: 'Venus', icon: '🌕', color: 'rgba(220,185,100,0.90)',
+      stats: [
+        { value: '465°C', label: 'TEMPERATUUR', sub: 'heetste planeet!' },
+        { value: 'H₂SO₄', label: 'WOLKEN', sub: 'zwavelzuur' },
+        { value: '−1', label: 'ROTATIE', sub: 'draait andersom' },
+        { value: '0.9×', label: 'GROOTTE', sub: 'vs. Aarde' },
+      ]},
+    'aarde': { title: 'De Aarde', icon: '🌍', color: 'rgba(100,200,255,0.92)',
+      stats: [
+        { value: '71%', label: 'WATEROPPERVLAK', sub: 'uniek in ons stelsel' },
+        { value: '1', label: 'MAAN', sub: 'Luna, onze trouwe maan' },
+        { value: '24u', label: 'EEN DAG', sub: 'aardse dag' },
+        { value: '🚀', label: 'FALCON 9', sub: 'nu op weg naar Mars!' },
+      ]},
+    'mars': { title: 'Mars', icon: '🔴', color: 'rgba(230,100,60,0.92)',
+      stats: [
+        { value: '21 km', label: 'OLYMPUS MONS', sub: 'hoogste berg ooit' },
+        { value: '2', label: 'MANEN', sub: 'Phobos & Deimos' },
+        { value: '-65°C', label: 'TEMPERATUUR', sub: 'gemiddeld op Mars' },
+        { value: '1.9j', label: 'EEN JAAR', sub: 'op Mars duurt langer' },
+      ]},
+    'saturnus': { title: 'Saturnus', icon: '🪐', color: 'rgba(220,195,140,0.92)',
+      stats: [
+        { value: '146', label: 'MANEN', sub: 'waaronder Titan' },
+        { value: '0.7', label: 'DICHTHEID', sub: 'drijft op water!' },
+        { value: '300.000', label: 'RING BREEDTE', sub: 'km — slechts 1 km dik' },
+        { value: '10.7u', label: 'EEN DAG', sub: 'op Saturnus' },
+      ]},
+    'uranus': { title: 'Uranus', icon: '🔵', color: 'rgba(100,230,210,0.92)',
+      stats: [
+        { value: '98°', label: 'KANTELHOEK', sub: 'draait op z\'n zij!' },
+        { value: '-224°C', label: 'TEMPERATUUR', sub: 'koudste planeet' },
+        { value: '27', label: 'MANEN', sub: 'Shakespeare-namen' },
+        { value: '84j', label: 'EEN JAAR', sub: 'op Uranus' },
+      ]},
+    'neptunus': { title: 'Neptunus', icon: '🔵', color: 'rgba(80,130,255,0.92)',
+      stats: [
+        { value: '2100 km/u', label: 'WIND', sub: 'snelste winden!' },
+        { value: '4,5 mrd', label: 'ZON-AFSTAND', sub: 'km van de Zon' },
+        { value: '165j', label: 'EEN JAAR', sub: 'op Neptunus' },
+        { value: '14', label: 'MANEN', sub: 'waaronder Triton' },
+      ]},
+    'pluto': { title: 'Pluto', icon: '🌑', color: 'rgba(196,168,130,0.90)',
+      stats: [
+        { value: 'DWERG', label: 'PLANEETSTATUS', sub: 'geen echte planeet' },
+        { value: '248j', label: 'EEN JAAR', sub: 'op Pluto' },
+        { value: '5', label: 'MANEN', sub: 'waaronder Charon' },
+        { value: '-230°C', label: 'TEMPERATUUR', sub: 'ijzig koud!' },
+      ]},
+    'jupiter-einde': { title: 'Terug bij Jupiter', icon: '✨', color: 'rgba(255,232,31,0.92)',
+      stats: [
+        { value: '#1', label: 'GROOTSTE', sub: 'planeet in ons stelsel' },
+        { value: '95', label: 'MANEN', sub: 'en nog meer ontdekt!' },
+        { value: '1300×', label: 'VOLUME', sub: 'vs. de Aarde' },
+        { value: '♾️', label: 'BEDANKT!', sub: 'voor het kijken!' },
+      ]},
   };
 
-  startPresentation() {
+    startPresentation() {
     if (!this.sceneLoaded()) return;
     this.hasStarted.set(true);
     this.startBgAudio();
@@ -795,9 +872,14 @@ export class App implements AfterViewInit {
         },
         { duration: 1.2, ease: 'easeOut' }
       ).finished.then(() => {
-        // Clear committed inline styles so CSS classes (like opacity-0 for tour fade) can take effect
+        // Clear ALL committed inline styles — motion/WAAPI persists opacity, filter,
+        // transform, will-change and scale as inline styles after animation ends,
+        // overriding any CSS class bindings (like [class.opacity-0]="tourMode()").
         crawlEl.style.removeProperty('opacity');
         crawlEl.style.removeProperty('filter');
+        crawlEl.style.removeProperty('transform');
+        crawlEl.style.removeProperty('will-change');
+        crawlEl.style.removeProperty('scale');
         this.isTransitioning.set(false);
       });
     }

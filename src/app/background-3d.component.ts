@@ -96,6 +96,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private earthOrbitAngle = 0;
   private earthOrbitActive = false;
 
+    // Earth's Moon (Luna) orbiting Earth
+    private moonMesh!: THREE.Mesh;
+    private moonOrbitAngle = 0;
+
+    // Titan — Saturn's largest moon
+    private titanMesh!: THREE.Mesh;
+    private titanOrbitAngle = 0;
+
+    // Pluto — dwarf planet beyond Neptune
+    private plutoMesh!: THREE.Mesh;
+
   // Distance beam between Earth and Jupiter
   private distanceBeam!: THREE.Group;
   private distanceBeamActive = false;
@@ -253,11 +264,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const p = this.uranusGroup.position;
       this.tourStops.push({ name: 'uranus', camX: p.x - 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
     }
-    // Neptune
-    if (this.neptuneGroup) {
-      const p = this.neptuneGroup.position;
-      this.tourStops.push({ name: 'neptunus', camX: p.x + 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
-    }
+      // Neptune — gas giant
+      if (this.neptuneGroup) {
+        const p = this.neptuneGroup.position;
+        this.tourStops.push({ name: 'neptunus', camX: p.x + 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
+      }
+      // Pluto — dwarf planet beyond Neptune
+      if (this.plutoMesh) {
+        const p = this.plutoMesh.position;
+        this.tourStops.push({ name: 'pluto', camX: p.x + 6, camY: p.y + 3, camZ: p.z + 6, lookX: p.x, lookY: p.y, lookZ: p.z });
+      }
     // Back to Jupiter — full circle
     this.tourStops.push({ name: 'jupiter-einde', camX: jPos.x + 5, camY: jPos.y + 8, camZ: jPos.z + 50, lookX: jPos.x, lookY: jPos.y, lookZ: jPos.z });
 
@@ -1149,6 +1165,24 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
     const earthAtmo = new THREE.Mesh(new THREE.SphereGeometry(1.08, 32, 32), earthAtmoMat);
     this.earthMesh.add(earthAtmo);
+
+      // ─── Earth's Moon (Luna) ─────────────────────────────────────────────
+      // Real radius: 1737 km. We scale to 0.28 scene units for visibility.
+      // Orbit radius compressed to ~2.8 scene units from Earth.
+      const moonGeo = new THREE.SphereGeometry(0.28, 32, 32);
+      const moonMat = new THREE.MeshStandardMaterial({
+        color: 0xbbbbaa, roughness: 0.92, metalness: 0.0
+      });
+      this.moonMesh = new THREE.Mesh(moonGeo, moonMat);
+      this.moonMesh.visible = false;
+      this.scene.add(this.moonMesh);
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        textureLoader.load('2k_moon.jpg', (tex) => {
+          tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+          moonMat.map = tex; moonMat.color.setHex(0xffffff); moonMat.needsUpdate = true;
+          resolve();
+        }, undefined, () => resolve());
+      }));
 
     // Jupiter's Faint Ring System — discovered by Voyager 1 (1979)
     // Halo ring: 1.29-1.71 Rj, Main ring: 1.71-1.81 Rj, Gossamer rings: to 3.16 Rj
@@ -2417,6 +2451,49 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.saturnGroup.position.set(120, 20, -200);
     this.saturnGroup.rotation.z = 0.466; // Saturn tilt: 26.7°
     this.scene.add(this.saturnGroup);
+
+      // ─── Titan — Saturn's largest moon ───────────────────────────────────
+      // Titan radius: 2575 km → 0.36 scene units. Orbit ~20 units from Saturn
+      // (severely compressed; real orbit is ~1,221,865 km from Saturn center)
+      const titanGeo = new THREE.SphereGeometry(0.5, 24, 24);
+      const titanMat = new THREE.MeshStandardMaterial({
+        color: 0xcc9944, roughness: 0.85, metalness: 0.05  // Orange-ish haze atmosphere
+      });
+      this.titanMesh = new THREE.Mesh(titanGeo, titanMat);
+      // Initial position offset from Saturn
+      const sp = this.saturnGroup.position;
+      this.titanMesh.position.set(sp.x + 20, sp.y, sp.z);
+      this.scene.add(this.titanMesh);
+      // Load moon texture for Titan (reuse 2k_moon.jpg, tinted by material color)
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        this.textureLoader.load('2k_moon.jpg', (tex) => {
+          tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+          titanMat.map = tex;
+          titanMat.color.setHex(0xcc9944); // Keep the warm orange tint
+          titanMat.needsUpdate = true;
+          resolve();
+        }, undefined, () => resolve());
+      }));
+
+      // ─── Pluto — dwarf planet beyond Neptune ─────────────────────────────
+      // Pluto radius: 1188 km → 0.17 scene units. Upscaled to 0.32 for visibility.
+      // Position: farther from Neptune, highly inclined orbit
+      const plutoGeo = new THREE.SphereGeometry(0.32, 20, 20);
+      const plutoMat = new THREE.MeshStandardMaterial({
+        color: 0xc4a882, roughness: 0.95, metalness: 0.0
+      });
+      this.plutoMesh = new THREE.Mesh(plutoGeo, plutoMat);
+      this.plutoMesh.position.set(-240, -25, -220);
+      this.scene.add(this.plutoMesh);
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        this.textureLoader.load('2k_moon.jpg', (tex) => {
+          tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+          plutoMat.map = tex;
+          plutoMat.color.setHex(0xc4a882);
+          plutoMat.needsUpdate = true;
+          resolve();
+        }, undefined, () => resolve());
+      }));
 
     // Mars — small red dot in the inner solar system direction
     // Mars equatorial radius: 3,396 km → 3396/71492 × 10 = 0.475 scene units
@@ -3944,6 +4021,38 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.updateEarthOrbit();
       }
     }
+
+      // Moon follows Earth, always visible when Earth is visible
+      if (this.moonMesh) {
+        const earthVisible = this.earthMesh?.visible ?? false;
+        this.moonMesh.visible = earthVisible;
+        if (earthVisible && this.earthMesh) {
+          this.moonOrbitAngle += 0.008; // Faster than Earth orbit for visual clarity
+          const ep = this.earthMesh.position;
+          this.moonMesh.position.set(
+            ep.x + 2.8 * Math.cos(this.moonOrbitAngle),
+            ep.y + 0.3 * Math.sin(this.moonOrbitAngle * 0.5),
+            ep.z + 2.8 * Math.sin(this.moonOrbitAngle)
+          );
+          this.moonMesh.rotation.y += 0.002;
+        }
+      }
+
+      // Titan orbits Saturn
+      if (this.titanMesh && this.saturnGroup) {
+        this.titanOrbitAngle += 0.003;
+        const sPos = this.saturnGroup.position;
+        this.titanMesh.position.set(
+          sPos.x + 22 * Math.cos(this.titanOrbitAngle),
+          sPos.y + 1.5 * Math.sin(this.titanOrbitAngle * 0.4),
+          sPos.z + 22 * Math.sin(this.titanOrbitAngle)
+        );
+        this.titanMesh.rotation.y += 0.002;
+      }
+      // Rotate Pluto slowly
+      if (this.plutoMesh) {
+        this.plutoMesh.rotation.y += 0.0008;
+      }
     this.updateDistanceBeam(time);
 
     this.updateMoons();

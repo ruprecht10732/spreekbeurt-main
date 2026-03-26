@@ -15,7 +15,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   @Input() slideIndex = 0;
   @Input() slideId = 'title';
   @Input() fadeOut = false;
+  @Input() tourMode = false;
   @Output() loaded = new EventEmitter<void>();
+  @Output() tourPlanet = new EventEmitter<string>();
   @ViewChild('canvasContainer', { static: true }) canvasContainer!: ElementRef<HTMLDivElement>;
 
   private scene!: THREE.Scene;
@@ -158,6 +160,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Zodiacal light
   private zodiacalLight!: THREE.Mesh;
 
+  // Planet tour state
+  private tourActive = false;
+  private tourStopIndex = 0;
+  private tourStopTime = 0;
+  private tourTransitionProgress = 0;
+  private readonly TOUR_STOP_DURATION = 8; // seconds at each planet
+  private readonly TOUR_TRANSITION_DURATION = 3; // seconds flying between planets
+  private tourStops: { name: string; camX: number; camY: number; camZ: number; lookX: number; lookY: number; lookZ: number }[] = [];
+
   // Orbit controls (Google Earth-style)
   private controls!: OrbitControls;
   private userInteracting = false;
@@ -178,6 +189,122 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.userInteracting = false; // Reset to slide-driven camera on slide change
       if (this.userInteractionTimeout) clearTimeout(this.userInteractionTimeout);
       this.updateCameraForSlide(this.slideId);
+    }
+    if (this.isBrowser && changes['tourMode']) {
+      if (this.tourMode && !this.tourActive) {
+        this.startPlanetTour();
+      } else if (!this.tourMode && this.tourActive) {
+        this.tourActive = false;
+      }
+    }
+  }
+
+  private startPlanetTour() {
+    // Build tour stops from actual planet positions
+    this.tourStops = [];
+    const jPos = this.jupiterGroup?.position || new THREE.Vector3(12, 0, -15);
+    // Jupiter close-up first
+    this.tourStops.push({ name: 'jupiter', camX: jPos.x - 20, camY: jPos.y + 5, camZ: jPos.z + 18, lookX: jPos.x, lookY: jPos.y, lookZ: jPos.z });
+    // Sun
+    if (this.sunMesh) {
+      const p = this.sunMesh.position;
+      this.tourStops.push({ name: 'zon', camX: p.x + 18, camY: p.y + 6, camZ: p.z + 14, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Mercury
+    if (this.mercuryMesh) {
+      const p = this.mercuryMesh.position;
+      this.tourStops.push({ name: 'mercurius', camX: p.x + 3, camY: p.y + 1, camZ: p.z + 3, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Venus
+    if (this.venusMesh) {
+      const p = this.venusMesh.position;
+      this.tourStops.push({ name: 'venus', camX: p.x + 4, camY: p.y + 1.5, camZ: p.z + 4, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Earth
+    if (this.earthMesh) {
+      this.earthMesh.visible = true;
+      this.earthMesh.position.set(-8, 2, -5);
+      const p = this.earthMesh.position;
+      this.tourStops.push({ name: 'aarde', camX: p.x + 4, camY: p.y + 1.5, camZ: p.z + 4, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Mars
+    if (this.marsMesh) {
+      const p = this.marsMesh.position;
+      this.tourStops.push({ name: 'mars', camX: p.x + 3, camY: p.y + 1, camZ: p.z + 3, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Saturn
+    if (this.saturnGroup) {
+      const p = this.saturnGroup.position;
+      this.tourStops.push({ name: 'saturnus', camX: p.x - 25, camY: p.y + 12, camZ: p.z + 20, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Uranus
+    if (this.uranusMesh) {
+      const p = this.uranusMesh.position;
+      this.tourStops.push({ name: 'uranus', camX: p.x - 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Neptune
+    if (this.neptuneMesh) {
+      const p = this.neptuneMesh.position;
+      this.tourStops.push({ name: 'neptunus', camX: p.x + 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
+    }
+    // Back to Jupiter — full circle
+    this.tourStops.push({ name: 'jupiter-einde', camX: jPos.x + 5, camY: jPos.y + 8, camZ: jPos.z + 50, lookX: jPos.x, lookY: jPos.y, lookZ: jPos.z });
+
+    this.tourActive = true;
+    this.tourStopIndex = 0;
+    this.tourStopTime = (Date.now() - this.startTime) * 0.001;
+    this.tourTransitionProgress = 0;
+    this.userInteracting = false;
+    this.tourPlanet.emit(this.tourStops[0].name);
+  }
+
+  private updatePlanetTour(time: number) {
+    if (!this.tourActive || this.tourStops.length === 0) return;
+
+    const elapsed = time - this.tourStopTime;
+    const stop = this.tourStops[this.tourStopIndex];
+    const totalStopTime = this.TOUR_STOP_DURATION + this.TOUR_TRANSITION_DURATION;
+
+    if (elapsed < this.TOUR_TRANSITION_DURATION) {
+      // Flying to this stop — smooth ease-in-out
+      const t = elapsed / this.TOUR_TRANSITION_DURATION;
+      const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; // easeInOutQuad
+
+      this.baseCameraX += (stop.camX - this.baseCameraX) * (ease * 0.05 + 0.01);
+      this.baseCameraY += (stop.camY - this.baseCameraY) * (ease * 0.05 + 0.01);
+      this.baseCameraZ += (stop.camZ - this.baseCameraZ) * (ease * 0.05 + 0.01);
+      this.targetLookAt.set(
+        this.targetLookAt.x + (stop.lookX - this.targetLookAt.x) * (ease * 0.05 + 0.01),
+        this.targetLookAt.y + (stop.lookY - this.targetLookAt.y) * (ease * 0.05 + 0.01),
+        this.targetLookAt.z + (stop.lookZ - this.targetLookAt.z) * (ease * 0.05 + 0.01)
+      );
+      this.cameraLerpSpeed = 0.04;
+    } else if (elapsed < totalStopTime) {
+      // At this stop — gentle orbit drift
+      this.baseCameraX = stop.camX;
+      this.baseCameraY = stop.camY;
+      this.baseCameraZ = stop.camZ;
+      this.targetLookAt.set(stop.lookX, stop.lookY, stop.lookZ);
+      this.cameraLerpSpeed = 0.025;
+      // Gentle circular drift around the planet
+      const driftTime = elapsed - this.TOUR_TRANSITION_DURATION;
+      this.cameraDriftX = Math.sin(driftTime * 0.3) * 2;
+      this.cameraDriftY = Math.sin(driftTime * 0.2) * 0.5;
+      this.cameraDriftZ = Math.cos(driftTime * 0.3) * 2;
+    } else {
+      // Move to next stop
+      this.tourStopIndex++;
+      this.cameraDriftX = 0;
+      this.cameraDriftY = 0;
+      this.cameraDriftZ = 0;
+      if (this.tourStopIndex >= this.tourStops.length) {
+        // Tour finished — loop back
+        this.tourStopIndex = 0;
+        this.tourStopTime = time;
+      } else {
+        this.tourStopTime = time;
+      }
+      this.tourPlanet.emit(this.tourStops[this.tourStopIndex].name);
     }
   }
 
@@ -3387,6 +3514,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.currentShipSpeedMultiplier += (this.targetShipSpeedMultiplier - this.currentShipSpeedMultiplier) * contextLerp;
 
     this.updateAtmosphere(time);
+    if (this.tourActive) this.updatePlanetTour(time);
     this.updateCamera();
     this.updateJupiterRotation();
 

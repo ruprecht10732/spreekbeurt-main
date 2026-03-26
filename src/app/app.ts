@@ -34,8 +34,10 @@ import { animate, stagger, cubicBezier } from 'motion';
       [slideIndex]="currentIndex()" 
       [slideId]="currentSlide().id"
       [fadeOut]="videoRevealed()"
+      [tourMode]="tourMode()"
       (loaded)="onSceneLoaded()"
       (distanceKm)="onDistanceUpdate($event)"
+      (tourPlanet)="onTourPlanet($event)"
       class="transition-opacity duration-[2000ms] ease-in-out"
       [class.opacity-0]="videoRevealed()">
     </app-background-3d>
@@ -45,7 +47,7 @@ import { animate, stagger, cubicBezier } from 'motion';
       <!-- Star Wars Crawl for Title Slide -->
       @if (currentSlide().isTitleSlide) {
         <div class="absolute inset-0 flex items-center justify-center perspective-[800px]">
-          <div #crawlContainer class="w-[80%] max-w-3xl text-center text-[var(--color-starwars-yellow)] font-starwars transform-gpu rotate-x-[20deg] origin-bottom">
+          <div #crawlContainer class="w-[80%] max-w-3xl text-center text-[var(--color-starwars-yellow)] font-starwars transform-gpu rotate-x-[20deg] origin-bottom transition-opacity duration-[3000ms]" [class.opacity-0]="tourMode()">
             <h1 class="text-7xl md:text-9xl mb-8 uppercase tracking-widest title-shimmer">{{ currentSlide().title }}</h1>
             @if (currentSlide().id === 'title') {
               <p class="text-sm md:text-xl mb-4 uppercase tracking-[0.5em] opacity-50 font-starwars">Gemaakt door</p>
@@ -83,6 +85,33 @@ import { animate, stagger, cubicBezier } from 'motion';
             }
           </div>
         </div>
+        <!-- Planet Tour Overlay -->
+        @if (tourMode() && tourCurrentPlanet() && planetFacts[tourCurrentPlanet()]) {
+          <div class="absolute inset-0 pointer-events-none">
+            <!-- Subtle gradient for readability -->
+            <div class="absolute inset-0 bg-gradient-to-r from-black/60 via-transparent to-transparent"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-black/40 via-transparent to-black/20"></div>
+            <!-- Planet facts card — bottom left -->
+            <div class="absolute bottom-28 left-10 md:left-14 max-w-[38%] tour-facts-card">
+              <div class="tour-accent-line w-20 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_12px_rgba(255,232,31,0.4)]"></div>
+              <div class="flex items-center gap-3 mb-4">
+                <span class="text-4xl">{{ planetFacts[tourCurrentPlanet()].icon }}</span>
+                <h2 class="text-3xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">
+                  {{ planetFacts[tourCurrentPlanet()].title }}
+                </h2>
+              </div>
+              <div class="space-y-2.5">
+                @for (fact of planetFacts[tourCurrentPlanet()].facts; track $index) {
+                  <p class="tour-fact-item text-sm md:text-base text-white/85 flex items-start gap-2"
+                     [style.animation-delay]="($index * 200 + 300) + 'ms'">
+                    <span class="text-[var(--color-starwars-yellow)]/60 mt-0.5 text-xs">✦</span>
+                    <span>{{ fact }}</span>
+                  </p>
+                }
+              </div>
+            </div>
+          </div>
+        }
       } @else {
         <!-- Gradient overlays for text readability -->
         <div class="absolute inset-0 pointer-events-none" [class]="videoRevealed() ? 'video-readability-overlay' : ''">
@@ -519,6 +548,33 @@ import { animate, stagger, cubicBezier } from 'motion';
     .video-readability-overlay > div:first-child {
       background: linear-gradient(to right, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 45%, transparent 100%) !important;
     }
+    /* Planet tour animations */
+    .tour-facts-card {
+      animation: tourCardIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes tourCardIn {
+      from { opacity: 0; transform: translateX(-40px) translateY(20px); filter: blur(8px); }
+      to { opacity: 1; transform: translateX(0) translateY(0); filter: blur(0px); }
+    }
+    .tour-fact-item {
+      opacity: 0;
+      animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+    }
+    @keyframes tourFactIn {
+      from { opacity: 0; transform: translateX(-20px); filter: blur(4px); }
+      to { opacity: 1; transform: translateX(0); filter: blur(0px); }
+    }
+    .tour-accent-line {
+      animation: tourLineIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+      transform-origin: left;
+      transform: scaleX(0);
+      opacity: 0;
+    }
+    @keyframes tourLineIn {
+      from { transform: scaleX(0); opacity: 0; }
+      to { transform: scaleX(1); opacity: 1; }
+    }
   `]
 })
 export class App implements AfterViewInit {
@@ -536,6 +592,9 @@ export class App implements AfterViewInit {
   sceneLoaded = signal(false);
   currentDistance = signal(0);
   celebrationActive = signal(false);
+  tourMode = signal(false);
+  tourCurrentPlanet = signal('');
+  private tourTimer: ReturnType<typeof setTimeout> | null = null;
   // t = d/c: light-travel time in minutes (c = 299,792 km/s)
   lightTravelMinutes = computed(() => (this.currentDistance() * 1_000_000 / 299_792 / 60).toFixed(1));
   // 1 AU = 149,597,870.7 km
@@ -572,6 +631,16 @@ export class App implements AfterViewInit {
       // Fire space celebration on the "Einde" slide
       if (current.id === 'afsluiting' && this.isBrowser) {
         setTimeout(() => this.fireSpaceCelebration('finale'), 600);
+        // After 10 seconds, fade out text and start planet tour
+        if (this.tourTimer) clearTimeout(this.tourTimer);
+        this.tourTimer = setTimeout(() => {
+          this.tourMode.set(true);
+        }, 10000);
+      } else {
+        // Cancel tour if navigating away from afsluiting
+        if (this.tourTimer) { clearTimeout(this.tourTimer); this.tourTimer = null; }
+        this.tourMode.set(false);
+        this.tourCurrentPlanet.set('');
       }
       
       // Animate new slide content
@@ -622,6 +691,24 @@ export class App implements AfterViewInit {
   onDistanceUpdate(km: number) {
     this.currentDistance.set(km);
   }
+
+  onTourPlanet(planetName: string) {
+    this.tourCurrentPlanet.set(planetName);
+  }
+
+  // Planet facts for the tour (Dutch, kid-friendly)
+  readonly planetFacts: Record<string, { title: string; icon: string; facts: string[] }> = {
+    'jupiter': { title: 'Jupiter', icon: '🪐', facts: ['De allergrootste planeet!', '90% waterstof, 10% helium', '95 manen draaien eromheen', 'De Grote Rode Vlek is een superstorm'] },
+    'zon': { title: 'De Zon', icon: '☀️', facts: ['Onze eigen ster!', '5.500°C aan de buitenkant', '1,3 miljoen keer zo groot als de aarde', 'Geeft licht en warmte aan alle planeten'] },
+    'mercurius': { title: 'Mercurius', icon: '🟤', facts: ['De kleinste planeet', 'Het dichtst bij de zon', 'Overdag 430°C, \'s nachts -180°C', 'Geen dampkring, vol kraters'] },
+    'venus': { title: 'Venus', icon: '🟡', facts: ['De heetste planeet: 465°C!', 'Dikke wolken van zwavelzuur', 'Draait de verkeerde kant op', 'Bijna net zo groot als de aarde'] },
+    'aarde': { title: 'De Aarde', icon: '🌍', facts: ['Ons thuis!', 'De enige planeet met vloeibaar water', 'Eén maan: de Maan', 'Perfecte afstand tot de zon voor leven'] },
+    'mars': { title: 'Mars', icon: '🔴', facts: ['De rode planeet', 'Heeft de hoogste berg: Olympus Mons', 'Robots rijden er al rond!', 'Misschien ooit water gehad'] },
+    'saturnus': { title: 'Saturnus', icon: '🪐', facts: ['Beroemd om z\'n prachtige ringen!', 'De ringen zijn van ijs en rots', 'Zo licht dat het zou drijven op water', '146 manen, waaronder Titan'] },
+    'uranus': { title: 'Uranus', icon: '🔵', facts: ['Draait op z\'n zij! (98° kantel)', 'IJskoud: -224°C', 'Blauw-groen door methaan', '27 manen die eromheen draaien'] },
+    'neptunus': { title: 'Neptunus', icon: '🔵', facts: ['De verste planeet', 'Windsnelheden tot 2.100 km/u!', 'Prachtig diepblauw van kleur', 'Eén omloop duurt 165 jaar'] },
+    'jupiter-einde': { title: 'Terug bij Jupiter', icon: '✨', facts: ['De koning van de planeten', 'Beschermt de aarde tegen kometen', 'Een echte gasreus!', 'Bedankt voor het kijken!'] }
+  };
 
   startPresentation() {
     if (!this.sceneLoaded()) return;

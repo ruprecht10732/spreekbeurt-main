@@ -92,6 +92,28 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Galaxy band
   private galaxyBand!: THREE.Points;
 
+  // Solar system planets in background
+  private saturnGroup!: THREE.Group;
+  private marsMesh!: THREE.Mesh;
+
+  // Asteroid belt
+  private asteroidBelt!: THREE.InstancedMesh;
+
+  // Shooting stars
+  private readonly shootingStars: { mesh: THREE.Mesh, velocity: THREE.Vector3, life: number, maxLife: number }[] = [];
+  private shootingStarTimer = 0;
+
+  // Comet
+  private cometGroup!: THREE.Group;
+  private cometAngle = 0;
+
+  // Jupiter polar aurora
+  private auroraTop!: THREE.Mesh;
+  private auroraBottom!: THREE.Mesh;
+
+  // Orbital trace rings for Galilean moons
+  private readonly orbitalRings: THREE.Line[] = [];
+
   private readonly ngZone = inject(NgZone);
   private readonly platformId = inject(PLATFORM_ID);
   
@@ -1001,6 +1023,27 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Galaxy effects for deep-space feel
     this.createGalaxyEffects();
 
+    // Solar system planets: Saturn, Mars
+    this.createSolarSystemPlanets();
+
+    // Asteroid belt between Mars and Jupiter
+    this.createAsteroidBelt();
+
+    // Shooting stars (meteor pool)
+    this.createShootingStars();
+
+    // Comet with ion + dust tails
+    this.createComet();
+
+    // Jupiter polar aurora
+    this.createJupiterAurora();
+
+    // Faint orbital rings for Galilean moons
+    this.createOrbitalRings();
+
+    // Enhance Galilean moon details (Io volcanism, Europa ice)
+    this.enhanceGalileanMoons();
+
     // Distance beam between Earth and Jupiter
     this.createDistanceBeam();
   }
@@ -1606,6 +1649,474 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     })));
   }
 
+  private createSolarSystemPlanets() {
+    // Saturn — visible in far background
+    // Real: Saturn radius ≈ 9.45 Earth radii. Jupiter radius here = 10, Earth = 0.89
+    // Saturn relative to Jupiter: 9.45/11.2 ≈ 0.84 of Jupiter → ~8.4 scene units
+    // But for background we scale down for distance: use ~4 units for visual clarity
+    this.saturnGroup = new THREE.Group();
+    const saturnGeo = new THREE.SphereGeometry(4, 64, 64);
+    const saturnMat = new THREE.MeshStandardMaterial({
+      color: 0xd4b06a, roughness: 0.5, metalness: 0.1
+    });
+    const saturn = new THREE.Mesh(saturnGeo, saturnMat);
+    this.saturnGroup.add(saturn);
+
+    // Saturn's iconic rings
+    const innerR = 5.5, outerR = 9;
+    const satRingGeo = new THREE.RingGeometry(innerR, outerR, 128, 4);
+    // Create ring texture procedurally
+    const ringCanvas = document.createElement('canvas');
+    ringCanvas.width = 512; ringCanvas.height = 64;
+    const rCtx = ringCanvas.getContext('2d')!;
+    // Cassini division and ring bands
+    for (let x = 0; x < 512; x++) {
+      const t = x / 512;
+      let opacity = 0;
+      let r = 210, g = 190, b = 150;
+      if (t < 0.25) { // C ring (faint)
+        opacity = 0.15 + Math.sin(t * 80) * 0.05;
+        r = 160; g = 140; b = 110;
+      } else if (t < 0.55) { // B ring (bright)
+        opacity = 0.6 + Math.sin(t * 120) * 0.1;
+      } else if (t < 0.62) { // Cassini division (gap)
+        opacity = 0.04;
+      } else if (t < 0.85) { // A ring
+        opacity = 0.45 + Math.sin(t * 100) * 0.08;
+        r = 200; g = 180; b = 140;
+      } else { // F ring (thin, faint)
+        opacity = t < 0.87 ? 0.2 : 0.05;
+      }
+      rCtx.fillStyle = `rgba(${r},${g},${b},${opacity})`;
+      rCtx.fillRect(x, 0, 1, 64);
+    }
+    const ringTexture = new THREE.CanvasTexture(ringCanvas);
+    ringTexture.wrapS = THREE.ClampToEdgeWrapping;
+    const satRingMat = new THREE.MeshBasicMaterial({
+      map: ringTexture,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      blending: THREE.NormalBlending
+    });
+    // Fix UVs to map radially
+    const ringPos = satRingGeo.attributes['position'];
+    const ringUv = satRingGeo.attributes['uv'] as THREE.BufferAttribute;
+    const rv3 = new THREE.Vector3();
+    for (let i = 0; i < ringPos.count; i++) {
+      rv3.fromBufferAttribute(ringPos as THREE.BufferAttribute, i);
+      const dist = rv3.length();
+      ringUv.setXY(i, (dist - innerR) / (outerR - innerR), 0.5);
+    }
+    const satRing = new THREE.Mesh(satRingGeo, satRingMat);
+    satRing.rotation.x = Math.PI / 2 - 0.47; // Saturn tilt ~26.7°
+    this.saturnGroup.add(satRing);
+
+    // Saturn position: far behind and to the right
+    // Real: Saturn orbit ~9.5 AU, Jupiter 5.2 AU. Place it distant
+    this.saturnGroup.position.set(120, 20, -200);
+    this.saturnGroup.rotation.z = 0.466; // Saturn tilt: 26.7°
+    this.scene.add(this.saturnGroup);
+
+    // Mars — small red dot in the inner solar system direction
+    // Real: Mars radius ≈ 0.53 Earth radii → 0.89 * 0.53 ≈ 0.47
+    // Placed closer to show inner planet
+    const marsGeo = new THREE.SphereGeometry(0.35, 32, 32);
+    const marsMat = new THREE.MeshStandardMaterial({
+      color: 0xc1440e, roughness: 0.8, metalness: 0.1
+    });
+    this.marsMesh = new THREE.Mesh(marsGeo, marsMat);
+    this.marsMesh.position.set(-55, -5, 20);
+    this.scene.add(this.marsMesh);
+
+    // Mars atmosphere (thin, subtle)
+    const marsAtmoMat = new THREE.MeshBasicMaterial({
+      color: 0xff6633, transparent: true, opacity: 0.08,
+      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 16), marsAtmoMat);
+    this.marsMesh.add(marsAtmo);
+  }
+
+  private createAsteroidBelt() {
+    // Main asteroid belt between Mars (~2.2 AU) and Jupiter (~5.2 AU)
+    // In scene: Mars at ~-55x, Jupiter at ~12x → belt at ~-25x, spread over a torus
+    const count = 800;
+    const rockGeo = new THREE.IcosahedronGeometry(0.12, 0);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0x666655, roughness: 1, metalness: 0.2 });
+    this.asteroidBelt = new THREE.InstancedMesh(rockGeo, rockMat, count);
+
+    const dummy = new THREE.Object3D();
+    const centerX = -20, centerZ = -10;
+    const beltRadius = 35;
+
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const radOffset = (Math.random() - 0.5) * 12;
+      const r = beltRadius + radOffset;
+      const y = (Math.random() - 0.5) * 4;
+
+      dummy.position.set(
+        centerX + r * Math.cos(angle),
+        y,
+        centerZ + r * Math.sin(angle)
+      );
+      const s = 0.3 + Math.random() * 1.5;
+      dummy.scale.set(s, s * (0.5 + Math.random() * 0.5), s);
+      dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      dummy.updateMatrix();
+      this.asteroidBelt.setMatrixAt(i, dummy.matrix);
+
+      // Random grey/brown colors
+      const shade = 0.3 + Math.random() * 0.3;
+      this.asteroidBelt.setColorAt(i, new THREE.Color(shade, shade * 0.9, shade * 0.8));
+    }
+    this.asteroidBelt.instanceColor!.needsUpdate = true;
+    this.scene.add(this.asteroidBelt);
+  }
+
+  private createShootingStars() {
+    // Pre-create a pool of shooting star meshes (initially invisible)
+    for (let i = 0; i < 5; i++) {
+      const geo = new THREE.BufferGeometry();
+      const positions = new Float32Array(6); // 2 points (head + trail)
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: 0xffffff, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending
+      });
+      const line = new THREE.Line(geo, mat) as unknown as THREE.Mesh;
+      line.visible = false;
+      this.scene.add(line);
+      this.shootingStars.push({
+        mesh: line,
+        velocity: new THREE.Vector3(),
+        life: 0,
+        maxLife: 0
+      });
+    }
+  }
+
+  private spawnShootingStar() {
+    const inactive = this.shootingStars.find(s => s.life <= 0);
+    if (!inactive) return;
+
+    // Spawn from random edge of view
+    const side = Math.random();
+    let x: number, y: number, z: number;
+    if (side < 0.5) {
+      x = (Math.random() - 0.5) * 120;
+      y = 40 + Math.random() * 40;
+      z = -20 + Math.random() * 40;
+    } else {
+      x = (Math.random() > 0.5 ? 60 : -60) + (Math.random() - 0.5) * 20;
+      y = (Math.random() - 0.5) * 60;
+      z = -20 + Math.random() * 40;
+    }
+
+    inactive.mesh.position.set(x, y, z);
+    inactive.velocity.set(
+      (Math.random() - 0.5) * 2,
+      -(1 + Math.random() * 2),
+      (Math.random() - 0.5)
+    );
+    inactive.maxLife = 40 + Math.random() * 60;
+    inactive.life = inactive.maxLife;
+    inactive.mesh.visible = true;
+  }
+
+  private updateShootingStars() {
+    this.shootingStarTimer++;
+    // Spawn roughly every 2-4 seconds (at 60fps)
+    if (this.shootingStarTimer > 120 + Math.random() * 120) {
+      this.spawnShootingStar();
+      this.shootingStarTimer = 0;
+    }
+
+    this.shootingStars.forEach(star => {
+      if (star.life <= 0) return;
+      star.life--;
+
+      const head = star.mesh.position;
+      head.add(star.velocity);
+
+      // Update trail line
+      const geo = star.mesh.geometry;
+      const pos = geo.attributes['position'] as THREE.BufferAttribute;
+      const trail = star.velocity.clone().multiplyScalar(-4);
+      pos.setXYZ(0, head.x, head.y, head.z);
+      pos.setXYZ(1, head.x + trail.x, head.y + trail.y, head.z + trail.z);
+      pos.needsUpdate = true;
+
+      // Fade in/out
+      const progress = 1 - star.life / star.maxLife;
+      const alpha = progress < 0.1 ? progress / 0.1 : progress > 0.7 ? (1 - progress) / 0.3 : 1;
+      (star.mesh.material as THREE.LineBasicMaterial).opacity = alpha * 0.8;
+
+      if (star.life <= 0) {
+        star.mesh.visible = false;
+      }
+    });
+  }
+
+  private createComet() {
+    this.cometGroup = new THREE.Group();
+
+    // Comet nucleus (icy/rocky)
+    const nucleusGeo = new THREE.SphereGeometry(0.5, 16, 16);
+    const nucleusMat = new THREE.MeshStandardMaterial({
+      color: 0xbbccdd, roughness: 0.4, metalness: 0.2,
+      emissive: 0x334466, emissiveIntensity: 0.3
+    });
+    this.cometGroup.add(new THREE.Mesh(nucleusGeo, nucleusMat));
+
+    // Coma (glowing halo)
+    const comaMat = new THREE.MeshBasicMaterial({
+      color: 0x88bbee, transparent: true, opacity: 0.2,
+      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.cometGroup.add(new THREE.Mesh(new THREE.SphereGeometry(1.5, 16, 16), comaMat));
+
+    // Ion tail (blue, straight) using particles
+    const ionCount = 200;
+    const ionGeo = new THREE.BufferGeometry();
+    const ionPos = new Float32Array(ionCount * 3);
+    const ionOpacities = new Float32Array(ionCount);
+    for (let i = 0; i < ionCount; i++) {
+      const t = i / ionCount;
+      ionPos[i * 3] = t * 30 + (Math.random() - 0.5) * 0.5;
+      ionPos[i * 3 + 1] = (Math.random() - 0.5) * (0.5 + t * 2);
+      ionPos[i * 3 + 2] = (Math.random() - 0.5) * (0.5 + t * 2);
+      ionOpacities[i] = 1 - t;
+    }
+    ionGeo.setAttribute('position', new THREE.Float32BufferAttribute(ionPos, 3));
+    ionGeo.setAttribute('alpha', new THREE.Float32BufferAttribute(ionOpacities, 1));
+    const ionTail = new THREE.Points(ionGeo, new THREE.ShaderMaterial({
+      vertexShader: `
+        attribute float alpha;
+        varying float vAlpha;
+        void main() {
+          vAlpha = alpha;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = 2.5 * (100.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vAlpha;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float a = smoothstep(0.5, 0.0, d) * vAlpha * 0.5;
+          gl_FragColor = vec4(0.4, 0.6, 1.0, a);
+        }
+      `,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    }));
+    this.cometGroup.add(ionTail);
+
+    // Dust tail (yellowish, curved) using particles
+    const dustCount = 150;
+    const dustGeo = new THREE.BufferGeometry();
+    const dustPos = new Float32Array(dustCount * 3);
+    const dustAlphas = new Float32Array(dustCount);
+    for (let i = 0; i < dustCount; i++) {
+      const t = i / dustCount;
+      dustPos[i * 3] = t * 20 + (Math.random() - 0.5);
+      dustPos[i * 3 + 1] = t * t * 8 + (Math.random() - 0.5) * (1 + t * 3);
+      dustPos[i * 3 + 2] = (Math.random() - 0.5) * (0.5 + t * 2);
+      dustAlphas[i] = (1 - t) * 0.7;
+    }
+    dustGeo.setAttribute('position', new THREE.Float32BufferAttribute(dustPos, 3));
+    dustGeo.setAttribute('alpha', new THREE.Float32BufferAttribute(dustAlphas, 1));
+    const dustTail = new THREE.Points(dustGeo, new THREE.ShaderMaterial({
+      vertexShader: `
+        attribute float alpha;
+        varying float vAlpha;
+        void main() {
+          vAlpha = alpha;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = 2.0 * (100.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying float vAlpha;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float a = smoothstep(0.5, 0.0, d) * vAlpha * 0.4;
+          gl_FragColor = vec4(1.0, 0.9, 0.5, a);
+        }
+      `,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+    }));
+    this.cometGroup.add(dustTail);
+
+    // Start comet on an elliptical orbit far out
+    this.cometGroup.position.set(80, 30, -100);
+    this.scene.add(this.cometGroup);
+  }
+
+  private updateComet() {
+    // Elliptical orbit in the background
+    this.cometAngle += 0.0003;
+    const a = 120, b = 60; // semi-major, semi-minor
+    this.cometGroup.position.set(
+      a * Math.cos(this.cometAngle) + 20,
+      b * Math.sin(this.cometAngle) * 0.3 + 15,
+      -80 + Math.sin(this.cometAngle) * 30
+    );
+    // Point tail away from sun (sun at -50, 10, 30)
+    const toSun = new THREE.Vector3(-50, 10, 30).sub(this.cometGroup.position).normalize();
+    this.cometGroup.lookAt(this.cometGroup.position.clone().sub(toSun));
+  }
+
+  private createJupiterAurora() {
+    // Jupiter has spectacular aurora at both poles due to its strong magnetic field
+    const auroraGeo = new THREE.TorusGeometry(3.5, 0.8, 16, 64);
+    const auroraMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vPos;
+        void main() {
+          vUv = uv;
+          vPos = position;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        varying vec3 vPos;
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+        void main() {
+          float wave = sin(vUv.x * 20.0 + uTime * 3.0) * 0.5 + 0.5;
+          float shimmer = hash(vUv + uTime * 0.1) * 0.3;
+          float pulse = sin(uTime * 2.0 + vUv.x * 10.0) * 0.3 + 0.7;
+          float edge = smoothstep(0.0, 0.3, vUv.y) * smoothstep(1.0, 0.7, vUv.y);
+          float alpha = (wave * 0.5 + shimmer + 0.2) * edge * pulse * 0.25;
+          vec3 color = mix(vec3(0.1, 0.8, 0.3), vec3(0.3, 0.4, 1.0), wave);
+          color += vec3(0.8, 0.2, 0.5) * shimmer;
+          gl_FragColor = vec4(color, alpha);
+        }
+      `,
+      transparent: true, side: THREE.DoubleSide,
+      depthWrite: false, blending: THREE.AdditiveBlending
+    });
+
+    // North pole aurora
+    this.auroraTop = new THREE.Mesh(auroraGeo, auroraMat);
+    this.auroraTop.position.y = 9;
+    this.auroraTop.rotation.x = Math.PI / 2;
+    this.jupiterGroup.add(this.auroraTop);
+
+    // South pole aurora (clone material for independent time)
+    const auroraMatS = auroraMat.clone();
+    auroraMatS.uniforms = { uTime: { value: 0 } };
+    this.auroraBottom = new THREE.Mesh(auroraGeo.clone(), auroraMatS);
+    this.auroraBottom.position.y = -9;
+    this.auroraBottom.rotation.x = -Math.PI / 2;
+    this.jupiterGroup.add(this.auroraBottom);
+  }
+
+  private createOrbitalRings() {
+    // Faint dotted orbital path rings for each Galilean moon
+    const distances = [14, 18, 24, 32];
+    const colors = [0xddaa33, 0xeeeeee, 0xaaaaaa, 0x666666];
+    distances.forEach((dist, idx) => {
+      const segments = 128;
+      const positions = new Float32Array(segments * 3);
+      for (let i = 0; i < segments; i++) {
+        const angle = (i / segments) * Math.PI * 2;
+        positions[i * 3] = Math.cos(angle) * dist;
+        positions[i * 3 + 1] = 0;
+        positions[i * 3 + 2] = Math.sin(angle) * dist;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      const mat = new THREE.LineBasicMaterial({
+        color: colors[idx], transparent: true, opacity: 0.08,
+        blending: THREE.AdditiveBlending
+      });
+      const ring = new THREE.LineLoop(geo, mat) as unknown as THREE.Line;
+      this.jupiterGroup.add(ring);
+      this.orbitalRings.push(ring);
+    });
+  }
+
+  private enhanceGalileanMoons() {
+    // Io: volcanic glow (yellowish emissive spots)
+    if (this.galileanMoons[0]) {
+      const ioMat = this.galileanMoons[0].mesh.material as THREE.MeshStandardMaterial;
+      ioMat.emissive = new THREE.Color(0xff6600);
+      ioMat.emissiveIntensity = 0.15;
+
+      // Volcanic plume particles around Io
+      const plumeGeo = new THREE.BufferGeometry();
+      const plumeCount = 30;
+      const plumePos = new Float32Array(plumeCount * 3);
+      for (let i = 0; i < plumeCount; i++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.random() * Math.PI;
+        const r = 0.3 + Math.random() * 0.3;
+        plumePos[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+        plumePos[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+        plumePos[i * 3 + 2] = r * Math.cos(phi);
+      }
+      plumeGeo.setAttribute('position', new THREE.Float32BufferAttribute(plumePos, 3));
+      const plumeMat = new THREE.PointsMaterial({
+        color: 0xffaa33, size: 0.06, transparent: true, opacity: 0.4,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      });
+      this.galileanMoons[0].mesh.add(new THREE.Points(plumeGeo, plumeMat));
+    }
+
+    // Europa: icy shimmer (bluish-white emissive, slight transparency)
+    if (this.galileanMoons[1]) {
+      const europaMat = this.galileanMoons[1].mesh.material as THREE.MeshStandardMaterial;
+      europaMat.emissive = new THREE.Color(0x4488cc);
+      europaMat.emissiveIntensity = 0.08;
+
+      // Ice crack lines (thin line overlay)
+      const crackGeo = new THREE.BufferGeometry();
+      const crackCount = 20;
+      const crackPos = new Float32Array(crackCount * 6); // line segments
+      for (let i = 0; i < crackCount; i++) {
+        const theta1 = Math.random() * Math.PI * 2;
+        const phi1 = Math.random() * Math.PI;
+        const r = 0.265;
+        crackPos[i * 6] = r * Math.sin(phi1) * Math.cos(theta1);
+        crackPos[i * 6 + 1] = r * Math.sin(phi1) * Math.sin(theta1);
+        crackPos[i * 6 + 2] = r * Math.cos(phi1);
+        const theta2 = theta1 + (Math.random() - 0.5) * 0.5;
+        const phi2 = phi1 + (Math.random() - 0.5) * 0.5;
+        crackPos[i * 6 + 3] = r * Math.sin(phi2) * Math.cos(theta2);
+        crackPos[i * 6 + 4] = r * Math.sin(phi2) * Math.sin(theta2);
+        crackPos[i * 6 + 5] = r * Math.cos(phi2);
+      }
+      crackGeo.setAttribute('position', new THREE.Float32BufferAttribute(crackPos, 3));
+      const crackMat = new THREE.LineBasicMaterial({
+        color: 0x88ccff, transparent: true, opacity: 0.3
+      });
+      this.galileanMoons[1].mesh.add(new THREE.LineSegments(crackGeo, crackMat));
+    }
+
+    // Ganymede: subtle surface detail (largest moon, slight emissive)
+    if (this.galileanMoons[2]) {
+      const ganyMat = this.galileanMoons[2].mesh.material as THREE.MeshStandardMaterial;
+      ganyMat.emissive = new THREE.Color(0x444444);
+      ganyMat.emissiveIntensity = 0.05;
+    }
+
+    // Callisto: dark, heavily cratered look (lower roughness for slight sheen)
+    if (this.galileanMoons[3]) {
+      const callistoMat = this.galileanMoons[3].mesh.material as THREE.MeshStandardMaterial;
+      callistoMat.roughness = 0.95;
+    }
+  }
+
   private createDistanceBeam() {
     const group = new THREE.Group();
 
@@ -1717,6 +2228,27 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateMoons();
     this.updateSpaceships(time);
     this.updateStarsAndDust(time);
+
+    // New immersive effects
+    this.updateShootingStars();
+    this.updateComet();
+
+    // Rotate Saturn slowly
+    if (this.saturnGroup) {
+      this.saturnGroup.rotation.y += 0.0002;
+    }
+    // Rotate Mars
+    if (this.marsMesh) {
+      this.marsMesh.rotation.y += 0.003;
+    }
+
+    // Update aurora shaders
+    if (this.auroraTop) {
+      (this.auroraTop.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
+    }
+    if (this.auroraBottom) {
+      (this.auroraBottom.material as THREE.ShaderMaterial).uniforms['uTime'].value = time + 5;
+    }
 
     this.renderer.autoClear = false;
     this.renderer.clear();

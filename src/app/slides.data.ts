@@ -14,6 +14,7 @@ export interface Slide {
     explanation?: string;
   }[];
   isTitleSlide?: boolean;
+  video?: string;
 }
 
 export const SLIDES: Slide[] = [
@@ -60,6 +61,7 @@ export const SLIDES: Slide[] = [
       '• Groter dan de hele aarde!',
       '• Rode kleur door zonnestraling'
     ],
+    video: 'Jupiter_red_dot_storm.mp4',
     experiment: {
       title: 'Maak je eigen Rode Vlek!',
       description: 'Nodig: Glazen pot met water, lepel, rode limonadesiroop.',
@@ -99,6 +101,7 @@ export const SLIDES: Slide[] = [
       '• Draait super snel om zijn as',
       '• Eén dag duurt nog geen 10 uur!'
     ],
+    video: 'Jupiter_Size_Comparison_Video.mp4',
     experiment: {
       title: 'Hoe zwaar ben je op Jupiter?',
       description: 'Nodig: Tasje met 1 kilo suiker, tasje met 2,5 kilo suiker.',

@@ -14,4 +14,12 @@ body {
   overflow: hidden;
   background-color: #000;
   color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(255, 232, 31, 0.3);
+  color: white;
 }

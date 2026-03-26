@@ -13,6 +13,7 @@ import * as THREE from 'three';
 export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   @Input() slideIndex = 0;
   @Input() slideId = 'title';
+  @Input() fadeOut = false;
   @ViewChild('canvasContainer', { static: true }) canvasContainer!: ElementRef<HTMLDivElement>;
 
   private scene!: THREE.Scene;
@@ -23,15 +24,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private atmosphere!: THREE.Mesh;
   
   // 95 Moons: 4 Galilean + 91 small moons
-  private galileanMoons: { mesh: THREE.Mesh, distance: number, speed: number, angle: number }[] = [];
+  private readonly galileanMoons: { mesh: THREE.Mesh, distance: number, speed: number, angle: number }[] = [];
   private smallMoons!: THREE.InstancedMesh;
-  private smallMoonsData: { distance: number, speed: number, angle: number, inclination: number }[] = [];
+  private readonly smallMoonsData: { distance: number, speed: number, angle: number, inclination: number }[] = [];
   
   private stars!: THREE.Points;
   private dustSystem!: THREE.Points;
   private animationFrameId: number | null = null;
-  private isBrowser: boolean;
-  private clock = new THREE.Clock();
+  private readonly isBrowser: boolean;
+  private readonly startTime = Date.now();
   
   // Camera transition targets
   private targetCameraX = 0;
@@ -40,8 +41,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private baseCameraX = 0;
   private baseCameraY = 0;
   private baseCameraZ = 45;
-  private targetLookAt = new THREE.Vector3(0, 0, 0);
-  private currentLookAt = new THREE.Vector3(0, 0, 0);
+  private readonly targetLookAt = new THREE.Vector3(0, 0, 0);
+  private readonly currentLookAt = new THREE.Vector3(0, 0, 0);
   private targetJupiterRotationY: number | null = null;
   private mouseX = 0;
   private mouseY = 0;
@@ -62,9 +63,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private postScene!: THREE.Scene;
   private postCamera!: THREE.OrthographicCamera;
   private postMaterial!: THREE.ShaderMaterial;
+  private readonly nebulae: THREE.Mesh[] = [];
 
-  private ngZone = inject(NgZone);
-  private platformId = inject(PLATFORM_ID);
+  private readonly ngZone = inject(NgZone);
+  private readonly platformId = inject(PLATFORM_ID);
   
   constructor() {
     this.isBrowser = isPlatformBrowser(this.platformId);
@@ -103,10 +105,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.targetAtmospherePulse = 1; // Enable pulsing
         break;
       case 'h2':
-        // The Great Red Spot - Close up, angled towards southern hemisphere
-        this.baseCameraX = 0; this.baseCameraY = -3; this.baseCameraZ = 14;
-        this.targetLookAt.set(0, -2, 0);
-        this.targetJupiterRotationY = 4.7; // Rotate planet so the Red Spot faces the camera perfectly
+        // The Great Red Spot - Zoom in dramatically close to the storm
+        this.baseCameraX = 8; this.baseCameraY = -5; this.baseCameraZ = 6;
+        this.targetLookAt.set(10, -3, -10);
+        this.targetJupiterRotationY = 4.7;
         break;
       case 'h3':
         // Distance - Warp speed effect
@@ -148,8 +150,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.ngZone.runOutsideAngular(() => {
         this.animate();
       });
-      window.addEventListener('resize', this.onWindowResize.bind(this));
-      window.addEventListener('mousemove', this.onMouseMove.bind(this));
+      globalThis.addEventListener('resize', this.onWindowResize.bind(this));
+      globalThis.addEventListener('mousemove', this.onMouseMove.bind(this));
     }
   }
 
@@ -158,8 +160,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.animationFrameId !== null) {
         cancelAnimationFrame(this.animationFrameId);
       }
-      window.removeEventListener('resize', this.onWindowResize.bind(this));
-      window.removeEventListener('mousemove', this.onMouseMove.bind(this));
+      globalThis.removeEventListener('resize', this.onWindowResize.bind(this));
+      globalThis.removeEventListener('mousemove', this.onMouseMove.bind(this));
       if (this.renderer) {
         this.renderer.dispose();
       }
@@ -169,6 +171,205 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private onMouseMove(event: MouseEvent) {
     this.mouseX = (event.clientX / window.innerWidth) * 2 - 1;
     this.mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
+  }
+
+  /** Generates a high-fidelity 4K procedural Jupiter texture with Perlin-noise bands */
+  private generateJupiterTexture(): THREE.CanvasTexture {
+    const W = 4096, H = 2048;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d')!;
+    const imageData = ctx.createImageData(W, H);
+    const data = imageData.data;
+
+    // Permutation table for Perlin noise
+    const perm = new Uint8Array(512);
+    const p0 = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p0[i] = i;
+    for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p0[i], p0[j]] = [p0[j], p0[i]]; }
+    for (let i = 0; i < 512; i++) perm[i] = p0[i & 255];
+
+    const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+    const lerp = (a: number, b: number, t: number) => a + t * (b - a);
+    const grad = (hash: number, x: number, y: number) => {
+      switch (hash & 3) {
+        case 0: return x + y;
+        case 1: return -x + y;
+        case 2: return x - y;
+        default: return -x - y;
+      }
+    };
+    const perlin2d = (x: number, y: number) => {
+      const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
+      const xf = x - Math.floor(x), yf = y - Math.floor(y);
+      const u = fade(xf), v = fade(yf);
+      const aa = perm[perm[xi] + yi], ab = perm[perm[xi] + yi + 1];
+      const ba = perm[perm[xi + 1] + yi], bb = perm[perm[xi + 1] + yi + 1];
+      return lerp(lerp(grad(aa, xf, yf), grad(ba, xf - 1, yf), u),
+                  lerp(grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1), u), v);
+    };
+    const fbm = (x: number, y: number, octaves: number, lacunarity = 2, gain = 0.5) => {
+      let value = 0, amplitude = 1, frequency = 1, maxAmp = 0;
+      for (let i = 0; i < octaves; i++) {
+        value += perlin2d(x * frequency, y * frequency) * amplitude;
+        maxAmp += amplitude;
+        amplitude *= gain;
+        frequency *= lacunarity;
+      }
+      return value / maxAmp;
+    };
+
+    // Jupiter band color definitions: alternating zones and belts
+    const bands: { latMin: number; latMax: number; r: number; g: number; b: number }[] = [
+      // South polar region
+      { latMin: 0, latMax: 0.08, r: 115, g: 110, b: 105 },
+      // South temperate belt
+      { latMin: 0.08, latMax: 0.16, r: 155, g: 100, b: 65 },
+      // South temperate zone
+      { latMin: 0.16, latMax: 0.24, r: 210, g: 190, b: 165 },
+      // South equatorial belt (dark, strong)
+      { latMin: 0.24, latMax: 0.36, r: 165, g: 95, b: 55 },
+      // Equatorial zone (bright white/cream)
+      { latMin: 0.36, latMax: 0.55, r: 235, g: 225, b: 210 },
+      // North equatorial belt (prominent dark brown)
+      { latMin: 0.55, latMax: 0.68, r: 160, g: 90, b: 50 },
+      // North tropical zone
+      { latMin: 0.68, latMax: 0.76, r: 215, g: 195, b: 168 },
+      // North temperate belt
+      { latMin: 0.76, latMax: 0.84, r: 170, g: 115, b: 72 },
+      // North temperate zone
+      { latMin: 0.84, latMax: 0.92, r: 200, g: 185, b: 160 },
+      // North polar region
+      { latMin: 0.92, latMax: 1, r: 120, g: 115, b: 110 },
+    ];
+
+    const getBandColor = (lat: number): [number, number, number] => {
+      for (let i = 0; i < bands.length - 1; i++) {
+        const b = bands[i], next = bands[i + 1];
+        if (lat >= b.latMin && lat < next.latMin) {
+          // Smooth blend at edges
+          const edgeWidth = 0.025;
+          const distToEnd = next.latMin - lat;
+          if (distToEnd < edgeWidth) {
+            const t = 1 - distToEnd / edgeWidth;
+            return [
+              b.r + (next.r - b.r) * t * t,
+              b.g + (next.g - b.g) * t * t,
+              b.b + (next.b - b.b) * t * t
+            ];
+          }
+          return [b.r, b.g, b.b];
+        }
+      }
+      const last = bands.at(-1)!;
+      return [last.r, last.g, last.b];
+    };
+
+    for (let py = 0; py < H; py++) {
+      const v = py / H; // 0-1 from top to bottom
+      for (let px = 0; px < W; px++) {
+        const u = px / W;
+        const idx = (py * W + px) * 4;
+
+        // Multi-octave noise for turbulent band distortion
+        const nx = u * 8; // wraps nicely
+        const ny = v * 4;
+        const turbulence = fbm(nx, ny * 6, 6, 2.2, 0.48);
+        const fineTurb = fbm(nx * 4, ny * 12, 4, 2.5, 0.4) * 0.3;
+
+        // Distort the latitude lookup with noise to create wavy band edges
+        const distortedLat = Math.max(0, Math.min(1, v + turbulence * 0.025 + fineTurb * 0.008));
+        let [r, g, b] = getBandColor(distortedLat);
+
+        // Apply noise-based hue/brightness variation within bands
+        const bandNoise = fbm(nx * 2 + 100, ny * 8 + 50, 5, 2, 0.5);
+        const detailNoise = fbm(nx * 8 + 200, ny * 20 + 150, 4, 2.3, 0.45);
+        r += bandNoise * 18 + detailNoise * 8;
+        g += bandNoise * 12 + detailNoise * 5;
+        b += bandNoise * 8 + detailNoise * 3;
+
+        // Longitudinal streaks (jet streams)
+        const jetStream = Math.sin(v * Math.PI * 35 + turbulence * 8) * 0.5 + 0.5;
+        const streakIntensity = jetStream * fbm(nx * 3, ny * 2, 3) * 12;
+        r += streakIntensity;
+        g += streakIntensity * 0.7;
+        b += streakIntensity * 0.4;
+
+        // Apply GRS, storms, and polar darkening
+        [r, g, b] = this.applyTextureEffects(u, v, r, g, b, fbm);
+
+        data[idx]     = Math.max(0, Math.min(255, r));
+        data[idx + 1] = Math.max(0, Math.min(255, g));
+        data[idx + 2] = Math.max(0, Math.min(255, b));
+        data[idx + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    if ('SRGBColorSpace' in THREE) {
+      texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
+    }
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.generateMipmaps = true;
+    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    return texture;
+  }
+
+  private applyTextureEffects(
+    u: number, v: number, r: number, g: number, b: number,
+    fbm: (x: number, y: number, octaves: number, lacunarity?: number, gain?: number) => number
+  ): [number, number, number] {
+    const grsU = 0.293, grsV = 0.635;
+    const grsRadiusX = 0.044, grsRadiusY = 0.022;
+    const nx = u * 8, ny = v * 4;
+    // Great Red Spot
+    const du = u - grsU, dv = v - grsV;
+    const grsDistSq = (du * du) / (grsRadiusX * grsRadiusX) + (dv * dv) / (grsRadiusY * grsRadiusY);
+    if (grsDistSq < 4) {
+      const grsDist = Math.sqrt(grsDistSq);
+      const angle = Math.atan2(dv, du);
+      const spiral = Math.sin(angle * 3 + grsDist * 8 + fbm(nx * 5 + 300, ny * 10 + 300, 3) * 4);
+
+      if (grsDist < 1) {
+        const t = grsDist;
+        const coreR = 195 + spiral * 25;
+        const coreG = 65 + spiral * 15 + t * 20;
+        const coreB = 35 + spiral * 10 + t * 15;
+        const mix = (1 - t) * 0.9;
+        r = r * (1 - mix) + coreR * mix;
+        g = g * (1 - mix) + coreG * mix;
+        b = b * (1 - mix) + coreB * mix;
+      } else if (grsDist < 2) {
+        const haloT = (grsDist - 1);
+        const swirlEffect = (1 - haloT) * 0.35 * (0.5 + spiral * 0.5);
+        r = r + swirlEffect * 40;
+        g = g - swirlEffect * 10;
+        b = b - swirlEffect * 15;
+      }
+    }
+
+    // White oval storms
+    const stormSeed = Math.floor(v * 20) * 1000 + Math.floor(u * 30);
+    const stormNoise = fbm(u * 40 + stormSeed * 0.001, v * 40, 2);
+    if (stormNoise > 0.42 && Math.abs(v - 0.5) > 0.12) {
+      const bright = (stormNoise - 0.42) * 80;
+      r = Math.min(255, r + bright);
+      g = Math.min(255, g + bright * 0.9);
+      b = Math.min(255, b + bright * 0.7);
+    }
+
+    // Polar darkening
+    const polarFade = Math.abs(v - 0.5) * 2;
+    if (polarFade > 0.8) {
+      const darkening = (polarFade - 0.8) * 2.5;
+      r *= 1 - darkening * 0.4;
+      g *= 1 - darkening * 0.4;
+      b *= 1 - darkening * 0.35;
+    }
+
+    return [r, g, b];
   }
 
   private initThreeJs() {
@@ -189,25 +390,65 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     container.appendChild(this.renderer.domElement);
 
-    // Stars (More dynamic starfield)
+    // Stars - Multi-colored with size variation and twinkle
     const starsGeometry = new THREE.BufferGeometry();
-    const starsMaterial = new THREE.PointsMaterial({
-      color: 0xffffff,
-      size: 0.15,
-      transparent: true,
-      opacity: 0.9,
-      sizeAttenuation: true
-    });
-
     const starsVertices = [];
-    for (let i = 0; i < 15000; i++) {
-      const x = THREE.MathUtils.randFloatSpread(2000);
-      const y = THREE.MathUtils.randFloatSpread(2000);
-      const z = THREE.MathUtils.randFloatSpread(2000);
-      starsVertices.push(x, y, z);
+    const starsColors = [];
+    const starsSizes = [];
+    const starColorPalette = [
+      [1, 1, 1],
+      [0.8, 0.85, 1],
+      [1, 0.95, 0.8],
+      [1, 0.8, 0.7],
+      [0.7, 0.8, 1],
+    ];
+
+    for (let i = 0; i < 20000; i++) {
+      starsVertices.push(
+        THREE.MathUtils.randFloatSpread(2000),
+        THREE.MathUtils.randFloatSpread(2000),
+        THREE.MathUtils.randFloatSpread(2000)
+      );
+      const color = starColorPalette[Math.floor(Math.random() * starColorPalette.length)];
+      starsColors.push(color[0], color[1], color[2]);
+      starsSizes.push(Math.random() * 2.5 + 0.5);
     }
 
     starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
+    starsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(starsColors, 3));
+    starsGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(starsSizes, 1));
+
+    const starsMaterial = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vColor;
+        uniform float uTime;
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          float twinkle = sin(uTime * 2.0 + position.x * 0.1 + position.y * 0.15) * 0.3 + 0.7;
+          gl_PointSize = aSize * twinkle * (300.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float alpha = smoothstep(0.5, 0.0, dist);
+          float core = smoothstep(0.3, 0.0, dist);
+          vec3 finalColor = vColor + core * 0.5;
+          gl_FragColor = vec4(finalColor, alpha * 0.9);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
     this.stars = new THREE.Points(starsGeometry, starsMaterial);
     this.scene.add(this.stars);
 
@@ -228,95 +469,84 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.dustSystem = new THREE.Points(dustGeometry, dustMaterial);
     this.scene.add(this.dustSystem);
 
+    // Deep-space nebula clouds
+    const nebulaConfigs = [
+      { color: new THREE.Color(0x1a0a2e), radius: 250, pos: [-300, 100, -500] },
+      { color: new THREE.Color(0x0a1628), radius: 300, pos: [200, -80, -600] },
+      { color: new THREE.Color(0x2e0a0a), radius: 220, pos: [100, 200, -450] },
+    ];
+    nebulaConfigs.forEach((cfg, i) => {
+      const nebulaGeo = new THREE.SphereGeometry(cfg.radius, 32, 32);
+      const nebulaMat = new THREE.ShaderMaterial({
+        uniforms: {
+          uColor: { value: cfg.color },
+          uTime: { value: 0 },
+          uSeed: { value: i * 42.5 }
+        },
+        vertexShader: `
+          varying vec3 vPos;
+          void main() {
+            vPos = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform float uTime;
+          uniform float uSeed;
+          varying vec3 vPos;
+          float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
+          float noise(vec3 p) {
+            vec3 i = floor(p); vec3 f = fract(p);
+            f = f * f * (3.0 - 2.0 * f);
+            float a = hash(i); float b = hash(i + vec3(1,0,0));
+            float c = hash(i + vec3(0,1,0)); float d = hash(i + vec3(1,1,0));
+            float e = hash(i + vec3(0,0,1)); float f1 = hash(i + vec3(1,0,1));
+            float g = hash(i + vec3(0,1,1)); float h = hash(i + vec3(1,1,1));
+            return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,f1,f.x), mix(g,h,f.x), f.y), f.z);
+          }
+          float fbm(vec3 p) {
+            float v = 0.0; float a = 0.5;
+            for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
+            return v;
+          }
+          void main() {
+            vec3 pos = normalize(vPos) * 3.0 + uSeed;
+            float n = fbm(pos + uTime * 0.01);
+            float alpha = smoothstep(0.3, 0.7, n) * 0.12;
+            gl_FragColor = vec4(uColor * 2.0, alpha);
+          }
+        `,
+        transparent: true,
+        side: THREE.BackSide,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending
+      });
+      const nebula = new THREE.Mesh(nebulaGeo, nebulaMat);
+      nebula.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
+      this.scene.add(nebula);
+      this.nebulae.push(nebula);
+    });
+
     // Group for Jupiter and Atmosphere
     this.jupiterGroup = new THREE.Group();
     this.jupiterGroup.position.set(12, 0, -15);
     this.jupiterGroup.rotation.z = 0.05; // Slight tilt
     this.scene.add(this.jupiterGroup);
 
-    // Jupiter Texture Generation (Procedural Fallback)
-    const canvas = document.createElement('canvas');
-    canvas.width = 2048;
-    canvas.height = 1024;
-    const context = canvas.getContext('2d');
-    if (context) {
-      // Base color
-      context.fillStyle = '#c99b65';
-      context.fillRect(0, 0, 2048, 1024);
-      
-      // Draw many fine bands with turbulence
-      for (let i = 0; i < 1500; i++) {
-        const y = Math.random() * 1024;
-        const h = Math.random() * 15 + 2;
-        const opacity = Math.random() * 0.4;
-        
-        // Color palette based on latitude
-        const lat = Math.abs((y / 1024) - 0.5) * 2.0; // 0 at equator, 1 at poles
-        let r, g, b;
-        if (lat < 0.15) { // Equatorial Zone (White/Light)
-           r = 230 + Math.random() * 25; g = 220 + Math.random() * 25; b = 210 + Math.random() * 25;
-        } else if (lat < 0.3) { // Equatorial Belts (Dark Brown/Red)
-           r = 160 + Math.random() * 40; g = 90 + Math.random() * 30; b = 50 + Math.random() * 20;
-        } else if (lat < 0.5) { // Tropical Zones (Lighter)
-           r = 210 + Math.random() * 30; g = 190 + Math.random() * 30; b = 160 + Math.random() * 30;
-        } else if (lat < 0.7) { // Temperate Belts (Brown/Orange)
-           r = 180 + Math.random() * 30; g = 120 + Math.random() * 30; b = 80 + Math.random() * 20;
-        } else { // Polar Regions (Grey/Blueish/Brown)
-           r = 140 + Math.random() * 30; g = 140 + Math.random() * 30; b = 130 + Math.random() * 30;
-        }
-        
-        context.fillStyle = `rgba(${r},${g},${b},${opacity})`;
-        
-        context.beginPath();
-        context.moveTo(0, y);
-        for(let x = 0; x <= 2048; x += 20) {
-           const wave1 = Math.sin(x * 0.01 + y * 0.05) * 10;
-           const wave2 = Math.cos(x * 0.03 - y * 0.02) * 5;
-           context.lineTo(x, y + wave1 + wave2);
-        }
-        context.lineTo(2048, y + h);
-        context.lineTo(0, y + h);
-        context.fill();
-      }
-      
-      // Draw the Great Red Spot with gradient
-      const grsX = 1200;
-      const grsY = 650;
-      const gradient = context.createRadialGradient(grsX, grsY, 10, grsX, grsY, 120);
-      gradient.addColorStop(0, 'rgba(200, 70, 40, 1)');
-      gradient.addColorStop(0.4, 'rgba(220, 100, 60, 0.9)');
-      gradient.addColorStop(0.8, 'rgba(180, 80, 50, 0.6)');
-      gradient.addColorStop(1, 'rgba(180, 80, 50, 0)');
-      
-      context.fillStyle = gradient;
-      context.beginPath();
-      context.ellipse(grsX, grsY, 180, 90, 0, 0, Math.PI * 2);
-      context.fill();
-      
-      // Swirling around the red spot
-      context.lineWidth = 3;
-      for(let i=0; i<12; i++) {
-        context.strokeStyle = `rgba(230, 180, 130, ${0.5 - i*0.04})`;
-        context.beginPath();
-        context.ellipse(grsX, grsY, 190 + i*12, 100 + i*6, 0, 0, Math.PI * 2);
-        context.stroke();
-      }
-    }
-    
-    const fallbackTexture = new THREE.CanvasTexture(canvas);
-    if ('SRGBColorSpace' in THREE) {
-      fallbackTexture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
-    }
+    // Jupiter Texture Generation — High-fidelity procedural with Perlin noise bands
+    const fallbackTexture = this.generateJupiterTexture();
     fallbackTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     
     const jupiterGeometry = new THREE.SphereGeometry(10, 256, 256);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
-      roughness: 0.4, // Gas giants are relatively smooth but scatter light
-      metalness: 0.0
+      roughness: 0.35,
+      metalness: 0,
+      envMapIntensity: 0.3
     });
 
-    // Subtle Cinematic Enhancement (Removed aggressive contrast that crushed details)
+    // Cinematic shader enhancement — red spot glow, subsurface warmth, micro-contrast
     jupiterMaterial.onBeforeCompile = (shader) => {
       shader.fragmentShader = shader.fragmentShader.replace(
         `#include <map_fragment>`,
@@ -324,12 +554,21 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         #ifdef USE_MAP
           vec4 sampledDiffuseColor = texture2D( map, vMapUv );
           
-          // Subtle enhancement of the Great Red Spot
-          float redDominance = max(0.0, sampledDiffuseColor.r - max(sampledDiffuseColor.g, sampledDiffuseColor.b) * 0.9);
-          sampledDiffuseColor.r += redDominance * 0.3; 
+          // Enhance the Great Red Spot with a warm glow
+          float redDominance = max(0.0, sampledDiffuseColor.r - max(sampledDiffuseColor.g, sampledDiffuseColor.b) * 0.85);
+          sampledDiffuseColor.r += redDominance * 0.4;
+          sampledDiffuseColor.g += redDominance * 0.05;
           
-          // Very slight contrast boost to keep details crisp
-          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, smoothstep(0.0, 1.0, sampledDiffuseColor.rgb), 0.2);
+          // Micro-contrast for band definition
+          vec3 luma = vec3(dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));
+          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, sampledDiffuseColor.rgb * sampledDiffuseColor.rgb * 1.8, 0.15);
+          
+          // Warm subsurface scattering tint (gas giant internal heat)
+          sampledDiffuseColor.rgb += vec3(0.02, 0.008, 0.0) * (1.0 - dot(sampledDiffuseColor.rgb, vec3(0.333)));
+          
+          // Subtle cinematic color grading — push shadows blue, highlights warm
+          float brightness = dot(sampledDiffuseColor.rgb, vec3(0.333));
+          sampledDiffuseColor.rgb += mix(vec3(-0.01, -0.005, 0.02), vec3(0.02, 0.01, -0.01), brightness);
 
           #ifdef DECODE_VIDEO_TEXTURE
             sampledDiffuseColor = vec4( mix( pow( sampledDiffuseColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), sampledDiffuseColor.rgb * 0.0773993808, vec3( lessThanEqual( sampledDiffuseColor.rgb, vec3( 0.04045 ) ) ) ), sampledDiffuseColor.w );
@@ -343,13 +582,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiter = new THREE.Mesh(jupiterGeometry, jupiterMaterial);
     this.jupiterGroup.add(this.jupiter);
 
-    // Load Ultra High-Res Equirectangular Texture (8K/4K)
+    // Load NASA HST OPAL high-res Jupiter map from local assets
     const textureLoader = new THREE.TextureLoader();
-    textureLoader.setCrossOrigin('anonymous');
-    
-    // Using a highly detailed 4K Jupiter map from Wikimedia Commons
     textureLoader.load(
-      'https://upload.wikimedia.org/wikipedia/commons/e/e2/Jupiter.jpg',
+      '20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg',
       (texture) => {
         if ('SRGBColorSpace' in THREE) {
           texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
@@ -358,9 +594,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         texture.minFilter = THREE.LinearMipmapLinearFilter;
         texture.magFilter = THREE.LinearFilter;
         texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-        
         jupiterMaterial.map = texture;
-        // Removed bumpMap as using diffuse for bump on a gas giant creates unnatural noise and ruins crispness
         jupiterMaterial.needsUpdate = true;
       },
       undefined,
@@ -574,7 +808,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(ambientLight);
 
     // Main sun light (Warmer and brighter for cinematic contrast)
-    const sunLight = new THREE.DirectionalLight(0xffeedd, 4.0);
+    const sunLight = new THREE.DirectionalLight(0xffeedd, 4);
     sunLight.position.set(-50, 10, 30);
     this.scene.add(sunLight);
 
@@ -643,11 +877,26 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec2 center = vUv - 0.5;
           float dist = length(center);
-          float vignette = smoothstep(0.9, 0.25, dist * 1.2);
-          float grain = (random(vUv + mod(uTime, 10.0)) - 0.5) * 0.07;
+          
+          // Deeper cinematic vignette
+          float vignette = smoothstep(1.0, 0.2, dist * 1.3);
+          
+          // Organic film grain
+          float grain = (random(vUv * 1000.0 + mod(uTime, 10.0)) - 0.5) * 0.06;
+          
+          // Subtle anamorphic horizontal streak
+          float streak = smoothstep(0.5, 0.0, abs(center.y)) * smoothstep(0.6, 0.3, abs(center.x)) * 0.015;
+          
           vec4 overlayColor = vec4(0.0, 0.0, 0.0, 1.0 - vignette);
+          
+          // Teal-orange color grading at edges
+          overlayColor.r += dist * 0.04;
+          overlayColor.b += dist * 0.02;
+          
           overlayColor.rgb += grain;
-          overlayColor.a += abs(grain) * 0.5;
+          overlayColor.a += abs(grain) * 0.4;
+          overlayColor.a = max(overlayColor.a - streak, 0.0);
+          
           gl_FragColor = overlayColor;
         }
       `,
@@ -659,63 +908,47 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.postMaterial));
   }
 
-  private animate() {
-    this.animationFrameId = requestAnimationFrame(() => this.animate());
-
-    const time = this.clock.getElapsedTime();
-
-    // Lerp contextual animation values
-    this.currentStarSpeed += (this.targetStarSpeed - this.currentStarSpeed) * 0.02;
-    this.currentMoonSpeedMultiplier += (this.targetMoonSpeedMultiplier - this.currentMoonSpeedMultiplier) * 0.02;
-    this.currentAtmospherePulse += (this.targetAtmospherePulse - this.currentAtmospherePulse) * 0.05;
-    this.currentJupiterSpinSpeed += (this.targetJupiterSpinSpeed - this.currentJupiterSpinSpeed) * 0.02;
-
-    // Atmosphere pulsing (Gas giant slide)
+  private updateAtmosphere(time: number) {
     if (this.atmosphere) {
-      const pulseScale = 1.0 + Math.sin(time * 3) * 0.03 * this.currentAtmospherePulse;
+      const pulseScale = 1 + Math.sin(time * 3) * 0.03 * this.currentAtmospherePulse;
       this.atmosphere.scale.set(pulseScale, pulseScale, pulseScale);
-      
+
       const mat = this.atmosphere.material as THREE.ShaderMaterial;
       if (mat.uniforms) {
         mat.uniforms['uTime'].value = time;
         mat.uniforms['uPulse'].value = this.currentAtmospherePulse;
       }
     }
+  }
 
-    // Smooth camera transition with mouse parallax
+  private updateCamera() {
     if (this.camera) {
       this.targetCameraX = this.baseCameraX + this.mouseX * 4;
       this.targetCameraY = this.baseCameraY + this.mouseY * 4;
       this.targetCameraZ = this.baseCameraZ;
 
-      // Smoother dampening for cinematic parallax
-      this.camera.position.x += (this.targetCameraX - this.camera.position.x) * 0.02;
-      this.camera.position.y += (this.targetCameraY - this.camera.position.y) * 0.02;
-      this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * 0.02;
-      
-      this.currentLookAt.lerp(this.targetLookAt, 0.02);
+      this.camera.position.x += (this.targetCameraX - this.camera.position.x) * 0.035;
+      this.camera.position.y += (this.targetCameraY - this.camera.position.y) * 0.035;
+      this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * 0.035;
+
+      this.currentLookAt.lerp(this.targetLookAt, 0.035);
       this.camera.lookAt(this.currentLookAt);
     }
+  }
 
-    // Rotate Jupiter slowly to show different sides, or target the Red Spot
+  private updateJupiterRotation() {
     if (this.jupiterGroup) {
-      if (this.targetJupiterRotationY !== null) {
-        // Lerp to the target rotation (shortest path)
+      if (this.targetJupiterRotationY === null) {
+        this.jupiterGroup.rotation.y += this.currentJupiterSpinSpeed;
+      } else {
         const diff = this.targetJupiterRotationY - this.jupiterGroup.rotation.y;
         const normalizedDiff = Math.atan2(Math.sin(diff), Math.cos(diff));
         this.jupiterGroup.rotation.y += normalizedDiff * 0.02;
-      } else {
-        // Normal slow rotation or dynamic fast spin
-        this.jupiterGroup.rotation.y += this.currentJupiterSpinSpeed;
       }
     }
+  }
 
-    // Rotate Earth if visible
-    if (this.earthMesh && this.earthMesh.visible) {
-      this.earthMesh.rotation.y += 0.005;
-    }
-
-    // Animate Galilean Moons
+  private updateMoons() {
     this.galileanMoons.forEach(moon => {
       moon.angle += moon.speed * this.currentMoonSpeedMultiplier;
       moon.mesh.position.x = Math.cos(moon.angle) * moon.distance;
@@ -723,7 +956,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       moon.mesh.rotation.y += 0.01 * this.currentMoonSpeedMultiplier;
     });
 
-    // Animate 91 Small Moons
     if (this.smallMoons) {
       const dummy = new THREE.Object3D();
       for (let i = 0; i < 91; i++) {
@@ -739,33 +971,63 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
       this.smallMoons.instanceMatrix.needsUpdate = true;
     }
+  }
 
-    // Slowly move stars (or fast for warp speed)
+  private updateStarsAndDust(time: number) {
     if (this.stars) {
       this.stars.rotation.y += this.currentStarSpeed;
       this.stars.rotation.x += this.currentStarSpeed * 0.5;
+      const starMat = this.stars.material as THREE.ShaderMaterial;
+      if (starMat.uniforms) starMat.uniforms['uTime'].value = time;
     }
 
-    // Rotate dust slowly, and move along Z for warp effect
     if (this.dustSystem) {
       this.dustSystem.rotation.y += this.currentStarSpeed * 3;
       this.dustSystem.rotation.x += this.currentStarSpeed;
-      
+
       if (this.currentStarSpeed > 0.001) {
         const positions = this.dustSystem.geometry.attributes['position'] as THREE.BufferAttribute;
         for (let i = 0; i < positions.count; i++) {
           let z = positions.getZ(i);
-          z += this.currentStarSpeed * 300; // Move towards camera much faster
-          if (z > 50) z -= 100; // Wrap around
+          z += this.currentStarSpeed * 300;
+          if (z > 50) z -= 100;
           positions.setZ(i, z);
         }
         positions.needsUpdate = true;
       }
     }
 
+    this.nebulae.forEach(mesh => {
+      const mat = mesh.material as THREE.ShaderMaterial;
+      if (mat.uniforms) mat.uniforms['uTime'].value = time;
+    });
+
     if (this.postMaterial) {
       this.postMaterial.uniforms['uTime'].value = time;
     }
+  }
+
+  private animate() {
+    this.animationFrameId = requestAnimationFrame(() => this.animate());
+
+    const time = (Date.now() - this.startTime) * 0.001;
+
+    // Lerp contextual animation values
+    this.currentStarSpeed += (this.targetStarSpeed - this.currentStarSpeed) * 0.02;
+    this.currentMoonSpeedMultiplier += (this.targetMoonSpeedMultiplier - this.currentMoonSpeedMultiplier) * 0.02;
+    this.currentAtmospherePulse += (this.targetAtmospherePulse - this.currentAtmospherePulse) * 0.05;
+    this.currentJupiterSpinSpeed += (this.targetJupiterSpinSpeed - this.currentJupiterSpinSpeed) * 0.02;
+
+    this.updateAtmosphere(time);
+    this.updateCamera();
+    this.updateJupiterRotation();
+
+    if (this.earthMesh?.visible) {
+      this.earthMesh.rotation.y += 0.005;
+    }
+
+    this.updateMoons();
+    this.updateStarsAndDust(time);
 
     this.renderer.autoClear = false;
     this.renderer.clear();

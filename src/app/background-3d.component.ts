@@ -59,6 +59,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private targetJupiterSpinSpeed = 0.0005;
   private currentJupiterSpinSpeed = 0.0005;
 
+  // Cinematic camera drift — slow creeping motion within each slide
+  private cameraDriftX = 0;
+  private cameraDriftY = 0;
+  private cameraDriftZ = 0;
+  private cameraDriftSpeedX = 0;
+  private cameraDriftSpeedY = 0;
+  private cameraDriftSpeedZ = 0;
+  private cameraLerpSpeed = 0.035;
+  private slideStartTime = 0;
+
   private earthMesh!: THREE.Mesh;
 
   // Post-processing
@@ -172,7 +182,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private updateCameraForSlide(id: string) {
-    this.targetJupiterRotationY = null; // Default to normal rotation
+    this.targetJupiterRotationY = null;
     this.targetStarSpeed = 0.0001;
     this.targetMoonSpeedMultiplier = 1;
     this.targetAtmospherePulse = 0;
@@ -180,72 +190,148 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.targetShipSpeedMultiplier = 1;
     this.earthOrbitActive = false;
     this.distanceBeamActive = false;
-    if (this.earthMesh) this.earthMesh.visible = false; // Hide earth by default
+    this.cameraLerpSpeed = 0.035;
+    this.cameraDriftSpeedX = 0;
+    this.cameraDriftSpeedY = 0;
+    this.cameraDriftSpeedZ = 0;
+    this.cameraDriftX = 0;
+    this.cameraDriftY = 0;
+    this.cameraDriftZ = 0;
+    this.slideStartTime = (Date.now() - this.startTime) * 0.001;
+    if (this.earthMesh) this.earthMesh.visible = false;
     if (this.distanceBeam) this.distanceBeam.visible = false;
 
     switch(id) {
       case 'title':
-      case 'afsluiting':
-        // Majestic wide shot
-        this.baseCameraX = 0; this.baseCameraY = 0; this.baseCameraZ = 45;
+        // ACT 1: Approach from deep space — camera far away, slowly drifting in
+        this.baseCameraX = 5; this.baseCameraY = 8; this.baseCameraZ = 70;
         this.targetLookAt.set(0, 0, 0);
-        this.targetShipSpeedMultiplier = 0.5;
+        this.targetShipSpeedMultiplier = 0.3;
+        this.targetJupiterSpinSpeed = 0.0003;
+        this.cameraLerpSpeed = 0.015; // Very slow, contemplative
+        // Slow drift inward — approaching Jupiter
+        this.cameraDriftSpeedZ = -0.008;
+        this.cameraDriftSpeedY = -0.002;
         break;
+
       case 'inhoud':
-        // Slightly angled overview
-        this.baseCameraX = 25; this.baseCameraY = 10; this.baseCameraZ = 25;
-        this.targetLookAt.set(0, 0, 0);
+        // ACT 1: Arrived — sweeping orbit reveals the solar system context
+        this.baseCameraX = 30; this.baseCameraY = 12; this.baseCameraZ = 30;
+        this.targetLookAt.set(0, 2, 0);
+        this.targetShipSpeedMultiplier = 1;
+        this.cameraLerpSpeed = 0.025;
+        // Slow orbit drift — camera glides around Jupiter
+        this.cameraDriftSpeedX = -0.012;
+        this.cameraDriftSpeedZ = -0.006;
         break;
+
       case 'h1':
-        // Composition / Gas giant - Close up on the bands, pulsing atmosphere
-        this.baseCameraX = -16; this.baseCameraY = 0; this.baseCameraZ = 16;
-        this.targetLookAt.set(-4, 0, 0);
-        this.targetAtmospherePulse = 1; // Enable pulsing
+        // ACT 2: Dive into the atmosphere — close-up on Jupiter's bands
+        this.baseCameraX = -14; this.baseCameraY = 2; this.baseCameraZ = 15;
+        this.targetLookAt.set(-3, 0, 0);
+        this.targetAtmospherePulse = 1;
+        this.targetJupiterSpinSpeed = 0.001; // Slightly faster — showing the gas swirling
+        this.cameraLerpSpeed = 0.03;
+        // Slow creep closer into the clouds
+        this.cameraDriftSpeedZ = -0.004;
+        this.cameraDriftSpeedX = 0.003;
         break;
+
       case 'h2':
-        // The Great Red Spot - Zoom in dramatically close to the storm
-        this.baseCameraX = 8; this.baseCameraY = -5; this.baseCameraZ = 6;
+        // ACT 2: Dramatic swoop to the Great Red Spot
+        this.baseCameraX = 8; this.baseCameraY = -4; this.baseCameraZ = 6;
         this.targetLookAt.set(10, -3, -10);
         this.targetJupiterRotationY = 4.7;
+        this.cameraLerpSpeed = 0.02; // Slow dramatic reveal
+        // Tiny drift — hovering over the storm
+        this.cameraDriftSpeedY = 0.002;
+        this.cameraDriftSpeedX = -0.001;
         break;
+
       case 'h3':
-        // Distance - Show Earth and Jupiter with distance beam
-        this.baseCameraX = -5; this.baseCameraY = 18; this.baseCameraZ = 50;
+        // ACT 3: Pull way back — reveal the vast distance to Earth
+        this.baseCameraX = -8; this.baseCameraY = 20; this.baseCameraZ = 55;
         this.targetLookAt.set(0, 0, -8);
         this.targetStarSpeed = 0.002;
-        this.targetShipSpeedMultiplier = 2;
+        this.targetShipSpeedMultiplier = 2.5;
+        this.cameraLerpSpeed = 0.02; // Slow pullback for dramatic scale
         if (this.earthMesh) this.earthMesh.visible = true;
         this.earthOrbitActive = true;
         this.distanceBeamActive = true;
+        // Slow pan across the gap
+        this.cameraDriftSpeedX = 0.005;
+        this.cameraDriftSpeedY = -0.002;
         break;
+
       case 'h4':
-        // Age - Slow flyby
-        this.baseCameraX = -20; this.baseCameraY = -10; this.baseCameraZ = 20;
-        this.targetLookAt.set(0, 0, 0);
+        // ACT 3: Ancient flyby — majestic side pass like a spacecraft
+        this.baseCameraX = -22; this.baseCameraY = -8; this.baseCameraZ = 22;
+        this.targetLookAt.set(2, 0, 0);
+        this.targetJupiterSpinSpeed = 0.0003; // Slow, ancient, timeless
+        this.targetStarSpeed = 0.00005; // Stars barely move — frozen in time
+        this.targetShipSpeedMultiplier = 0.3;
+        this.cameraLerpSpeed = 0.018; // Very slow, contemplative
+        // Long slow flyby drift
+        this.cameraDriftSpeedX = 0.015;
+        this.cameraDriftSpeedY = 0.004;
+        this.cameraDriftSpeedZ = -0.003;
         break;
+
       case 'h5':
-        // Size and Gravity - Look up at Jupiter from below, fast moons, show Earth
-        this.baseCameraX = 0; this.baseCameraY = -18; this.baseCameraZ = 22;
-        this.targetLookAt.set(0, 6, 0);
-        this.targetMoonSpeedMultiplier = 35; // Super fast moons to show gravity
+        // ACT 4: Power — look UP at Jupiter's massive underside
+        this.baseCameraX = 3; this.baseCameraY = -20; this.baseCameraZ = 20;
+        this.targetLookAt.set(0, 8, 0);
+        this.targetMoonSpeedMultiplier = 30;
+        this.targetJupiterSpinSpeed = 0.003; // Faster spin — showing rapid rotation
+        this.cameraLerpSpeed = 0.025;
         if (this.earthMesh) {
           this.earthMesh.visible = true;
           this.earthMesh.position.set(-8, 2, -5);
         }
+        // Slow rise upward — feeling the gravity
+        this.cameraDriftSpeedY = 0.006;
+        this.cameraDriftSpeedX = -0.002;
         break;
+
       case 'extra':
-        // Moons - High angle looking down at the orbital plane
-        this.baseCameraX = 0; this.baseCameraY = 35; this.baseCameraZ = 25;
-        this.targetLookAt.set(0, 0, 0);
+        // ACT 4: Rise above — reveal the magnificent moon system
+        this.baseCameraX = 5; this.baseCameraY = 38; this.baseCameraZ = 22;
+        this.targetLookAt.set(0, 0, -2);
+        this.targetMoonSpeedMultiplier = 3; // Visible but graceful orbital motion
+        this.targetJupiterSpinSpeed = 0.001;
+        this.cameraLerpSpeed = 0.02;
+        // Slow orbit above the moon plane
+        this.cameraDriftSpeedX = -0.008;
+        this.cameraDriftSpeedZ = 0.005;
         break;
+
       case 'quiz':
-        // Dramatic close-up and fast spin for the quiz
-        this.baseCameraX = 0; this.baseCameraY = 0; this.baseCameraZ = 18;
+        // FINALE: Dynamic energy — Jupiter front and center, spinning with power
+        this.baseCameraX = 0; this.baseCameraY = 2; this.baseCameraZ = 20;
         this.targetLookAt.set(0, 0, 0);
-        this.targetJupiterSpinSpeed = 0.015; // Dynamic fast spin
-        this.targetStarSpeed = 0.005; // Slightly faster stars
-        this.targetShipSpeedMultiplier = 2;
+        this.targetJupiterSpinSpeed = 0.012;
+        this.targetStarSpeed = 0.004;
+        this.targetShipSpeedMultiplier = 3;
+        this.targetMoonSpeedMultiplier = 4;
+        this.cameraLerpSpeed = 0.04; // Snappy, energetic
+        // Slow orbit — camera circles during quiz
+        this.cameraDriftSpeedX = -0.01;
+        this.cameraDriftSpeedZ = -0.008;
         break;
+
+      case 'afsluiting':
+        // EPILOGUE: Pull back to the wide shot we started from — full circle
+        this.baseCameraX = 0; this.baseCameraY = 5; this.baseCameraZ = 50;
+        this.targetLookAt.set(0, 0, 0);
+        this.targetShipSpeedMultiplier = 0.5;
+        this.targetJupiterSpinSpeed = 0.0003;
+        this.targetStarSpeed = 0.00005;
+        this.cameraLerpSpeed = 0.015; // Slow, peaceful departure
+        // Gentle drift away — leaving Jupiter behind
+        this.cameraDriftSpeedZ = 0.005;
+        this.cameraDriftSpeedY = 0.002;
+        break;
+
       default:
     }
   }
@@ -1273,16 +1359,21 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private updateCamera() {
     if (this.camera) {
       if (!this.userInteracting) {
-        // Slide-driven camera with mouse parallax
-        this.targetCameraX = this.baseCameraX + this.mouseX * 4;
-        this.targetCameraY = this.baseCameraY + this.mouseY * 4;
-        this.targetCameraZ = this.baseCameraZ;
+        // Accumulate cinematic drift (slow continuous camera creep within each slide)
+        this.cameraDriftX += this.cameraDriftSpeedX;
+        this.cameraDriftY += this.cameraDriftSpeedY;
+        this.cameraDriftZ += this.cameraDriftSpeedZ;
 
-        this.camera.position.x += (this.targetCameraX - this.camera.position.x) * 0.035;
-        this.camera.position.y += (this.targetCameraY - this.camera.position.y) * 0.035;
-        this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * 0.035;
+        // Slide-driven camera with mouse parallax + cinematic drift
+        this.targetCameraX = this.baseCameraX + this.mouseX * 3 + this.cameraDriftX;
+        this.targetCameraY = this.baseCameraY + this.mouseY * 3 + this.cameraDriftY;
+        this.targetCameraZ = this.baseCameraZ + this.cameraDriftZ;
 
-        this.currentLookAt.lerp(this.targetLookAt, 0.035);
+        this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
+        this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
+        this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.cameraLerpSpeed;
+
+        this.currentLookAt.lerp(this.targetLookAt, this.cameraLerpSpeed);
         this.controls.target.copy(this.currentLookAt);
       }
       this.controls.update();
@@ -3096,12 +3187,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     const time = (Date.now() - this.startTime) * 0.001;
 
-    // Lerp contextual animation values
-    this.currentStarSpeed += (this.targetStarSpeed - this.currentStarSpeed) * 0.02;
-    this.currentMoonSpeedMultiplier += (this.targetMoonSpeedMultiplier - this.currentMoonSpeedMultiplier) * 0.02;
+    // Lerp contextual animation values (speed matches camera for cohesive feel)
+    const contextLerp = Math.min(this.cameraLerpSpeed * 0.8, 0.04);
+    this.currentStarSpeed += (this.targetStarSpeed - this.currentStarSpeed) * contextLerp;
+    this.currentMoonSpeedMultiplier += (this.targetMoonSpeedMultiplier - this.currentMoonSpeedMultiplier) * contextLerp;
     this.currentAtmospherePulse += (this.targetAtmospherePulse - this.currentAtmospherePulse) * 0.05;
-    this.currentJupiterSpinSpeed += (this.targetJupiterSpinSpeed - this.currentJupiterSpinSpeed) * 0.02;
-    this.currentShipSpeedMultiplier += (this.targetShipSpeedMultiplier - this.currentShipSpeedMultiplier) * 0.02;
+    this.currentJupiterSpinSpeed += (this.targetJupiterSpinSpeed - this.currentJupiterSpinSpeed) * contextLerp;
+    this.currentShipSpeedMultiplier += (this.targetShipSpeedMultiplier - this.currentShipSpeedMultiplier) * contextLerp;
 
     this.updateAtmosphere(time);
     this.updateCamera();

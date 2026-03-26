@@ -846,25 +846,39 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const earthAtmo = new THREE.Mesh(new THREE.SphereGeometry(1.08, 32, 32), earthAtmoMat);
     this.earthMesh.add(earthAtmo);
 
-    // Jupiter's Faint Ring System
-    const ringGeometry = new THREE.RingGeometry(12, 18, 128);
+    // Jupiter's Faint Ring System — discovered by Voyager 1 (1979)
+    // Halo ring: 1.29-1.71 Rj, Main ring: 1.71-1.81 Rj, Gossamer rings: to 3.16 Rj
+    // In scene units (Rj=10): halo 12.9-17.1, main 17.1-18.1, gossamer to 31.6
+    // Jupiter's rings are extremely faint — barely visible even to spacecraft
+    const ringGeometry = new THREE.RingGeometry(12.9, 18.1, 128);
     const pos = ringGeometry.attributes['position'];
     const v3 = new THREE.Vector3();
     for (let i = 0; i < pos.count; i++){
         v3.fromBufferAttribute(pos as THREE.BufferAttribute, i);
-        (ringGeometry.attributes['uv'] as THREE.BufferAttribute).setXY(i, v3.length() < 15 ? 0 : 1, 1);
+        const t = (v3.length() - 12.9) / (18.1 - 12.9);
+        (ringGeometry.attributes['uv'] as THREE.BufferAttribute).setXY(i, t, 0.5);
     }
     const ringMaterial = new THREE.MeshBasicMaterial({
       color: 0x887766,
       transparent: true,
-      opacity: 0.15,
+      opacity: 0.06, // Very faint — Jupiter's rings are nearly invisible
       side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
     const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = Math.PI / 2 + 0.05; // Align with equator
+    ring.rotation.x = Math.PI / 2 + 0.054; // Align with equator (3.13° tilt)
     this.jupiterGroup.add(ring);
+
+    // Gossamer rings (extremely faint, extends to 3.16 Rj)
+    const gossamerGeo = new THREE.RingGeometry(18.1, 31.6, 64);
+    const gossamerMat = new THREE.MeshBasicMaterial({
+      color: 0x887766, transparent: true, opacity: 0.015,
+      side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    const gossamerRing = new THREE.Mesh(gossamerGeo, gossamerMat);
+    gossamerRing.rotation.x = Math.PI / 2 + 0.054;
+    this.jupiterGroup.add(gossamerRing);
 
     // Atmosphere Glow (Custom Shader)
     const vertexShader = `
@@ -978,12 +992,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // The 4 Galilean Moons — Kepler's 3rd law: T² ∝ a³, so ω ∝ a^(-3/2)
     // Real orbital periods: Io=1.769d, Europa=3.551d, Ganymede=7.155d, Callisto=16.689d
     // Speed ratios = inverse period ratios (ω = 2π/T)
-    // Sizes proportional to real radii: Io=1821km, Europa=1561km, Ganymede=2634km, Callisto=2410km
+    // Real radii: Io=1822km, Europa=1561km, Ganymede=2634km, Callisto=2410km
+    // Scene radii: radius_km / Jupiter_radius_km(71492) × 10
+    // Orbital distances use power-law compression (d^0.6) of real Rj values
+    // to keep scene manageable while preserving relative ordering
+    // Real Rj from center: Io=5.90, Europa=9.38, Ganymede=14.97, Callisto=26.33
     const galileanConfigs = [
-      { name: 'Io', color: 0xddaa33, size: 0.3, distance: 14, speed: 0.008, texture: '2k_io.jpg' },
-      { name: 'Europa', color: 0xeeeeee, size: 0.26, distance: 18, speed: 0.00398, texture: '2k_europa.jpg' },
-      { name: 'Ganymede', color: 0xaaaaaa, size: 0.43, distance: 24, speed: 0.00198, texture: '2k_ganymede.jpg' },
-      { name: 'Callisto', color: 0x666666, size: 0.4, distance: 32, speed: 0.000848, texture: '2k_callisto.jpg' }
+      { name: 'Io', color: 0xddaa33, size: 0.255, distance: 14, speed: 0.008, texture: '2k_io.jpg' },
+      { name: 'Europa', color: 0xeeeeee, size: 0.218, distance: 19, speed: 0.00399, texture: '2k_europa.jpg' },
+      { name: 'Ganymede', color: 0xaaaaaa, size: 0.368, distance: 27, speed: 0.00198, texture: '2k_ganymede.jpg' },
+      { name: 'Callisto', color: 0x666666, size: 0.337, distance: 39, speed: 0.000848, texture: '2k_callisto.jpg' }
     ];
 
     galileanConfigs.forEach(config => {
@@ -1011,10 +1029,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     
     const dummy = new THREE.Object3D();
     for (let i = 0; i < 91; i++) {
-      const distance = 12 + Math.random() * 40;
+      // Inner moons (Metis, Adrastea, Amalthea, Thebe) orbit at 1.8-3.1 Rj = 18-31 scene units
+      // Irregular moons (Himalia group, retrograde groups) orbit much farther out
+      // We distribute: ~8 inner (12-17), rest spread from Callisto outward (40-90)
+      const isInner = i < 8;
+      const distance = isInner ? 12 + Math.random() * 5 : 40 + Math.random() * 50;
       const speed = (Math.random() * 0.005 + 0.001) * (Math.random() > 0.5 ? 1 : -1);
       const angle = Math.random() * Math.PI * 2;
-      const inclination = (Math.random() - 0.5) * Math.PI * 0.5; // Up to 45 deg inclination
+      // Inner moons have low inclination; irregular moons can be highly inclined or retrograde
+      const inclination = isInner
+        ? (Math.random() - 0.5) * 0.1  // near-equatorial
+        : (Math.random() - 0.5) * Math.PI * 0.8; // Up to ~72° (some retrograde)
       
       this.smallMoonsData.push({ distance, speed, angle, inclination });
       
@@ -1299,16 +1324,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createSpaceships() {
     const jupiterPos = this.jupiterGroup.position;
+    // Orbits placed between moon orbits: Io=14, Europa=19, Ganymede=27, Callisto=39
     const configs = [
-      { type: 'fighter', radius: 14, speed: 0.006, y: 2, incl: 0.15, scale: 0.6 },
-      { type: 'fighter', radius: 18, speed: -0.004, y: -1, incl: -0.2, scale: 0.5 },
-      { type: 'fighter', radius: 16, speed: 0.005, y: 3.5, incl: 0.3, scale: 0.55 },
-      { type: 'tie', radius: 20, speed: -0.005, y: -2, incl: 0.25, scale: 0.6 },
-      { type: 'tie', radius: 23, speed: 0.003, y: 1.5, incl: -0.15, scale: 0.5 },
-      { type: 'shuttle', radius: 28, speed: 0.002, y: 4, incl: 0.1, scale: 0.7 },
-      { type: 'shuttle', radius: 33, speed: -0.0015, y: -3, incl: -0.18, scale: 0.6 },
-      { type: 'fighter', radius: 40, speed: 0.003, y: 7, incl: 0.4, scale: 0.4 },
-      { type: 'tie', radius: 45, speed: -0.002, y: -5, incl: -0.35, scale: 0.4 },
+      { type: 'fighter', radius: 16, speed: 0.006, y: 2, incl: 0.15, scale: 0.6 },
+      { type: 'fighter', radius: 22, speed: -0.004, y: -1, incl: -0.2, scale: 0.5 },
+      { type: 'fighter', radius: 17, speed: 0.005, y: 3.5, incl: 0.3, scale: 0.55 },
+      { type: 'tie', radius: 24, speed: -0.005, y: -2, incl: 0.25, scale: 0.6 },
+      { type: 'tie', radius: 32, speed: 0.003, y: 1.5, incl: -0.15, scale: 0.5 },
+      { type: 'shuttle', radius: 35, speed: 0.002, y: 4, incl: 0.1, scale: 0.7 },
+      { type: 'shuttle', radius: 42, speed: -0.0015, y: -3, incl: -0.18, scale: 0.6 },
+      { type: 'fighter', radius: 50, speed: 0.003, y: 7, incl: 0.4, scale: 0.4 },
+      { type: 'tie', radius: 55, speed: -0.002, y: -5, incl: -0.35, scale: 0.4 },
     ];
 
     configs.forEach(cfg => {
@@ -1796,11 +1822,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createSolarSystemPlanets() {
     // Saturn — visible in far background
-    // Real: Saturn radius ≈ 9.45 Earth radii. Jupiter radius here = 10, Earth = 0.89
-    // Saturn relative to Jupiter: 9.45/11.2 ≈ 0.84 of Jupiter → ~8.4 scene units
-    // But for background we scale down for distance: use ~4 units for visual clarity
+    // Saturn equatorial radius: 60,268 km → 60268/71492 × 10 = 8.43 scene units
+    // Using correct relative size to Jupiter
     this.saturnGroup = new THREE.Group();
-    const saturnGeo = new THREE.SphereGeometry(4, 64, 64);
+    const saturnGeo = new THREE.SphereGeometry(8.4, 64, 64);
     const saturnMat = new THREE.MeshStandardMaterial({
       color: 0xd4b06a, roughness: 0.5, metalness: 0.1
     });
@@ -1816,8 +1841,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }, undefined, () => resolve());
     }));
 
-    // Saturn's iconic rings
-    const innerR = 5.5, outerR = 9;
+    // Saturn's iconic rings (C ring inner to F ring outer)
+    // Real: C ring at 1.24 Rs, A ring outer at 2.27 Rs → 10.4 to 19.1 scene units
+    const innerR = 10.4, outerR = 19.1;
     const satRingGeo = new THREE.RingGeometry(innerR, outerR, 128, 4);
     // Create ring texture procedurally
     const ringCanvas = document.createElement('canvas');
@@ -1873,9 +1899,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.saturnGroup);
 
     // Mars — small red dot in the inner solar system direction
-    // Real: Mars radius ≈ 0.53 Earth radii → 0.89 * 0.53 ≈ 0.47
-    // Placed closer to show inner planet
-    const marsGeo = new THREE.SphereGeometry(0.35, 32, 32);
+    // Mars equatorial radius: 3,396 km → 3396/71492 × 10 = 0.475 scene units
+    const marsGeo = new THREE.SphereGeometry(0.475, 32, 32);
     const marsMat = new THREE.MeshStandardMaterial({
       color: 0xc1440e, roughness: 0.8, metalness: 0.1
     });
@@ -1892,12 +1917,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }, undefined, () => resolve());
     }));
 
-    // Mars atmosphere (thin, subtle)
+    // Mars atmosphere (thin, subtle — real Mars atmosphere is only 1% of Earth's)
     const marsAtmoMat = new THREE.MeshBasicMaterial({
-      color: 0xff6633, transparent: true, opacity: 0.08,
+      color: 0xff6633, transparent: true, opacity: 0.05,
       side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
     });
-    const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.42, 16, 16), marsAtmoMat);
+    const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.52, 16, 16), marsAtmoMat);
     this.marsMesh.add(marsAtmo);
   }
 
@@ -2186,7 +2211,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createOrbitalRings() {
     // Faint dotted orbital path rings for each Galilean moon
-    const distances = [14, 18, 24, 32];
+    // Distances match compressed orbital distances from galileanConfigs
+    const distances = [14, 19, 27, 39];
     const colors = [0xddaa33, 0xeeeeee, 0xaaaaaa, 0x666666];
     distances.forEach((dist, idx) => {
       const segments = 128;
@@ -2282,8 +2308,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createSun() {
     // The Sun — bright glowing sphere in the direction of sunlight (-50, 10, 30)
-    // Real sun: enormous, but at this scale we show it as a bright point with corona
-    const sunGeo = new THREE.SphereGeometry(3, 32, 32);
+    // Real: Sun radius 696,000 km = 97.4 Rj — would fill entire scene
+    // Using artistic size (6 units) large enough to be prominent but not overwhelming
+    const sunGeo = new THREE.SphereGeometry(6, 32, 32);
     const sunMat = new THREE.MeshBasicMaterial({
       color: 0xffffee,
       fog: false
@@ -2301,7 +2328,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
 
     // Inner corona (bright yellow-white)
-    const coronaInnerGeo = new THREE.SphereGeometry(5, 32, 32);
+    const coronaInnerGeo = new THREE.SphereGeometry(10, 32, 32);
     const coronaInnerMat = new THREE.ShaderMaterial({
       uniforms: { uTime: { value: 0 } },
       vertexShader: `
@@ -2331,7 +2358,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunMesh.add(coronaInner);
 
     // Outer corona (faint extended halo)
-    const coronaOuterGeo = new THREE.SphereGeometry(12, 32, 32);
+    const coronaOuterGeo = new THREE.SphereGeometry(20, 32, 32);
     const coronaOuterMat = new THREE.MeshBasicMaterial({
       color: 0xffddaa, transparent: true, opacity: 0.06,
       side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
@@ -2541,7 +2568,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createEuropaPlumes() {
     // Europa's water plumes — geysers of water vapor shooting from the icy surface
     // Discovered by Hubble Space Telescope, up to 200 km high
-    // Europa is moon index 1, size 0.26 → plumes extend ~2x moon radius
+    // Europa is moon index 1, size 0.218 → plumes extend ~2x moon radius
     const plumeCount = 60;
     const plumeGeo = new THREE.BufferGeometry();
     const plumePos = new Float32Array(plumeCount * 3);
@@ -2551,7 +2578,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       // Cluster around the south pole region (where plumes were observed)
       const spread = 0.15;
       plumePos[i * 3] = (Math.random() - 0.5) * spread;
-      plumePos[i * 3 + 1] = -(0.26 + Math.random() * 0.6); // below moon, shooting down
+      plumePos[i * 3 + 1] = -(0.218 + Math.random() * 0.5); // below moon, shooting down
       plumePos[i * 3 + 2] = (Math.random() - 0.5) * spread;
       plumeSpeeds[i] = 0.5 + Math.random() * 1.5;
     }
@@ -2674,7 +2701,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createRadiationBelts() {
     // Jupiter's radiation belts are the most intense in the solar system
     // Charged particles trapped by the magnetic field form toroidal belts
-    const beltGeo = new THREE.TorusGeometry(16, 5, 32, 96);
+    // Inner belt peaks at ~1.5-3 Rj = 15-30 scene units from center
+    const beltGeo = new THREE.TorusGeometry(20, 6, 32, 96);
     const beltMat = new THREE.ShaderMaterial({
       uniforms: { uTime: { value: 0 } },
       vertexShader: `

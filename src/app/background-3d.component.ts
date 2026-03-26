@@ -65,6 +65,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private postMaterial!: THREE.ShaderMaterial;
   private readonly nebulae: THREE.Mesh[] = [];
 
+  // Spaceships orbiting Jupiter
+  private readonly spaceshipData: {
+    group: THREE.Group;
+    orbitRadius: number;
+    orbitSpeed: number;
+    orbitAngle: number;
+    orbitY: number;
+    orbitInclination: number;
+  }[] = [];
+  private targetShipSpeedMultiplier = 1;
+  private currentShipSpeedMultiplier = 1;
+
   private readonly ngZone = inject(NgZone);
   private readonly platformId = inject(PLATFORM_ID);
   
@@ -84,6 +96,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.targetMoonSpeedMultiplier = 1;
     this.targetAtmospherePulse = 0;
     this.targetJupiterSpinSpeed = 0.0005;
+    this.targetShipSpeedMultiplier = 1;
     if (this.earthMesh) this.earthMesh.visible = false; // Hide earth by default
 
     switch(id) {
@@ -92,6 +105,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         // Majestic wide shot
         this.baseCameraX = 0; this.baseCameraY = 0; this.baseCameraZ = 45;
         this.targetLookAt.set(0, 0, 0);
+        this.targetShipSpeedMultiplier = 0.5;
         break;
       case 'inhoud':
         // Slightly angled overview
@@ -115,6 +129,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.baseCameraX = 30; this.baseCameraY = 15; this.baseCameraZ = 5;
         this.targetLookAt.set(0, 0, 0);
         this.targetStarSpeed = 0.25; // Much faster stars for warp speed
+        this.targetShipSpeedMultiplier = 5;
         break;
       case 'h4':
         // Age - Slow flyby
@@ -139,6 +154,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.targetLookAt.set(0, 0, 0);
         this.targetJupiterSpinSpeed = 0.015; // Dynamic fast spin
         this.targetStarSpeed = 0.005; // Slightly faster stars
+        this.targetShipSpeedMultiplier = 2;
         break;
       default:
     }
@@ -370,6 +386,87 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     return [r, g, b];
+  }
+
+  /** Generates a simple procedural Earth texture */
+  private generateEarthTexture(): THREE.CanvasTexture {
+    const W = 512, H = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = W; canvas.height = H;
+    const ctx = canvas.getContext('2d')!;
+    const imageData = ctx.createImageData(W, H);
+    const data = imageData.data;
+
+    // Simple Perlin-like noise for continent shapes
+    const perm = new Uint8Array(512);
+    const p0 = new Uint8Array(256);
+    for (let i = 0; i < 256; i++) p0[i] = i;
+    for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p0[i], p0[j]] = [p0[j], p0[i]]; }
+    for (let i = 0; i < 512; i++) perm[i] = p0[i & 255];
+
+    const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
+    const lerp = (a: number, b: number, t: number) => a + t * (b - a);
+    const grad = (hash: number, x: number, y: number) => {
+      switch (hash & 3) { case 0: return x + y; case 1: return -x + y; case 2: return x - y; default: return -x - y; }
+    };
+    const perlin2d = (x: number, y: number) => {
+      const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
+      const xf = x - Math.floor(x), yf = y - Math.floor(y);
+      const u = fade(xf), v = fade(yf);
+      const aa = perm[perm[xi] + yi], ab = perm[perm[xi] + yi + 1];
+      const ba = perm[perm[xi + 1] + yi], bb = perm[perm[xi + 1] + yi + 1];
+      return lerp(lerp(grad(aa, xf, yf), grad(ba, xf - 1, yf), u),
+                  lerp(grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1), u), v);
+    };
+    const fbm = (x: number, y: number, oct: number) => {
+      let val = 0, amp = 1, freq = 1, max = 0;
+      for (let i = 0; i < oct; i++) { val += perlin2d(x * freq, y * freq) * amp; max += amp; amp *= 0.5; freq *= 2; }
+      return val / max;
+    };
+
+    for (let py = 0; py < H; py++) {
+      const v = py / H;
+      const lat = (v - 0.5) * Math.PI;
+      for (let px = 0; px < W; px++) {
+        const u = px / W;
+        const idx = (py * W + px) * 4;
+
+        const nx = u * 6, ny = v * 6;
+        const n = fbm(nx, ny, 6);
+
+        // Polar ice caps
+        const polarFade = Math.abs(lat) / (Math.PI / 2);
+        const ice = polarFade > 0.75 ? (polarFade - 0.75) * 4 : 0;
+
+        let r: number, g: number, b: number;
+        if (ice > 0.5) {
+          r = 230 + Math.random() * 20; g = 235 + Math.random() * 15; b = 240;
+        } else if (n > 0.05) {
+          // Land
+          const height = (n - 0.05) * 4;
+          r = 40 + height * 50; g = 90 + height * 40 - Math.abs(lat) * 20; b = 30 + height * 15;
+          // Desert near equator
+          if (Math.abs(lat) < 0.35 && n > 0.2) { r += 40; g += 10; b -= 10; }
+        } else {
+          // Ocean
+          const depth = (0.05 - n) * 10;
+          r = 15 + depth * 5; g = 40 + depth * 15; b = 130 + depth * 30 + n * 40;
+        }
+
+        data[idx] = Math.max(0, Math.min(255, r));
+        data[idx + 1] = Math.max(0, Math.min(255, g));
+        data[idx + 2] = Math.max(0, Math.min(255, b));
+        data[idx + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+    const texture = new THREE.CanvasTexture(canvas);
+    if ('SRGBColorSpace' in THREE) {
+      texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
+    }
+    texture.generateMipmaps = true;
+    return texture;
   }
 
   private initThreeJs() {
@@ -619,20 +716,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.earthMesh.visible = false; // Hidden by default
     this.scene.add(this.earthMesh);
 
-    // Load Earth Texture
-    textureLoader.load(
-      'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c7/Earth_map_1000x500.jpg/1024px-Earth_map_1000x500.jpg',
-      (texture) => {
-        if ('SRGBColorSpace' in THREE) {
-          texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
-        }
-        earthMaterial.map = texture;
-        earthMaterial.color.setHex(0xffffff); // Reset base color when texture loads
-        earthMaterial.needsUpdate = true;
-      },
-      undefined,
-      (err) => console.warn('Could not load Earth texture.', err)
-    );
+    // Procedural Earth Texture (no external URL needed)
+    earthMaterial.map = this.generateEarthTexture();
+    earthMaterial.color.setHex(0xffffff);
+    earthMaterial.needsUpdate = true;
 
     // Jupiter's Faint Ring System
     const ringGeometry = new THREE.RingGeometry(12, 18, 128);
@@ -906,6 +993,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthTest: false
     });
     this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.postMaterial));
+
+    // Add spaceships
+    this.createSpaceships();
   }
 
   private updateAtmosphere(time: number) {
@@ -1007,6 +1097,237 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
   }
 
+  private createSpaceships() {
+    const jupiterPos = this.jupiterGroup.position;
+    const configs = [
+      { type: 'fighter', radius: 14, speed: 0.006, y: 2, incl: 0.15, scale: 3 },
+      { type: 'fighter', radius: 18, speed: -0.004, y: -1, incl: -0.2, scale: 2.5 },
+      { type: 'fighter', radius: 16, speed: 0.005, y: 3.5, incl: 0.3, scale: 2.8 },
+      { type: 'tie', radius: 20, speed: -0.005, y: -2, incl: 0.25, scale: 3 },
+      { type: 'tie', radius: 23, speed: 0.003, y: 1.5, incl: -0.15, scale: 2.5 },
+      { type: 'shuttle', radius: 28, speed: 0.002, y: 4, incl: 0.1, scale: 3.5 },
+      { type: 'shuttle', radius: 33, speed: -0.0015, y: -3, incl: -0.18, scale: 3 },
+      { type: 'fighter', radius: 40, speed: 0.003, y: 7, incl: 0.4, scale: 2 },
+      { type: 'tie', radius: 45, speed: -0.002, y: -5, incl: -0.35, scale: 2 },
+    ];
+
+    configs.forEach(cfg => {
+      let group: THREE.Group;
+      switch (cfg.type) {
+        case 'tie': group = this.buildTieShip(); break;
+        case 'shuttle': group = this.buildShuttleShip(); break;
+        default: group = this.buildFighterShip(); break;
+      }
+      group.scale.setScalar(cfg.scale);
+      const angle = Math.random() * Math.PI * 2;
+      const sinI = Math.sin(cfg.incl);
+      const cosI = Math.cos(cfg.incl);
+      group.position.set(
+        jupiterPos.x + cfg.radius * Math.cos(angle),
+        jupiterPos.y + cfg.y + cfg.radius * Math.sin(angle) * sinI,
+        jupiterPos.z + cfg.radius * Math.sin(angle) * cosI
+      );
+      this.scene.add(group);
+      this.spaceshipData.push({
+        group,
+        orbitRadius: cfg.radius,
+        orbitSpeed: cfg.speed,
+        orbitAngle: angle,
+        orbitY: cfg.y,
+        orbitInclination: cfg.incl,
+      });
+    });
+  }
+
+  private buildFighterShip(): THREE.Group {
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.8, roughness: 0.2, emissive: 0x112233, emissiveIntensity: 0.15 });
+
+    // Fuselage
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.4, 8), bodyMat);
+    body.rotation.x = -Math.PI / 2;
+    group.add(body);
+
+    // Wings
+    const wingMat = new THREE.MeshStandardMaterial({ color: 0x778899, metalness: 0.6, roughness: 0.3, emissive: 0x111122, emissiveIntensity: 0.1 });
+    const wingGeo = new THREE.BoxGeometry(1.6, 0.03, 0.5);
+    const wings = new THREE.Mesh(wingGeo, wingMat);
+    wings.position.z = 0.1;
+    group.add(wings);
+
+    // Cockpit canopy
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x224466, metalness: 0.9, roughness: 0.1, emissive: 0x113355, emissiveIntensity: 0.3 });
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), canopyMat);
+    canopy.position.set(0, 0.12, -0.2);
+    canopy.scale.set(1, 0.7, 1.3);
+    group.add(canopy);
+
+    // Engine glow
+    const engineMat = new THREE.MeshBasicMaterial({ color: 0x66ccff });
+    const engine = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), engineMat);
+    engine.position.z = 0.7;
+    group.add(engine);
+
+    // Engine trail
+    const trailMat = new THREE.MeshBasicMaterial({
+      color: 0x4488ff, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+    });
+    const trailGeo = new THREE.CylinderGeometry(0.005, 0.08, 1.6, 6);
+    trailGeo.rotateX(Math.PI / 2);
+    const trail = new THREE.Mesh(trailGeo, trailMat);
+    trail.position.z = 1.5;
+    group.add(trail);
+
+    // Wing-tip lights
+    const tipMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+    const tipL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), tipMat);
+    tipL.position.set(-0.8, 0, 0.1);
+    group.add(tipL);
+    const tipR = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), new THREE.MeshBasicMaterial({ color: 0x00ff44 }));
+    tipR.position.set(0.8, 0, 0.1);
+    group.add(tipR);
+
+    return group;
+  }
+
+  private buildTieShip(): THREE.Group {
+    const group = new THREE.Group();
+
+    // Central cockpit sphere
+    const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x556677, metalness: 0.9, roughness: 0.15, emissive: 0x112233, emissiveIntensity: 0.2 });
+    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), cockpitMat);
+    group.add(cockpit);
+
+    // Cockpit viewport
+    const viewportMat = new THREE.MeshBasicMaterial({ color: 0x88ccff });
+    const viewport = new THREE.Mesh(new THREE.CircleGeometry(0.12, 8), viewportMat);
+    viewport.position.z = -0.29;
+    group.add(viewport);
+
+    // Hexagonal side panels
+    const panelMat = new THREE.MeshStandardMaterial({ color: 0x334455, metalness: 0.7, roughness: 0.25, emissive: 0x111122, emissiveIntensity: 0.1 });
+    const panelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.04, 6);
+    panelGeo.rotateZ(Math.PI / 2);
+    const leftPanel = new THREE.Mesh(panelGeo, panelMat);
+    leftPanel.position.x = -0.55;
+    group.add(leftPanel);
+    const rightPanel = new THREE.Mesh(panelGeo, panelMat);
+    rightPanel.position.x = 0.55;
+    group.add(rightPanel);
+
+    // Struts connecting cockpit to panels
+    const strutMat = new THREE.MeshStandardMaterial({ color: 0x445566, metalness: 0.8, roughness: 0.2 });
+    const strutGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6);
+    strutGeo.rotateZ(Math.PI / 2);
+    const leftStrut = new THREE.Mesh(strutGeo, strutMat);
+    leftStrut.position.x = -0.3;
+    group.add(leftStrut);
+    const rightStrut = new THREE.Mesh(strutGeo, strutMat);
+    rightStrut.position.x = 0.3;
+    group.add(rightStrut);
+
+    // Rear engine glow
+    const engineMat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
+    const engine = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), engineMat);
+    engine.position.z = 0.3;
+    group.add(engine);
+
+    // Engine trail
+    const trailMat = new THREE.MeshBasicMaterial({
+      color: 0xff3311, transparent: true, opacity: 0.35,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+    });
+    const trailGeo = new THREE.CylinderGeometry(0.005, 0.07, 1.2, 6);
+    trailGeo.rotateX(Math.PI / 2);
+    const trail = new THREE.Mesh(trailGeo, trailMat);
+    trail.position.z = 0.9;
+    group.add(trail);
+
+    return group;
+  }
+
+  private buildShuttleShip(): THREE.Group {
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xbbccdd, metalness: 0.7, roughness: 0.25, emissive: 0x112233, emissiveIntensity: 0.15 });
+
+    // Main hull — elongated wedge
+    const body = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.8, 4), bodyMat);
+    body.rotation.x = -Math.PI / 2;
+    body.rotation.y = Math.PI / 4;
+    group.add(body);
+
+    // Cargo section
+    const cargoMat = new THREE.MeshStandardMaterial({ color: 0x99aabb, metalness: 0.6, roughness: 0.3 });
+    const cargo = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.6), cargoMat);
+    cargo.position.set(0, 0, 0.3);
+    group.add(cargo);
+
+    // Dorsal fin
+    const finMat = new THREE.MeshStandardMaterial({ color: 0x889aab, metalness: 0.5, roughness: 0.3 });
+    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.6, 0.5), finMat);
+    fin.position.set(0, 0.35, 0.15);
+    group.add(fin);
+
+    // Lower fins
+    const lowerFin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.3), finMat);
+    lowerFin.position.set(0, -0.15, 0.3);
+    group.add(lowerFin);
+
+    // Twin engines
+    const engineMat = new THREE.MeshBasicMaterial({ color: 0xffbb44 });
+    const engineL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), engineMat);
+    engineL.position.set(-0.15, 0, 0.9);
+    group.add(engineL);
+    const engineR = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), engineMat);
+    engineR.position.set(0.15, 0, 0.9);
+    group.add(engineR);
+
+    // Twin engine trails
+    const trailMat = new THREE.MeshBasicMaterial({
+      color: 0xff8833, transparent: true, opacity: 0.35,
+      blending: THREE.AdditiveBlending, side: THREE.DoubleSide
+    });
+    const trailGeoL = new THREE.CylinderGeometry(0.005, 0.06, 1.4, 6);
+    trailGeoL.rotateX(Math.PI / 2);
+    const trailL = new THREE.Mesh(trailGeoL, trailMat);
+    trailL.position.set(-0.15, 0, 1.6);
+    group.add(trailL);
+    const trailGeoR = new THREE.CylinderGeometry(0.005, 0.06, 1.4, 6);
+    trailGeoR.rotateX(Math.PI / 2);
+    const trailR = new THREE.Mesh(trailGeoR, trailMat);
+    trailR.position.set(0.15, 0, 1.6);
+    group.add(trailR);
+
+    return group;
+  }
+
+  private updateSpaceships(time: number) {
+    const jupiterPos = this.jupiterGroup.position;
+
+    this.spaceshipData.forEach(ship => {
+      ship.orbitAngle += ship.orbitSpeed * this.currentShipSpeedMultiplier;
+      const cosA = Math.cos(ship.orbitAngle);
+      const sinA = Math.sin(ship.orbitAngle);
+      const sinI = Math.sin(ship.orbitInclination);
+      const cosI = Math.cos(ship.orbitInclination);
+
+      ship.group.position.set(
+        jupiterPos.x + ship.orbitRadius * cosA,
+        jupiterPos.y + ship.orbitY + ship.orbitRadius * sinA * sinI,
+        jupiterPos.z + ship.orbitRadius * sinA * cosI
+      );
+
+      // Face direction of travel
+      const ahead = ship.orbitAngle + Math.sign(ship.orbitSpeed) * 0.1;
+      ship.group.lookAt(
+        jupiterPos.x + ship.orbitRadius * Math.cos(ahead),
+        jupiterPos.y + ship.orbitY + ship.orbitRadius * Math.sin(ahead) * sinI,
+        jupiterPos.z + ship.orbitRadius * Math.sin(ahead) * cosI
+      );
+    });
+  }
+
   private animate() {
     this.animationFrameId = requestAnimationFrame(() => this.animate());
 
@@ -1017,6 +1338,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.currentMoonSpeedMultiplier += (this.targetMoonSpeedMultiplier - this.currentMoonSpeedMultiplier) * 0.02;
     this.currentAtmospherePulse += (this.targetAtmospherePulse - this.currentAtmospherePulse) * 0.05;
     this.currentJupiterSpinSpeed += (this.targetJupiterSpinSpeed - this.currentJupiterSpinSpeed) * 0.02;
+    this.currentShipSpeedMultiplier += (this.targetShipSpeedMultiplier - this.currentShipSpeedMultiplier) * 0.02;
 
     this.updateAtmosphere(time);
     this.updateCamera();
@@ -1027,6 +1349,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     this.updateMoons();
+    this.updateSpaceships(time);
     this.updateStarsAndDust(time);
 
     this.renderer.autoClear = false;

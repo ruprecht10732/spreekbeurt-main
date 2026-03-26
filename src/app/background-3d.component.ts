@@ -96,6 +96,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Solar system planets in background
   private saturnGroup!: THREE.Group;
   private marsMesh!: THREE.Mesh;
+  private venusMesh!: THREE.Mesh;
+  private mercuryMesh!: THREE.Mesh;
+  private uranusMesh!: THREE.Mesh;
+  private neptuneMesh!: THREE.Mesh;
+
+  // Planet/moon labels (sprites)
+  private readonly labelSprites: THREE.Sprite[] = [];
 
   // Asteroid belt
   private asteroidBelt!: THREE.InstancedMesh;
@@ -1957,6 +1964,135 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
     const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.52, 16, 16), marsAtmoMat);
     this.marsMesh.add(marsAtmo);
+
+    // Venus — inner solar system, near the Sun direction
+    // Venus radius: 6,052 km → 6052/71492 × 10 = 0.846 scene units
+    const venusGeo = new THREE.SphereGeometry(0.846, 32, 32);
+    const venusMat = new THREE.MeshStandardMaterial({ color: 0xe8cda0, roughness: 0.7, metalness: 0.05 });
+    this.venusMesh = new THREE.Mesh(venusGeo, venusMat);
+    this.venusMesh.position.set(-42, 8, 25);
+    this.scene.add(this.venusMesh);
+    // Venus thick atmosphere glow
+    const venusAtmoMat = new THREE.MeshBasicMaterial({
+      color: 0xffe8c0, transparent: true, opacity: 0.12,
+      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
+    });
+    this.venusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 16), venusAtmoMat));
+
+    // Mercury — smallest planet, closest to the Sun
+    // Mercury radius: 2,440 km → 2440/71492 × 10 = 0.341 scene units
+    const mercuryGeo = new THREE.SphereGeometry(0.341, 24, 24);
+    const mercuryMat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.9, metalness: 0.15 });
+    this.mercuryMesh = new THREE.Mesh(mercuryGeo, mercuryMat);
+    this.mercuryMesh.position.set(-46, 12, 28);
+    this.scene.add(this.mercuryMesh);
+
+    // Uranus — distant ice giant, opposite direction from Sun
+    // Uranus radius: 25,559 km → 25559/71492 × 10 = 3.575 scene units
+    const uranusGeo = new THREE.SphereGeometry(3.575, 32, 32);
+    const uranusMat = new THREE.MeshStandardMaterial({ color: 0x9dd8d8, roughness: 0.4, metalness: 0.05 });
+    this.uranusMesh = new THREE.Mesh(uranusGeo, uranusMat);
+    this.uranusMesh.position.set(160, -10, 150);
+    this.scene.add(this.uranusMesh);
+    // Uranus is tilted 98° — rotates nearly on its side
+    this.uranusMesh.rotation.z = 1.71;
+
+    // Neptune — farthest giant planet
+    // Neptune radius: 24,764 km → 24764/71492 × 10 = 3.464 scene units
+    const neptuneGeo = new THREE.SphereGeometry(3.464, 32, 32);
+    const neptuneMat = new THREE.MeshStandardMaterial({ color: 0x3366cc, roughness: 0.4, metalness: 0.05 });
+    this.neptuneMesh = new THREE.Mesh(neptuneGeo, neptuneMat);
+    this.neptuneMesh.position.set(-180, 15, -160);
+    this.scene.add(this.neptuneMesh);
+
+    // Create all labels
+    this.createCelestialLabels();
+  }
+
+  private createLabelSprite(text: string, scale: number): THREE.Sprite {
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = 256;
+    canvas.height = 64;
+    ctx.clearRect(0, 0, 256, 64);
+    ctx.font = '600 28px Inter, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    // Subtle glow behind text
+    ctx.shadowColor = 'rgba(180,200,255,0.5)';
+    ctx.shadowBlur = 8;
+    ctx.fillStyle = 'rgba(220,230,255,0.7)';
+    ctx.fillText(text, 128, 32);
+    // Second pass for crispness
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = 'rgba(220,230,255,0.55)';
+    ctx.fillText(text, 128, 32);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    const spriteMat = new THREE.SpriteMaterial({
+      map: texture, transparent: true, depthWrite: false, depthTest: false,
+      blending: THREE.AdditiveBlending, fog: false
+    });
+    const sprite = new THREE.Sprite(spriteMat);
+    sprite.scale.set(scale * 4, scale, 1);
+    this.labelSprites.push(sprite);
+    return sprite;
+  }
+
+  private createCelestialLabels() {
+    // Jupiter label — attached above Jupiter in the jupiterGroup
+    const jupLabel = this.createLabelSprite('Jupiter', 3);
+    jupLabel.position.set(0, 13, 0);
+    this.jupiterGroup.add(jupLabel);
+
+    // Galilean moon labels
+    const moonNames = ['Io', 'Europa', 'Ganymede', 'Callisto'];
+    this.galileanMoons.forEach((moon, i) => {
+      const label = this.createLabelSprite(moonNames[i], 0.8);
+      label.position.set(0, (moon.mesh.geometry as THREE.SphereGeometry).parameters.radius + 0.5, 0);
+      moon.mesh.add(label);
+    });
+
+    // Sun
+    const sunLabel = this.createLabelSprite('Zon', 2.5);
+    sunLabel.position.set(0, 9, 0);
+    this.sunMesh.add(sunLabel);
+
+    // Earth
+    const earthLabel = this.createLabelSprite('Aarde', 1.2);
+    earthLabel.position.set(0, 1.8, 0);
+    this.earthMesh.add(earthLabel);
+
+    // Saturn
+    const saturnLabel = this.createLabelSprite('Saturnus', 2.5);
+    saturnLabel.position.set(0, 12, 0);
+    this.saturnGroup.add(saturnLabel);
+
+    // Mars
+    const marsLabel = this.createLabelSprite('Mars', 1);
+    marsLabel.position.set(0, 1.2, 0);
+    this.marsMesh.add(marsLabel);
+
+    // Venus
+    const venusLabel = this.createLabelSprite('Venus', 1);
+    venusLabel.position.set(0, 1.5, 0);
+    this.venusMesh.add(venusLabel);
+
+    // Mercury
+    const mercuryLabel = this.createLabelSprite('Mercurius', 0.8);
+    mercuryLabel.position.set(0, 1, 0);
+    this.mercuryMesh.add(mercuryLabel);
+
+    // Uranus
+    const uranusLabel = this.createLabelSprite('Uranus', 1.8);
+    uranusLabel.position.set(0, 5, 0);
+    this.uranusMesh.add(uranusLabel);
+
+    // Neptune
+    const neptuneLabel = this.createLabelSprite('Neptunus', 1.8);
+    neptuneLabel.position.set(0, 5, 0);
+    this.neptuneMesh.add(neptuneLabel);
   }
 
   private createAsteroidBelt() {
@@ -2993,6 +3129,22 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Rotate Mars
     if (this.marsMesh) {
       this.marsMesh.rotation.y += 0.003;
+    }
+    // Rotate Venus (retrograde, very slow)
+    if (this.venusMesh) {
+      this.venusMesh.rotation.y -= 0.0003;
+    }
+    // Rotate Mercury
+    if (this.mercuryMesh) {
+      this.mercuryMesh.rotation.y += 0.001;
+    }
+    // Rotate Uranus (sideways)
+    if (this.uranusMesh) {
+      this.uranusMesh.rotation.y += 0.0004;
+    }
+    // Rotate Neptune
+    if (this.neptuneMesh) {
+      this.neptuneMesh.rotation.y += 0.0004;
     }
 
     // Update aurora shaders

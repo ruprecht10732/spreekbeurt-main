@@ -28,6 +28,8 @@ import confetti from 'canvas-confetti';
       [slideIndex]="currentIndex()" 
       [slideId]="currentSlide().id"
       [fadeOut]="videoRevealed()"
+      (loaded)="onSceneLoaded()"
+      (distanceKm)="onDistanceUpdate($event)"
       class="transition-opacity duration-[2000ms] ease-in-out"
       [class.opacity-0]="videoRevealed()">
     </app-background-3d>
@@ -39,16 +41,37 @@ import confetti from 'canvas-confetti';
         <div class="absolute inset-0 flex items-center justify-center perspective-[800px]">
           <div #crawlContainer class="w-[80%] max-w-3xl text-center text-[var(--color-starwars-yellow)] font-starwars transform-gpu rotate-x-[20deg] origin-bottom">
             <h1 class="text-7xl md:text-9xl mb-8 uppercase tracking-widest title-shimmer">{{ currentSlide().title }}</h1>
-            @for (line of currentSlide().content; track $index) {
-              <p class="text-3xl md:text-5xl mb-4 uppercase tracking-wider">{{ line }}</p>
+            @if (currentSlide().id === 'title') {
+              <p class="text-sm md:text-xl mb-4 uppercase tracking-[0.5em] opacity-30 font-starwars">Gemaakt door</p>
+              <div class="name-backdrop relative mb-6">
+                @for (char of nameChars; track $index) {
+                  <span class="name-char relative inline-block text-5xl md:text-8xl font-starwars uppercase"
+                        [style.animation-delay]="($index * 120) + 'ms'"
+                        [style.min-width]="char === ' ' ? '0.4em' : 'auto'">{{ char }}</span>
+                }
+              </div>
+              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-30 name-subtitle">Klas: Groep 7</p>
+            } @else {
+              @for (line of currentSlide().content; track $index) {
+                <p class="text-3xl md:text-5xl mb-4 uppercase tracking-wider">{{ line }}</p>
+              }
             }
             @if (currentSlide().id === 'title' && !hasStarted()) {
-              <button (click)="startPresentation()" class="mt-12 pointer-events-auto group flex flex-col items-center gap-4 mx-auto focus:outline-none">
-                <div class="w-28 h-28 rounded-full bg-[var(--color-starwars-yellow)]/20 border-2 border-[var(--color-starwars-yellow)] flex items-center justify-center group-hover:bg-[var(--color-starwars-yellow)]/40 group-hover:scale-110 active:scale-95 transition-all duration-300 shadow-[0_0_40px_rgba(255,232,31,0.3)] group-hover:shadow-[0_0_60px_rgba(255,232,31,0.5)] play-pulse">
-                  <mat-icon class="!text-6xl !w-14 !h-14 text-[var(--color-starwars-yellow)] ml-1" style="font-size:56px;width:56px;height:56px;">play_arrow</mat-icon>
+              @if (sceneLoaded()) {
+                <button (click)="startPresentation()" class="mt-12 pointer-events-auto group flex flex-col items-center gap-4 mx-auto focus:outline-none">
+                  <div class="w-28 h-28 rounded-full bg-[var(--color-starwars-yellow)]/20 border-2 border-[var(--color-starwars-yellow)] flex items-center justify-center group-hover:bg-[var(--color-starwars-yellow)]/40 group-hover:scale-110 active:scale-95 transition-all duration-300 shadow-[0_0_40px_rgba(255,232,31,0.3)] group-hover:shadow-[0_0_60px_rgba(255,232,31,0.5)] play-pulse">
+                    <mat-icon class="!text-6xl !w-14 !h-14 text-[var(--color-starwars-yellow)] ml-1" style="font-size:56px;width:56px;height:56px;">play_arrow</mat-icon>
+                  </div>
+                  <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">Klik om te beginnen</span>
+                </button>
+              } @else {
+                <div class="mt-12 flex flex-col items-center gap-4">
+                  <div class="w-28 h-28 rounded-full bg-white/5 border-2 border-white/20 flex items-center justify-center">
+                    <div class="w-10 h-10 border-3 border-[var(--color-starwars-yellow)]/40 border-t-[var(--color-starwars-yellow)] rounded-full animate-spin"></div>
+                  </div>
+                  <span class="text-xl opacity-50">Laden...</span>
                 </div>
-                <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">Klik om te beginnen</span>
-              </button>
+              }
             } @else if (currentSlide().id === 'title' && hasStarted()) {
               <p class="mt-12 text-xl opacity-70 animate-pulse">Druk op spatie of pijltje naar rechts om verder te gaan</p>
             }
@@ -76,6 +99,17 @@ import confetti from 'canvas-confetti';
             }
           </div>
 
+          @if (currentSlide().id === 'h3' && currentDistance() > 0) {
+            <div class="mt-8 slide-item">
+              <div class="inline-block bg-black/40 backdrop-blur-sm rounded-xl px-6 py-4 border border-[var(--color-starwars-yellow)]/20 shadow-[0_0_30px_rgba(255,232,31,0.1)]">
+                <span class="text-xs text-[var(--color-starwars-yellow)]/60 font-starwars tracking-[0.3em] block mb-1">HUIDIGE AFSTAND</span>
+                <div class="flex items-baseline gap-2">
+                  <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_30px_rgba(255,232,31,0.5)]">{{ currentDistance() }}</span>
+                  <span class="text-lg md:text-2xl text-[var(--color-starwars-yellow)]/60 font-starwars tracking-wider">MILJOEN KM</span>
+                </div>
+              </div>
+            </div>
+          }
 
 
           @if (currentSlide().experiment) {
@@ -208,6 +242,77 @@ import confetti from 'canvas-confetti';
     .title-shimmer {
       animation: shimmer 3s ease-in-out infinite;
     }
+    @keyframes starBirth {
+      0% {
+        opacity: 0;
+        transform: scale(0) rotate(-20deg);
+        text-shadow: none;
+        filter: blur(20px);
+      }
+      12% {
+        opacity: 1;
+        transform: scale(3) rotate(8deg);
+        text-shadow: 0 0 80px #fff, 0 0 160px rgba(255, 232, 31, 0.9), 0 0 300px rgba(100, 150, 255, 0.6);
+        filter: blur(3px);
+        color: white;
+      }
+      30% {
+        transform: scale(0.85) rotate(-3deg);
+        text-shadow: 0 0 50px rgba(255, 232, 31, 0.8), 0 0 100px rgba(255, 232, 31, 0.4);
+        filter: blur(0px);
+      }
+      50% {
+        transform: scale(1.08) rotate(1deg);
+      }
+      70% {
+        transform: scale(0.97) rotate(0deg);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+        text-shadow: 0 0 15px rgba(255, 232, 31, 0.5), 0 0 50px rgba(255, 232, 31, 0.2), 0 0 100px rgba(100, 150, 255, 0.08);
+        filter: blur(0px);
+      }
+    }
+    .name-char {
+      opacity: 0;
+      animation: starBirth 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      will-change: transform, opacity, filter;
+    }
+    .name-char::after {
+      content: '✦';
+      position: absolute;
+      top: -0.2em;
+      right: -0.05em;
+      font-size: 0.15em;
+      opacity: 0;
+      animation: sparkleOut 2.5s ease-out forwards;
+      animation-delay: inherit;
+      pointer-events: none;
+    }
+    @keyframes sparkleOut {
+      0% { opacity: 0; transform: scale(0); }
+      12% { opacity: 1; transform: scale(3); color: white; }
+      30% { opacity: 0.8; transform: scale(1.5); color: #ffe81f; }
+      100% { opacity: 0; transform: scale(0) translateY(-30px); }
+    }
+    .name-backdrop::before {
+      content: '';
+      position: absolute;
+      inset: -80px -100px;
+      background: radial-gradient(ellipse at center, rgba(255, 232, 31, 0.07) 0%, rgba(100, 150, 255, 0.04) 35%, transparent 70%);
+      border-radius: 50%;
+      animation: nameGlow 5s ease-in-out 2.5s infinite;
+      pointer-events: none;
+    }
+    @keyframes nameGlow {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    .name-subtitle {
+      animation: fadeIn 1s ease-out 1.8s forwards;
+      opacity: 0;
+    }
     @keyframes playPulse {
       0%, 100% { box-shadow: 0 0 40px rgba(255, 232, 31, 0.3); }
       50% { box-shadow: 0 0 60px rgba(255, 232, 31, 0.6), 0 0 100px rgba(255, 232, 31, 0.2); }
@@ -240,6 +345,7 @@ import confetti from 'canvas-confetti';
 })
 export class App implements AfterViewInit {
   slides = SLIDES;
+  nameChars = [...'Asbjørn Oost'];
   currentIndex = signal(0);
   currentQuizQuestionIndex = signal(0);
   isAnswerRevealed = signal(false);
@@ -249,6 +355,8 @@ export class App implements AfterViewInit {
   hasStarted = signal(false);
   isMuted = signal(false);
   selectedQuizOption = signal(-1);
+  sceneLoaded = signal(false);
+  currentDistance = signal(0);
   private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
   private bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
   private isBrowser: boolean;
@@ -322,7 +430,16 @@ export class App implements AfterViewInit {
     }
   }
 
+  onSceneLoaded() {
+    this.sceneLoaded.set(true);
+  }
+
+  onDistanceUpdate(km: number) {
+    this.currentDistance.set(km);
+  }
+
   startPresentation() {
+    if (!this.sceneLoaded()) return;
     this.hasStarted.set(true);
     this.startBgAudio();
     // Auto-advance to the next slide after a short moment
@@ -459,7 +576,7 @@ export class App implements AfterViewInit {
     if (this.isTransitioning()) return;
     // Block keyboard nav until presentation has started
     if (!this.hasStarted()) {
-      if (event.key === ' ' || event.key === 'Enter') {
+      if ((event.key === ' ' || event.key === 'Enter') && this.sceneLoaded()) {
         this.startPresentation();
       }
       return;

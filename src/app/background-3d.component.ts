@@ -1,4 +1,4 @@
-import { Component, ElementRef, OnInit, OnDestroy, ViewChild, ChangeDetectionStrategy, NgZone, PLATFORM_ID, Input, OnChanges, SimpleChanges, inject } from '@angular/core';
+import { Component, ElementRef, OnInit, OnDestroy, ViewChild, ChangeDetectionStrategy, NgZone, PLATFORM_ID, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import * as THREE from 'three';
 
@@ -14,6 +14,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   @Input() slideIndex = 0;
   @Input() slideId = 'title';
   @Input() fadeOut = false;
+  @Output() loaded = new EventEmitter<void>();
   @ViewChild('canvasContainer', { static: true }) canvasContainer!: ElementRef<HTMLDivElement>;
 
   private scene!: THREE.Scene;
@@ -76,6 +77,20 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }[] = [];
   private targetShipSpeedMultiplier = 1;
   private currentShipSpeedMultiplier = 1;
+  private loadPromises: Promise<unknown>[] = [];
+
+  // Earth orbit for h3 distance visualization
+  private earthOrbitAngle = 0;
+  private earthOrbitActive = false;
+
+  // Distance beam between Earth and Jupiter
+  private distanceBeam!: THREE.Group;
+  private distanceBeamActive = false;
+  private lastEmittedKm = 0;
+  @Output() distanceKm = new EventEmitter<number>();
+
+  // Galaxy band
+  private galaxyBand!: THREE.Points;
 
   private readonly ngZone = inject(NgZone);
   private readonly platformId = inject(PLATFORM_ID);
@@ -97,7 +112,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.targetAtmospherePulse = 0;
     this.targetJupiterSpinSpeed = 0.0005;
     this.targetShipSpeedMultiplier = 1;
+    this.earthOrbitActive = false;
+    this.distanceBeamActive = false;
     if (this.earthMesh) this.earthMesh.visible = false; // Hide earth by default
+    if (this.distanceBeam) this.distanceBeam.visible = false;
 
     switch(id) {
       case 'title':
@@ -125,11 +143,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.targetJupiterRotationY = 4.7;
         break;
       case 'h3':
-        // Distance - Warp speed effect
-        this.baseCameraX = 30; this.baseCameraY = 15; this.baseCameraZ = 5;
-        this.targetLookAt.set(0, 0, 0);
-        this.targetStarSpeed = 0.25; // Much faster stars for warp speed
-        this.targetShipSpeedMultiplier = 5;
+        // Distance - Show Earth and Jupiter with distance beam
+        this.baseCameraX = -5; this.baseCameraY = 18; this.baseCameraZ = 50;
+        this.targetLookAt.set(0, 0, -8);
+        this.targetStarSpeed = 0.002;
+        this.targetShipSpeedMultiplier = 2;
+        if (this.earthMesh) this.earthMesh.visible = true;
+        this.earthOrbitActive = true;
+        this.distanceBeamActive = true;
         break;
       case 'h4':
         // Age - Slow flyby
@@ -141,7 +162,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.baseCameraX = 0; this.baseCameraY = -18; this.baseCameraZ = 22;
         this.targetLookAt.set(0, 6, 0);
         this.targetMoonSpeedMultiplier = 35; // Super fast moons to show gravity
-        if (this.earthMesh) this.earthMesh.visible = true;
+        if (this.earthMesh) {
+          this.earthMesh.visible = true;
+          this.earthMesh.position.set(-8, 2, -5);
+        }
         break;
       case 'extra':
         // Moons - High angle looking down at the orbital plane
@@ -163,6 +187,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   ngOnInit() {
     if (this.isBrowser) {
       this.initThreeJs();
+      Promise.all(this.loadPromises).then(() => this.loaded.emit());
       this.ngZone.runOutsideAngular(() => {
         this.animate();
       });
@@ -388,93 +413,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     return [r, g, b];
   }
 
-  /** Generates a simple procedural Earth texture */
-  private generateEarthTexture(): THREE.CanvasTexture {
-    const W = 512, H = 256;
-    const canvas = document.createElement('canvas');
-    canvas.width = W; canvas.height = H;
-    const ctx = canvas.getContext('2d')!;
-    const imageData = ctx.createImageData(W, H);
-    const data = imageData.data;
-
-    // Simple Perlin-like noise for continent shapes
-    const perm = new Uint8Array(512);
-    const p0 = new Uint8Array(256);
-    for (let i = 0; i < 256; i++) p0[i] = i;
-    for (let i = 255; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [p0[i], p0[j]] = [p0[j], p0[i]]; }
-    for (let i = 0; i < 512; i++) perm[i] = p0[i & 255];
-
-    const fade = (t: number) => t * t * t * (t * (t * 6 - 15) + 10);
-    const lerp = (a: number, b: number, t: number) => a + t * (b - a);
-    const grad = (hash: number, x: number, y: number) => {
-      switch (hash & 3) { case 0: return x + y; case 1: return -x + y; case 2: return x - y; default: return -x - y; }
-    };
-    const perlin2d = (x: number, y: number) => {
-      const xi = Math.floor(x) & 255, yi = Math.floor(y) & 255;
-      const xf = x - Math.floor(x), yf = y - Math.floor(y);
-      const u = fade(xf), v = fade(yf);
-      const aa = perm[perm[xi] + yi], ab = perm[perm[xi] + yi + 1];
-      const ba = perm[perm[xi + 1] + yi], bb = perm[perm[xi + 1] + yi + 1];
-      return lerp(lerp(grad(aa, xf, yf), grad(ba, xf - 1, yf), u),
-                  lerp(grad(ab, xf, yf - 1), grad(bb, xf - 1, yf - 1), u), v);
-    };
-    const fbm = (x: number, y: number, oct: number) => {
-      let val = 0, amp = 1, freq = 1, max = 0;
-      for (let i = 0; i < oct; i++) { val += perlin2d(x * freq, y * freq) * amp; max += amp; amp *= 0.5; freq *= 2; }
-      return val / max;
-    };
-
-    for (let py = 0; py < H; py++) {
-      const v = py / H;
-      const lat = (v - 0.5) * Math.PI;
-      for (let px = 0; px < W; px++) {
-        const u = px / W;
-        const idx = (py * W + px) * 4;
-
-        const nx = u * 6, ny = v * 6;
-        const n = fbm(nx, ny, 6);
-
-        // Polar ice caps
-        const polarFade = Math.abs(lat) / (Math.PI / 2);
-        const ice = polarFade > 0.75 ? (polarFade - 0.75) * 4 : 0;
-
-        let r: number, g: number, b: number;
-        if (ice > 0.5) {
-          r = 230 + Math.random() * 20; g = 235 + Math.random() * 15; b = 240;
-        } else if (n > 0.05) {
-          // Land
-          const height = (n - 0.05) * 4;
-          r = 40 + height * 50; g = 90 + height * 40 - Math.abs(lat) * 20; b = 30 + height * 15;
-          // Desert near equator
-          if (Math.abs(lat) < 0.35 && n > 0.2) { r += 40; g += 10; b -= 10; }
-        } else {
-          // Ocean
-          const depth = (0.05 - n) * 10;
-          r = 15 + depth * 5; g = 40 + depth * 15; b = 130 + depth * 30 + n * 40;
-        }
-
-        data[idx] = Math.max(0, Math.min(255, r));
-        data[idx + 1] = Math.max(0, Math.min(255, g));
-        data[idx + 2] = Math.max(0, Math.min(255, b));
-        data[idx + 3] = 255;
-      }
-    }
-
-    ctx.putImageData(imageData, 0, 0);
-    const texture = new THREE.CanvasTexture(canvas);
-    if ('SRGBColorSpace' in THREE) {
-      texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
-    }
-    texture.generateMipmaps = true;
-    return texture;
-  }
-
   private initThreeJs() {
     const container = this.canvasContainer.nativeElement;
     
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x000000, 0.0015);
+    this.scene.fog = new THREE.FogExp2(0x000000, 0.0008);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -571,6 +515,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       { color: new THREE.Color(0x1a0a2e), radius: 250, pos: [-300, 100, -500] },
       { color: new THREE.Color(0x0a1628), radius: 300, pos: [200, -80, -600] },
       { color: new THREE.Color(0x2e0a0a), radius: 220, pos: [100, 200, -450] },
+      { color: new THREE.Color(0x220044), radius: 280, pos: [-150, -60, -550] },
+      { color: new THREE.Color(0x003322), radius: 200, pos: [300, 150, -400] },
+      { color: new THREE.Color(0x441100), radius: 260, pos: [-250, -120, -650] },
+      { color: new THREE.Color(0x110033), radius: 320, pos: [50, 100, -700] },
+      { color: new THREE.Color(0x330011), radius: 240, pos: [180, -150, -500] },
     ];
     nebulaConfigs.forEach((cfg, i) => {
       const nebulaGeo = new THREE.SphereGeometry(cfg.radius, 32, 32);
@@ -681,22 +630,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load NASA HST OPAL high-res Jupiter map from local assets
     const textureLoader = new THREE.TextureLoader();
-    textureLoader.load(
-      '20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg',
-      (texture) => {
-        if ('SRGBColorSpace' in THREE) {
-          texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
-        }
-        texture.generateMipmaps = true;
-        texture.minFilter = THREE.LinearMipmapLinearFilter;
-        texture.magFilter = THREE.LinearFilter;
-        texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-        jupiterMaterial.map = texture;
-        jupiterMaterial.needsUpdate = true;
-      },
-      undefined,
-      (err) => console.warn('Could not load high-res Jupiter texture, using procedural fallback.', err)
-    );
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      textureLoader.load(
+        '20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg',
+        (texture) => {
+          if ('SRGBColorSpace' in THREE) {
+            texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
+          }
+          texture.generateMipmaps = true;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+          jupiterMaterial.map = texture;
+          jupiterMaterial.needsUpdate = true;
+          resolve();
+        },
+        undefined,
+        () => { console.warn('Could not load high-res Jupiter texture, using procedural fallback.'); resolve(); }
+      );
+    }));
 
     // Create Earth for scale comparison (Slide 5)
     // Jupiter radius is 10. Earth radius is ~11.2 times smaller, so 10 / 11.2 = 0.89
@@ -716,10 +668,56 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.earthMesh.visible = false; // Hidden by default
     this.scene.add(this.earthMesh);
 
-    // Procedural Earth Texture (no external URL needed)
-    earthMaterial.map = this.generateEarthTexture();
-    earthMaterial.color.setHex(0xffffff);
-    earthMaterial.needsUpdate = true;
+    // Earth Texture from local 8K asset
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      textureLoader.load(
+        '8k_earth_daymap.jpg',
+        (texture) => {
+          if ('SRGBColorSpace' in THREE) {
+            texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
+          }
+          texture.generateMipmaps = true;
+          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+          earthMaterial.map = texture;
+          earthMaterial.color.setHex(0xffffff);
+          earthMaterial.needsUpdate = true;
+          resolve();
+        },
+        undefined,
+        () => { console.warn('Could not load Earth texture.'); resolve(); }
+      );
+    }));
+
+    // Earth atmosphere glow (blue fresnel rim)
+    const earthAtmoMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPosition, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vNormal;
+        varying vec3 vPosition;
+        void main() {
+          vec3 viewDir = normalize(-vPosition);
+          float fresnel = 1.0 - dot(viewDir, vNormal);
+          fresnel = pow(fresnel, 3.0);
+          vec3 color = mix(vec3(0.3, 0.6, 1.0), vec3(0.6, 0.85, 1.0), fresnel);
+          gl_FragColor = vec4(color, fresnel * 0.7);
+        }
+      `,
+      transparent: true,
+      side: THREE.BackSide,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+    const earthAtmo = new THREE.Mesh(new THREE.SphereGeometry(1.08, 32, 32), earthAtmoMat);
+    this.earthMesh.add(earthAtmo);
 
     // Jupiter's Faint Ring System
     const ringGeometry = new THREE.RingGeometry(12, 18, 128);
@@ -996,6 +994,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Add spaceships
     this.createSpaceships();
+
+    // Galaxy effects for deep-space feel
+    this.createGalaxyEffects();
+
+    // Distance beam between Earth and Jupiter
+    this.createDistanceBeam();
   }
 
   private updateAtmosphere(time: number) {
@@ -1092,6 +1096,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (mat.uniforms) mat.uniforms['uTime'].value = time;
     });
 
+    if (this.galaxyBand) {
+      const bandMat = this.galaxyBand.material as THREE.ShaderMaterial;
+      if (bandMat.uniforms) bandMat.uniforms['uTime'].value = time;
+    }
+
     if (this.postMaterial) {
       this.postMaterial.uniforms['uTime'].value = time;
     }
@@ -1140,164 +1149,290 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private buildFighterShip(): THREE.Group {
+    // X-Wing style: long fuselage, 4 strike foils (S-foils), 4 engine pods
     const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xaabbcc, metalness: 0.8, roughness: 0.2, emissive: 0x112233, emissiveIntensity: 0.15 });
+    const hullColor = 0xcccccc;
+    const hullMat = new THREE.MeshStandardMaterial({ color: hullColor, metalness: 0.5, roughness: 0.35, emissive: 0x222222, emissiveIntensity: 0.1 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x555555, metalness: 0.7, roughness: 0.2 });
 
-    // Fuselage
-    const body = new THREE.Mesh(new THREE.ConeGeometry(0.25, 1.4, 8), bodyMat);
-    body.rotation.x = -Math.PI / 2;
-    group.add(body);
+    // Fuselage — long narrow nose
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.15, 1.2, 8), hullMat);
+    nose.rotation.x = -Math.PI / 2;
+    group.add(nose);
 
-    // Wings
-    const wingMat = new THREE.MeshStandardMaterial({ color: 0x778899, metalness: 0.6, roughness: 0.3, emissive: 0x111122, emissiveIntensity: 0.1 });
-    const wingGeo = new THREE.BoxGeometry(1.6, 0.03, 0.5);
-    const wings = new THREE.Mesh(wingGeo, wingMat);
-    wings.position.z = 0.1;
-    group.add(wings);
+    // Rear fuselage block
+    const rear = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.22, 0.6), hullMat);
+    rear.position.z = 0.55;
+    group.add(rear);
 
-    // Cockpit canopy
-    const canopyMat = new THREE.MeshStandardMaterial({ color: 0x224466, metalness: 0.9, roughness: 0.1, emissive: 0x113355, emissiveIntensity: 0.3 });
-    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 8), canopyMat);
-    canopy.position.set(0, 0.12, -0.2);
-    canopy.scale.set(1, 0.7, 1.3);
+    // Cockpit canopy (orange-tinted)
+    const canopyMat = new THREE.MeshStandardMaterial({ color: 0xff8800, metalness: 0.9, roughness: 0.05, emissive: 0xff6600, emissiveIntensity: 0.25 });
+    const canopy = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), canopyMat);
+    canopy.position.set(0, 0.12, -0.05);
+    canopy.scale.set(1, 0.6, 1.4);
     group.add(canopy);
 
-    // Engine glow
-    const engineMat = new THREE.MeshBasicMaterial({ color: 0x66ccff });
-    const engine = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 8), engineMat);
-    engine.position.z = 0.7;
-    group.add(engine);
+    // Astromech droid dome behind cockpit
+    const droidMat = new THREE.MeshStandardMaterial({ color: 0x3366cc, metalness: 0.5, roughness: 0.4, emissive: 0x1133aa, emissiveIntensity: 0.2 });
+    const droid = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), droidMat);
+    droid.position.set(0, 0.14, 0.2);
+    droid.scale.y = 0.7;
+    group.add(droid);
 
-    // Engine trail
+    // 4 S-foils (strike foils) in X formation
+    const wingMat = new THREE.MeshStandardMaterial({ color: hullColor, metalness: 0.4, roughness: 0.4 });
+    const foilGeo = new THREE.BoxGeometry(1.2, 0.02, 0.18);
+    const angles = [0.12, -0.12]; // spread angle
+    const sides = [-1, 1]; // left, right
+    for (const side of sides) {
+      for (const angle of angles) {
+        const foil = new THREE.Mesh(foilGeo, wingMat);
+        foil.position.set(side * 0.6, angle * 3, 0.35);
+        foil.rotation.z = side * angle;
+        group.add(foil);
+
+        // Red/orange stripe on top foils
+        if (angle > 0) {
+          const stripe = new THREE.Mesh(
+            new THREE.BoxGeometry(0.6, 0.025, 0.06),
+            new THREE.MeshBasicMaterial({ color: 0xcc2200 })
+          );
+          stripe.position.set(side * 0.75, angle * 3 + 0.015, 0.35);
+          stripe.rotation.z = side * angle;
+          group.add(stripe);
+        }
+
+        // Engine pod at the tip of each foil
+        const engineHousing = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.25, 8), darkMat);
+        engineHousing.rotation.x = Math.PI / 2;
+        engineHousing.position.set(side * 1.15, angle * 3, 0.4);
+        group.add(engineHousing);
+
+        // Engine glow
+        const glow = new THREE.Mesh(
+          new THREE.CircleGeometry(0.05, 8),
+          new THREE.MeshBasicMaterial({ color: 0xff4466, side: THREE.DoubleSide })
+        );
+        glow.position.set(side * 1.15, angle * 3, 0.53);
+        group.add(glow);
+      }
+    }
+
+    // Engine trails (4)
     const trailMat = new THREE.MeshBasicMaterial({
-      color: 0x4488ff, transparent: true, opacity: 0.4,
+      color: 0xff5577, transparent: true, opacity: 0.35,
       blending: THREE.AdditiveBlending, side: THREE.DoubleSide
     });
-    const trailGeo = new THREE.CylinderGeometry(0.005, 0.08, 1.6, 6);
-    trailGeo.rotateX(Math.PI / 2);
-    const trail = new THREE.Mesh(trailGeo, trailMat);
-    trail.position.z = 1.5;
-    group.add(trail);
+    for (const side of sides) {
+      for (const angle of angles) {
+        const trailGeo = new THREE.CylinderGeometry(0.003, 0.04, 1.0, 6);
+        trailGeo.rotateX(Math.PI / 2);
+        const trail = new THREE.Mesh(trailGeo, trailMat);
+        trail.position.set(side * 1.15, angle * 3, 1.03);
+        group.add(trail);
+      }
+    }
 
-    // Wing-tip lights
-    const tipMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
-    const tipL = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), tipMat);
-    tipL.position.set(-0.8, 0, 0.1);
-    group.add(tipL);
-    const tipR = new THREE.Mesh(new THREE.SphereGeometry(0.04, 6, 6), new THREE.MeshBasicMaterial({ color: 0x00ff44 }));
-    tipR.position.set(0.8, 0, 0.1);
-    group.add(tipR);
+    // Laser cannon tips (4 — at end of each foil)
+    const laserMat = new THREE.MeshBasicMaterial({ color: 0xff2222 });
+    for (const side of sides) {
+      for (const angle of angles) {
+        const laser = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.35, 4), darkMat);
+        laser.rotation.x = Math.PI / 2;
+        laser.position.set(side * 1.15, angle * 3, -0.05);
+        group.add(laser);
+        const laserTip = new THREE.Mesh(new THREE.SphereGeometry(0.018, 4, 4), laserMat);
+        laserTip.position.set(side * 1.15, angle * 3, -0.22);
+        group.add(laserTip);
+      }
+    }
 
     return group;
   }
 
   private buildTieShip(): THREE.Group {
+    // TIE Fighter: spherical cockpit, twin hexagonal solar panels, connecting pylons
     const group = new THREE.Group();
+    const imperialGrey = 0x445566;
+    const darkGrey = 0x222233;
+    const hullMat = new THREE.MeshStandardMaterial({ color: imperialGrey, metalness: 0.8, roughness: 0.15, emissive: 0x111122, emissiveIntensity: 0.15 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: darkGrey, metalness: 0.9, roughness: 0.1 });
 
-    // Central cockpit sphere
-    const cockpitMat = new THREE.MeshStandardMaterial({ color: 0x556677, metalness: 0.9, roughness: 0.15, emissive: 0x112233, emissiveIntensity: 0.2 });
-    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.3, 16, 16), cockpitMat);
+    // Central cockpit — ball shape
+    const cockpit = new THREE.Mesh(new THREE.SphereGeometry(0.28, 16, 16), hullMat);
     group.add(cockpit);
 
-    // Cockpit viewport
-    const viewportMat = new THREE.MeshBasicMaterial({ color: 0x88ccff });
-    const viewport = new THREE.Mesh(new THREE.CircleGeometry(0.12, 8), viewportMat);
-    viewport.position.z = -0.29;
+    // Cockpit viewport — front-facing circle window
+    const viewportMat = new THREE.MeshBasicMaterial({ color: 0x88bbff, side: THREE.DoubleSide });
+    const viewport = new THREE.Mesh(new THREE.RingGeometry(0.08, 0.14, 8), viewportMat);
+    viewport.position.z = -0.27;
     group.add(viewport);
+    // Viewport crosshairs
+    const crossMat = new THREE.MeshBasicMaterial({ color: 0x556688, side: THREE.DoubleSide });
+    const crossH = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.015, 0.001), crossMat);
+    crossH.position.z = -0.275;
+    group.add(crossH);
+    const crossV = new THREE.Mesh(new THREE.BoxGeometry(0.015, 0.28, 0.001), crossMat);
+    crossV.position.z = -0.275;
+    group.add(crossV);
 
-    // Hexagonal side panels
-    const panelMat = new THREE.MeshStandardMaterial({ color: 0x334455, metalness: 0.7, roughness: 0.25, emissive: 0x111122, emissiveIntensity: 0.1 });
-    const panelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.04, 6);
-    panelGeo.rotateZ(Math.PI / 2);
-    const leftPanel = new THREE.Mesh(panelGeo, panelMat);
-    leftPanel.position.x = -0.55;
-    group.add(leftPanel);
-    const rightPanel = new THREE.Mesh(panelGeo, panelMat);
-    rightPanel.position.x = 0.55;
-    group.add(rightPanel);
+    // Connecting pylons (horizontal bars from cockpit to panels)
+    const pylonMat = new THREE.MeshStandardMaterial({ color: 0x334455, metalness: 0.85, roughness: 0.15 });
+    const pylonGeo = new THREE.BoxGeometry(0.3, 0.06, 0.06);
+    const pylonL = new THREE.Mesh(pylonGeo, pylonMat);
+    pylonL.position.x = -0.42;
+    group.add(pylonL);
+    const pylonR = new THREE.Mesh(pylonGeo, pylonMat);
+    pylonR.position.x = 0.42;
+    group.add(pylonR);
 
-    // Struts connecting cockpit to panels
-    const strutMat = new THREE.MeshStandardMaterial({ color: 0x445566, metalness: 0.8, roughness: 0.2 });
-    const strutGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.5, 6);
-    strutGeo.rotateZ(Math.PI / 2);
-    const leftStrut = new THREE.Mesh(strutGeo, strutMat);
-    leftStrut.position.x = -0.3;
-    group.add(leftStrut);
-    const rightStrut = new THREE.Mesh(strutGeo, strutMat);
-    rightStrut.position.x = 0.3;
-    group.add(rightStrut);
+    // Solar panel arrays — flat hexagons
+    const panelMat = new THREE.MeshStandardMaterial({
+      color: 0x1a1a2e, metalness: 0.6, roughness: 0.3,
+      emissive: 0x0a0a1a, emissiveIntensity: 0.1
+    });
+    // Panel frame
+    const frameMat = new THREE.MeshStandardMaterial({ color: imperialGrey, metalness: 0.8, roughness: 0.2 });
 
-    // Rear engine glow
-    const engineMat = new THREE.MeshBasicMaterial({ color: 0xff4422 });
-    const engine = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), engineMat);
-    engine.position.z = 0.3;
+    for (const side of [-1, 1]) {
+      // Outer frame — hexagonal ring
+      const frameGeo = new THREE.CylinderGeometry(0.6, 0.6, 0.04, 6);
+      frameGeo.rotateZ(Math.PI / 2);
+      const frame = new THREE.Mesh(frameGeo, frameMat);
+      frame.position.x = side * 0.6;
+      group.add(frame);
+
+      // Inner panel fill (slightly smaller solid hexagon)
+      const panelGeo = new THREE.CylinderGeometry(0.55, 0.55, 0.035, 6);
+      panelGeo.rotateZ(Math.PI / 2);
+      const panel = new THREE.Mesh(panelGeo, panelMat);
+      panel.position.x = side * 0.6;
+      group.add(panel);
+
+      // Panel grid lines (vertical & horizontal struts on the panel)
+      for (let i = -2; i <= 2; i++) {
+        const gridV = new THREE.Mesh(
+          new THREE.BoxGeometry(0.02, 1.0, 0.015),
+          frameMat
+        );
+        gridV.position.set(side * 0.6, i * 0.2, 0);
+        group.add(gridV);
+      }
+      for (let i = -2; i <= 2; i++) {
+        const gridH = new THREE.Mesh(
+          new THREE.BoxGeometry(0.02, 0.015, 1.0),
+          frameMat
+        );
+        gridH.position.set(side * 0.6, 0, i * 0.2);
+        group.add(gridH);
+      }
+    }
+
+    // Twin rear ion engines (red glow)
+    const engineMat = new THREE.MeshBasicMaterial({ color: 0xff2200 });
+    const engine = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 8), engineMat);
+    engine.position.z = 0.28;
     group.add(engine);
 
-    // Engine trail
+    // Ion engine trail
     const trailMat = new THREE.MeshBasicMaterial({
-      color: 0xff3311, transparent: true, opacity: 0.35,
+      color: 0xff2200, transparent: true, opacity: 0.35,
       blending: THREE.AdditiveBlending, side: THREE.DoubleSide
     });
-    const trailGeo = new THREE.CylinderGeometry(0.005, 0.07, 1.2, 6);
+    const trailGeo = new THREE.CylinderGeometry(0.003, 0.06, 1.2, 6);
     trailGeo.rotateX(Math.PI / 2);
     const trail = new THREE.Mesh(trailGeo, trailMat);
-    trail.position.z = 0.9;
+    trail.position.z = 0.88;
     group.add(trail);
 
     return group;
   }
 
   private buildShuttleShip(): THREE.Group {
+    // Imperial Lambda-class Shuttle: central body, folded dorsal wing, two lower wings
     const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xbbccdd, metalness: 0.7, roughness: 0.25, emissive: 0x112233, emissiveIntensity: 0.15 });
+    const imperialWhite = 0xccccdd;
+    const hullMat = new THREE.MeshStandardMaterial({ color: imperialWhite, metalness: 0.5, roughness: 0.3, emissive: 0x222233, emissiveIntensity: 0.1 });
+    const darkMat = new THREE.MeshStandardMaterial({ color: 0x334455, metalness: 0.8, roughness: 0.15 });
 
-    // Main hull — elongated wedge
-    const body = new THREE.Mesh(new THREE.ConeGeometry(0.35, 1.8, 4), bodyMat);
-    body.rotation.x = -Math.PI / 2;
-    body.rotation.y = Math.PI / 4;
+    // Main body — elongated cone (front) + box (rear)
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.2, 1.0, 6), hullMat);
+    nose.rotation.x = -Math.PI / 2;
+    group.add(nose);
+
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.35, 0.35, 0.9), hullMat);
+    body.position.z = 0.4;
     group.add(body);
 
-    // Cargo section
-    const cargoMat = new THREE.MeshStandardMaterial({ color: 0x99aabb, metalness: 0.6, roughness: 0.3 });
-    const cargo = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.25, 0.6), cargoMat);
-    cargo.position.set(0, 0, 0.3);
-    group.add(cargo);
+    // Cockpit windows
+    const windowMat = new THREE.MeshBasicMaterial({ color: 0x88bbff });
+    const windowL = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.001), windowMat);
+    windowL.position.set(-0.176, 0.08, -0.1);
+    group.add(windowL);
+    const windowR = new THREE.Mesh(new THREE.BoxGeometry(0.08, 0.06, 0.001), windowMat);
+    windowR.position.set(0.176, 0.08, -0.1);
+    group.add(windowR);
 
-    // Dorsal fin
-    const finMat = new THREE.MeshStandardMaterial({ color: 0x889aab, metalness: 0.5, roughness: 0.3 });
-    const fin = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.6, 0.5), finMat);
-    fin.position.set(0, 0.35, 0.15);
-    group.add(fin);
+    // Large dorsal wing (the tall center fin — Lambda's signature)
+    const dorsalGeo = new THREE.BufferGeometry();
+    const dorsalVerts = new Float32Array([
+      0, 0.18, -0.2,   // base front
+      0, 0.18, 0.85,   // base rear
+      0, 1.6, 0.6,     // top point
+    ]);
+    dorsalGeo.setAttribute('position', new THREE.BufferAttribute(dorsalVerts, 3));
+    dorsalGeo.computeVertexNormals();
+    const dorsalMat = new THREE.MeshStandardMaterial({
+      color: imperialWhite, metalness: 0.4, roughness: 0.3,
+      side: THREE.DoubleSide, emissive: 0x111122, emissiveIntensity: 0.1
+    });
+    const dorsal = new THREE.Mesh(dorsalGeo, dorsalMat);
+    group.add(dorsal);
 
-    // Lower fins
-    const lowerFin = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.03, 0.3), finMat);
-    lowerFin.position.set(0, -0.15, 0.3);
-    group.add(lowerFin);
+    // Two lower folding wings (angled downward)
+    for (const side of [-1, 1]) {
+      const lowerGeo = new THREE.BufferGeometry();
+      const lowerVerts = new Float32Array([
+        side * 0.18, -0.18, -0.15,  // root front
+        side * 0.18, -0.18, 0.8,    // root rear
+        side * 1.0, -0.8, 0.5,      // tip
+      ]);
+      lowerGeo.setAttribute('position', new THREE.BufferAttribute(lowerVerts, 3));
+      lowerGeo.computeVertexNormals();
+      const lowerWing = new THREE.Mesh(lowerGeo, dorsalMat);
+      group.add(lowerWing);
 
-    // Twin engines
-    const engineMat = new THREE.MeshBasicMaterial({ color: 0xffbb44 });
-    const engineL = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), engineMat);
-    engineL.position.set(-0.15, 0, 0.9);
-    group.add(engineL);
-    const engineR = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 8), engineMat);
-    engineR.position.set(0.15, 0, 0.9);
-    group.add(engineR);
+      // Engine nacelle at wing root
+      const nacelle = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.3, 8), darkMat);
+      nacelle.rotation.x = Math.PI / 2;
+      nacelle.position.set(side * 0.18, -0.18, 0.85);
+      group.add(nacelle);
 
-    // Twin engine trails
+      // Engine glow
+      const glowMat = new THREE.MeshBasicMaterial({ color: 0x4488ff });
+      const glow = new THREE.Mesh(new THREE.CircleGeometry(0.04, 8), glowMat);
+      glow.position.set(side * 0.18, -0.18, 1.0);
+      group.add(glow);
+    }
+
+    // Central rear engine
+    const engineMat = new THREE.MeshBasicMaterial({ color: 0x4488ff });
+    const engine = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 8), engineMat);
+    engine.position.z = 0.85;
+    group.add(engine);
+
+    // Engine trails (3 — center + two wing roots)
     const trailMat = new THREE.MeshBasicMaterial({
-      color: 0xff8833, transparent: true, opacity: 0.35,
+      color: 0x4488ff, transparent: true, opacity: 0.3,
       blending: THREE.AdditiveBlending, side: THREE.DoubleSide
     });
-    const trailGeoL = new THREE.CylinderGeometry(0.005, 0.06, 1.4, 6);
-    trailGeoL.rotateX(Math.PI / 2);
-    const trailL = new THREE.Mesh(trailGeoL, trailMat);
-    trailL.position.set(-0.15, 0, 1.6);
-    group.add(trailL);
-    const trailGeoR = new THREE.CylinderGeometry(0.005, 0.06, 1.4, 6);
-    trailGeoR.rotateX(Math.PI / 2);
-    const trailR = new THREE.Mesh(trailGeoR, trailMat);
-    trailR.position.set(0.15, 0, 1.6);
-    group.add(trailR);
+    for (const xPos of [0, -0.18, 0.18]) {
+      const trailGeo = new THREE.CylinderGeometry(0.003, 0.04, 1.2, 6);
+      trailGeo.rotateX(Math.PI / 2);
+      const trail = new THREE.Mesh(trailGeo, trailMat);
+      trail.position.set(xPos, xPos === 0 ? 0 : -0.18, 1.45);
+      group.add(trail);
+    }
 
     return group;
   }
@@ -1328,6 +1463,225 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
   }
 
+  private createGalaxyEffects() {
+    // Milky Way band - dense concentration of stars in a tilted plane
+    const bandCount = 25000;
+    const bandGeo = new THREE.BufferGeometry();
+    const bandPos = new Float32Array(bandCount * 3);
+    const bandColors = new Float32Array(bandCount * 3);
+    const bandSizes = new Float32Array(bandCount);
+
+    for (let i = 0; i < bandCount; i++) {
+      const i3 = i * 3;
+      const r = 80 + Math.pow(Math.random(), 0.5) * 700;
+      const theta = Math.random() * Math.PI * 2;
+      const thickness = (Math.random() - 0.5) * 30 * Math.exp(-Math.random() * 3);
+
+      const x = r * Math.cos(theta);
+      const y = thickness;
+      const z = r * Math.sin(theta);
+
+      // Tilt 25° and shift back
+      const cosT = 0.906; // cos(25°)
+      const sinT = 0.423; // sin(25°)
+      bandPos[i3] = x;
+      bandPos[i3 + 1] = y * cosT - z * sinT + 60;
+      bandPos[i3 + 2] = y * sinT + z * cosT - 300;
+
+      const b = 0.3 + Math.random() * 0.7;
+      const colorRoll = Math.random();
+      if (colorRoll < 0.4) {
+        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.95; bandColors[i3 + 2] = b * 0.85;
+      } else if (colorRoll < 0.75) {
+        bandColors[i3] = b * 0.85; bandColors[i3 + 1] = b * 0.9; bandColors[i3 + 2] = b;
+      } else {
+        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.75; bandColors[i3 + 2] = b * 0.8;
+      }
+      bandSizes[i] = Math.random() * 1.5 + 0.3;
+    }
+
+    bandGeo.setAttribute('position', new THREE.Float32BufferAttribute(bandPos, 3));
+    bandGeo.setAttribute('color', new THREE.Float32BufferAttribute(bandColors, 3));
+    bandGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(bandSizes, 1));
+
+    const bandMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vColor;
+        uniform float uTime;
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          float twinkle = sin(uTime * 1.5 + position.x * 0.05 + position.z * 0.08) * 0.15 + 0.85;
+          gl_PointSize = aSize * twinkle * (200.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float dist = length(gl_PointCoord - vec2(0.5));
+          if (dist > 0.5) discard;
+          float alpha = smoothstep(0.5, 0.1, dist) * 0.5;
+          float core = smoothstep(0.2, 0.0, dist);
+          vec3 c = vColor + core * 0.4;
+          gl_FragColor = vec4(c, alpha);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    });
+
+    this.galaxyBand = new THREE.Points(bandGeo, bandMat);
+    this.scene.add(this.galaxyBand);
+
+    // Distant galaxy sprites
+    const galaxyCount = 50;
+    const gGeo = new THREE.BufferGeometry();
+    const gPos = new Float32Array(galaxyCount * 3);
+    const gSizes = new Float32Array(galaxyCount);
+    for (let i = 0; i < galaxyCount; i++) {
+      gPos[i * 3] = (Math.random() - 0.5) * 1500;
+      gPos[i * 3 + 1] = (Math.random() - 0.5) * 800 + 50;
+      gPos[i * 3 + 2] = -200 - Math.random() * 800;
+      gSizes[i] = 2 + Math.random() * 5;
+    }
+    gGeo.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
+    gGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(gSizes, 1));
+
+    this.scene.add(new THREE.Points(gGeo, new THREE.ShaderMaterial({
+      vertexShader: `
+        attribute float aSize;
+        void main() {
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * (400.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        void main() {
+          vec2 c = gl_PointCoord - vec2(0.5);
+          float d = length(c);
+          if (d > 0.5) discard;
+          float glow = exp(-d * 6.0) * 0.6;
+          float core = exp(-d * 18.0);
+          vec3 color = mix(vec3(0.5, 0.4, 0.7), vec3(1.0, 0.95, 0.85), core);
+          gl_FragColor = vec4(color, (glow + core * 0.4) * 0.35);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending
+    })));
+
+    // Volumetric cosmic dust clouds
+    const cDustCount = 3000;
+    const cGeo = new THREE.BufferGeometry();
+    const cPos = new Float32Array(cDustCount * 3);
+    const cColors = new Float32Array(cDustCount * 3);
+    for (let i = 0; i < cDustCount; i++) {
+      cPos[i * 3] = (Math.random() - 0.5) * 300;
+      cPos[i * 3 + 1] = (Math.random() - 0.5) * 300;
+      cPos[i * 3 + 2] = (Math.random() - 0.5) * 300;
+      const roll = Math.random();
+      if (roll < 0.33) {
+        cColors[i * 3] = 0.3; cColors[i * 3 + 1] = 0.2; cColors[i * 3 + 2] = 0.5;
+      } else if (roll < 0.66) {
+        cColors[i * 3] = 0.2; cColors[i * 3 + 1] = 0.3; cColors[i * 3 + 2] = 0.5;
+      } else {
+        cColors[i * 3] = 0.4; cColors[i * 3 + 1] = 0.25; cColors[i * 3 + 2] = 0.2;
+      }
+    }
+    cGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
+    cGeo.setAttribute('color', new THREE.Float32BufferAttribute(cColors, 3));
+    this.scene.add(new THREE.Points(cGeo, new THREE.PointsMaterial({
+      size: 0.4, transparent: true, opacity: 0.12, vertexColors: true,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    })));
+  }
+
+  private createDistanceBeam() {
+    const group = new THREE.Group();
+
+    // Glowing line
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute([0, 0, 0, 1, 0, 0], 3));
+    group.add(new THREE.Line(lineGeo, new THREE.LineBasicMaterial({
+      color: 0xffe81f, transparent: true, opacity: 0.4,
+      blending: THREE.AdditiveBlending
+    })));
+
+    // Particle dots along the beam
+    const pCount = 60;
+    const pGeo = new THREE.BufferGeometry();
+    pGeo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(pCount * 3), 3));
+    group.add(new THREE.Points(pGeo, new THREE.PointsMaterial({
+      color: 0xffe81f, size: 0.25, transparent: true, opacity: 0.5,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    })));
+
+    group.visible = false;
+    this.scene.add(group);
+    this.distanceBeam = group;
+  }
+
+  private updateEarthOrbit() {
+    this.earthOrbitAngle += 0.002;
+    const sunX = -25, sunZ = 5;
+    const r = 12;
+    this.earthMesh.position.set(
+      sunX + r * Math.cos(this.earthOrbitAngle),
+      1,
+      sunZ + r * Math.sin(this.earthOrbitAngle)
+    );
+  }
+
+  private updateDistanceBeam(time: number) {
+    if (!this.distanceBeam || !this.distanceBeamActive || !this.earthMesh?.visible) {
+      if (this.distanceBeam) this.distanceBeam.visible = false;
+      return;
+    }
+    this.distanceBeam.visible = true;
+
+    const ep = this.earthMesh.position;
+    const jp = this.jupiterGroup.position;
+
+    // Update line endpoints
+    const line = this.distanceBeam.children[0] as THREE.Line;
+    const lp = line.geometry.attributes['position'] as THREE.BufferAttribute;
+    lp.setXYZ(0, ep.x, ep.y, ep.z);
+    lp.setXYZ(1, jp.x, jp.y, jp.z);
+    lp.needsUpdate = true;
+
+    // Update particle dots along the beam
+    const pts = this.distanceBeam.children[1] as THREE.Points;
+    const pp = pts.geometry.attributes['position'] as THREE.BufferAttribute;
+    const pCount = pp.count;
+    for (let i = 0; i < pCount; i++) {
+      const t = i / (pCount - 1);
+      const wave = Math.sin(t * Math.PI * 6 + time * 4) * 0.2;
+      pp.setXYZ(i,
+        ep.x + (jp.x - ep.x) * t,
+        ep.y + (jp.y - ep.y) * t + wave,
+        ep.z + (jp.z - ep.z) * t
+      );
+    }
+    pp.needsUpdate = true;
+
+    // Map 3D distance to real km range (588-968 million km)
+    const dist3D = ep.distanceTo(jp);
+    const minDist3D = 27, maxDist3D = 51;
+    const frac = Math.max(0, Math.min(1, (dist3D - minDist3D) / (maxDist3D - minDist3D)));
+    const km = Math.round(588 + frac * (968 - 588));
+    if (km !== this.lastEmittedKm) {
+      this.lastEmittedKm = km;
+      this.ngZone.run(() => this.distanceKm.emit(km));
+    }
+  }
+
   private animate() {
     this.animationFrameId = requestAnimationFrame(() => this.animate());
 
@@ -1346,7 +1700,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     if (this.earthMesh?.visible) {
       this.earthMesh.rotation.y += 0.005;
+      if (this.earthOrbitActive) {
+        this.updateEarthOrbit();
+      }
     }
+    this.updateDistanceBeam(time);
 
     this.updateMoons();
     this.updateSpaceships(time);

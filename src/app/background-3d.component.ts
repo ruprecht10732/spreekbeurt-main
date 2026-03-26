@@ -111,7 +111,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private venusMesh!: THREE.Mesh;
   private mercuryMesh!: THREE.Mesh;
   private uranusMesh!: THREE.Mesh;
+  private uranusGroup!: THREE.Group;
   private neptuneMesh!: THREE.Mesh;
+  private neptuneGroup!: THREE.Group;
+  private earthCloudsMesh!: THREE.Mesh;
 
   // Planet/moon labels (sprites)
   private readonly labelSprites: THREE.Sprite[] = [];
@@ -159,6 +162,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Zodiacal light
   private zodiacalLight!: THREE.Mesh;
+
+  // SpaceX Falcon 9 rocket launch
+  private falconGroup!: THREE.Group;
+  private falconExhaust!: THREE.Mesh;
+  private falconLaunched = false;
+  private falconLaunchTime = 0;
+  private falconStartPos = new THREE.Vector3();
+  private falconTargetPos = new THREE.Vector3();
 
   // Planet tour state
   private tourActive = false;
@@ -238,13 +249,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.tourStops.push({ name: 'saturnus', camX: p.x - 25, camY: p.y + 12, camZ: p.z + 20, lookX: p.x, lookY: p.y, lookZ: p.z });
     }
     // Uranus
-    if (this.uranusMesh) {
-      const p = this.uranusMesh.position;
+    if (this.uranusGroup) {
+      const p = this.uranusGroup.position;
       this.tourStops.push({ name: 'uranus', camX: p.x - 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
     }
     // Neptune
-    if (this.neptuneMesh) {
-      const p = this.neptuneMesh.position;
+    if (this.neptuneGroup) {
+      const p = this.neptuneGroup.position;
       this.tourStops.push({ name: 'neptunus', camX: p.x + 10, camY: p.y + 4, camZ: p.z + 10, lookX: p.x, lookY: p.y, lookZ: p.z });
     }
     // Back to Jupiter — full circle
@@ -305,6 +316,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.tourStopTime = time;
       }
       this.tourPlanet.emit(this.tourStops[this.tourStopIndex].name);
+      // Launch Falcon 9 when arriving at Earth
+      if (this.tourStops[this.tourStopIndex].name === 'aarde' && !this.falconLaunched) {
+        setTimeout(() => this.launchFalcon9(), 2000); // 2s after arriving
+      }
     }
   }
 
@@ -1066,6 +1081,44 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         () => { console.warn('Could not load Earth texture.'); resolve(); }
       );
     }));
+    // Earth normal map for surface relief
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      textureLoader.load('2k_earth_normal_map.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        earthMaterial.normalMap = tex;
+        earthMaterial.normalScale = new THREE.Vector2(0.8, 0.8);
+        earthMaterial.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
+    // Earth specular map (oceans are shiny, land is rough)
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      textureLoader.load('2k_earth_specular_map.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        earthMaterial.metalnessMap = tex;
+        earthMaterial.roughness = 0.65;
+        earthMaterial.metalness = 0.15;
+        earthMaterial.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
+    // Earth cloud layer — semi-transparent rotating sphere
+    const earthCloudGeo = new THREE.SphereGeometry(0.905, 48, 48);
+    const earthCloudMat = new THREE.MeshStandardMaterial({
+      transparent: true, opacity: 0.45, depthWrite: false,
+      color: 0xffffff, roughness: 1.0, metalness: 0.0
+    });
+    this.earthCloudsMesh = new THREE.Mesh(earthCloudGeo, earthCloudMat);
+    this.earthMesh.add(this.earthCloudsMesh);
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      textureLoader.load('2k_earth_clouds.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        earthCloudMat.alphaMap = tex;
+        earthCloudMat.map = tex;
+        earthCloudMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
 
     // Earth atmosphere glow (blue fresnel rim)
     const earthAtmoMat = new THREE.ShaderMaterial({
@@ -1425,6 +1478,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Solar system planets: Saturn, Mars
     this.createSolarSystemPlanets();
+
+    // SpaceX Falcon 9 rocket (launches from Earth during tour)
+    this.falconGroup = this.buildFalcon9();
+    this.scene.add(this.falconGroup);
 
     // Asteroid belt between Mars and Jupiter
     this.createAsteroidBelt();
@@ -2086,6 +2143,203 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     })));
   }
 
+  private buildFalcon9(): THREE.Group {
+    const group = new THREE.Group();
+
+    // First stage — tall white cylinder (Falcon 9 is ~70m tall, we use ~0.5 scene units)
+    const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.3, metalness: 0.4 });
+    const firstStage = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.028, 0.32, 12), bodyMat);
+    firstStage.position.y = 0.16;
+    group.add(firstStage);
+
+    // Grid fins (4 small rectangles at base of first stage)
+    const finMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.6 });
+    for (let i = 0; i < 4; i++) {
+      const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.015, 0.003), finMat);
+      const angle = (i * Math.PI) / 2;
+      fin.position.set(Math.cos(angle) * 0.03, 0.28, Math.sin(angle) * 0.03);
+      fin.rotation.y = angle;
+      group.add(fin);
+    }
+
+    // Interstage — dark band
+    const interMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6, metalness: 0.3 });
+    const interstage = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.03, 12), interMat);
+    interstage.position.y = 0.335;
+    group.add(interstage);
+
+    // Second stage — shorter white cylinder
+    const secondStage = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.025, 0.12, 12), bodyMat);
+    secondStage.position.y = 0.41;
+    group.add(secondStage);
+
+    // Payload fairing — nose cone
+    const fairingMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.25, metalness: 0.3 });
+    const fairing = new THREE.Mesh(new THREE.ConeGeometry(0.026, 0.07, 12), fairingMat);
+    fairing.position.y = 0.505;
+    group.add(fairing);
+
+    // SpaceX logo strip — subtle dark band on first stage
+    const logoStrip = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.029, 0.02, 12), interMat);
+    logoStrip.position.y = 0.12;
+    group.add(logoStrip);
+
+    // Landing legs (4 folded legs at base)
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.5 });
+    for (let i = 0; i < 4; i++) {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.06, 0.015), legMat);
+      const angle = (i * Math.PI) / 2 + Math.PI / 4;
+      leg.position.set(Math.cos(angle) * 0.035, 0.01, Math.sin(angle) * 0.035);
+      leg.rotation.x = 0.3;
+      leg.rotation.y = angle;
+      group.add(leg);
+    }
+
+    // Nine Merlin engines at base (octaweb pattern) — small glowing circles
+    const engineMat = new THREE.MeshStandardMaterial({
+      color: 0x444444, roughness: 0.4, metalness: 0.8,
+      emissive: 0x331100, emissiveIntensity: 0.3
+    });
+    for (let i = 0; i < 9; i++) {
+      const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 0.015, 8), engineMat);
+      if (i === 0) {
+        eng.position.set(0, -0.005, 0); // Center engine
+      } else {
+        const angle = ((i - 1) * Math.PI * 2) / 8;
+        eng.position.set(Math.cos(angle) * 0.016, -0.005, Math.sin(angle) * 0.016);
+      }
+      group.add(eng);
+    }
+
+    // Exhaust plume — fiery cone pointing downward
+    const exhaustMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        void main() {
+          float dist = length(vUv - vec2(0.5, 0.0));
+          float core = smoothstep(0.5, 0.0, dist);
+          // Hot white core → orange → red → transparent
+          vec3 col = mix(vec3(1.0, 0.3, 0.05), vec3(1.0, 0.95, 0.8), core * core);
+          float flicker = 0.85 + 0.15 * sin(uTime * 30.0 + vUv.y * 20.0);
+          float alpha = core * flicker * smoothstep(1.0, 0.0, vUv.y);
+          gl_FragColor = vec4(col, alpha * 0.9);
+        }`,
+      uniforms: { uTime: { value: 0 } },
+      transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.falconExhaust = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.25, 12, 1, true), exhaustMat);
+    this.falconExhaust.position.y = -0.14;
+    this.falconExhaust.rotation.x = Math.PI; // Flip so tip faces down
+    this.falconExhaust.visible = false;
+    group.add(this.falconExhaust);
+
+    // Exhaust glow (point light for dramatic lighting)
+    const exhaustLight = new THREE.PointLight(0xff6622, 0, 3, 2);
+    exhaustLight.name = 'exhaustLight';
+    this.falconExhaust.add(exhaustLight);
+
+    group.visible = false;
+    return group;
+  }
+
+  private launchFalcon9() {
+    if (!this.falconGroup || !this.earthMesh || !this.marsMesh) return;
+    // Position at Earth's surface
+    const earthPos = this.earthMesh.position;
+    this.falconGroup.position.set(earthPos.x + 0.6, earthPos.y + 0.85, earthPos.z + 0.6);
+    this.falconGroup.visible = true;
+    this.falconExhaust.visible = true;
+    this.falconLaunched = true;
+    this.falconLaunchTime = (Date.now() - this.startTime) * 0.001;
+    // Start and end positions
+    this.falconStartPos.copy(this.falconGroup.position);
+    this.falconTargetPos.copy(this.marsMesh.position);
+    // Point exhaust light on
+    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+    if (light) light.intensity = 4;
+  }
+
+  private updateFalcon9(time: number) {
+    if (!this.falconLaunched || !this.falconGroup) return;
+
+    const elapsed = time - this.falconLaunchTime;
+    const totalDuration = 25; // seconds for full journey
+    const t = Math.min(elapsed / totalDuration, 1);
+
+    // Ease: slow start (liftoff), accelerate, then cruise
+    const ease = t < 0.15 ? (t / 0.15) * (t / 0.15) * 0.15 : 0.15 + (t - 0.15) * (0.85 / 0.85);
+
+    if (t < 0.08) {
+      // Phase 1: Liftoff — straight up from Earth
+      const liftT = t / 0.08;
+      const liftEase = liftT * liftT; // Accelerating upward
+      this.falconGroup.position.lerpVectors(
+        this.falconStartPos,
+        new THREE.Vector3(this.falconStartPos.x, this.falconStartPos.y + 3, this.falconStartPos.z),
+        liftEase
+      );
+    } else if (t < 0.2) {
+      // Phase 2: Gravity turn — arc over toward Mars
+      const turnT = (t - 0.08) / 0.12;
+      const above = new THREE.Vector3(this.falconStartPos.x, this.falconStartPos.y + 3, this.falconStartPos.z);
+      const midpoint = new THREE.Vector3().lerpVectors(this.falconStartPos, this.falconTargetPos, 0.15);
+      midpoint.y += 8; // High arc above the plane
+      this.falconGroup.position.lerpVectors(above, midpoint, turnT);
+    } else {
+      // Phase 3: Interplanetary cruise toward Mars
+      const cruiseT = (t - 0.2) / 0.8;
+      const cruiseEase = 1 - Math.pow(1 - cruiseT, 2); // Ease out
+      const midpoint = new THREE.Vector3().lerpVectors(this.falconStartPos, this.falconTargetPos, 0.15);
+      midpoint.y += 8;
+      this.falconGroup.position.lerpVectors(midpoint, this.falconTargetPos, cruiseEase);
+      // Scale down as it flies away to simulate distance
+      const scale = Math.max(0.3, 1 - cruiseT * 0.7);
+      this.falconGroup.scale.setScalar(scale);
+    }
+
+    // Orient rocket along velocity (look in direction of travel)
+    if (t > 0.01) {
+      const dir = new THREE.Vector3();
+      if (t < 0.08) {
+        dir.set(0, 1, 0);
+      } else {
+        dir.subVectors(this.falconTargetPos, this.falconGroup.position).normalize();
+      }
+      const up = new THREE.Vector3(0, 1, 0);
+      const quat = new THREE.Quaternion();
+      const mat4 = new THREE.Matrix4();
+      mat4.lookAt(new THREE.Vector3(), dir, up);
+      quat.setFromRotationMatrix(mat4);
+      // Rocket's "up" is Y axis, but lookAt points Z forward, so rotate
+      const adjust = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+      quat.multiply(adjust);
+      this.falconGroup.quaternion.slerp(quat, 0.05);
+    }
+
+    // Exhaust animation
+    if (this.falconExhaust) {
+      const mat = this.falconExhaust.material as THREE.ShaderMaterial;
+      mat.uniforms['uTime'].value = time;
+      // Vary exhaust size with thrust
+      const thrustScale = t < 0.15 ? 1.5 : 1;
+      this.falconExhaust.scale.set(thrustScale, thrustScale * (1 + Math.sin(time * 20) * 0.1), thrustScale);
+    }
+
+    // Done
+    if (t >= 1) {
+      this.falconGroup.visible = false;
+      this.falconExhaust.visible = false;
+      this.falconLaunched = false;
+    }
+  }
+
   private createSolarSystemPlanets() {
     // Saturn — visible in far background
     // Saturn equatorial radius: 60,268 km → 60268/71492 × 10 = 8.43 scene units
@@ -2193,43 +2447,208 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Venus — inner solar system, near the Sun direction
     // Venus radius: 6,052 km → 6052/71492 × 10 = 0.846 scene units
-    const venusGeo = new THREE.SphereGeometry(0.846, 32, 32);
+    const venusGeo = new THREE.SphereGeometry(0.846, 48, 48);
     const venusMat = new THREE.MeshStandardMaterial({ color: 0xe8cda0, roughness: 0.7, metalness: 0.05 });
     this.venusMesh = new THREE.Mesh(venusGeo, venusMat);
     this.venusMesh.position.set(-42, 8, 25);
     this.scene.add(this.venusMesh);
-    // Venus thick atmosphere glow
-    const venusAtmoMat = new THREE.MeshBasicMaterial({
-      color: 0xffe8c0, transparent: true, opacity: 0.12,
-      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
+    // Venus atmosphere texture (thick sulfuric acid clouds)
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_venus_atmosphere.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        venusMat.map = tex; venusMat.color.setHex(0xffffff); venusMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
+    // Venus thick atmosphere glow — dual layer
+    const venusAtmoMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPosition, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vec3 viewDir = normalize(-vPosition);
+          float fresnel = 1.0 - dot(viewDir, vNormal);
+          fresnel = pow(fresnel, 2.5);
+          vec3 col = mix(vec3(0.95, 0.85, 0.6), vec3(1.0, 0.92, 0.7), fresnel);
+          gl_FragColor = vec4(col, fresnel * 0.5);
+        }`,
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
-    this.venusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.95, 16, 16), venusAtmoMat));
+    this.venusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.93, 32, 32), venusAtmoMat));
 
     // Mercury — smallest planet, closest to the Sun
     // Mercury radius: 2,440 km → 2440/71492 × 10 = 0.341 scene units
-    const mercuryGeo = new THREE.SphereGeometry(0.341, 24, 24);
+    const mercuryGeo = new THREE.SphereGeometry(0.341, 32, 32);
     const mercuryMat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.9, metalness: 0.15 });
     this.mercuryMesh = new THREE.Mesh(mercuryGeo, mercuryMat);
-    this.mercuryMesh.position.set(-46, 12, 28);
+    this.mercuryMesh.position.set(-35, 5, 15);
     this.scene.add(this.mercuryMesh);
+    // Mercury texture — cratered surface
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_mercury.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        mercuryMat.map = tex; mercuryMat.color.setHex(0xffffff); mercuryMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
 
     // Uranus — distant ice giant, opposite direction from Sun
     // Uranus radius: 25,559 km → 25559/71492 × 10 = 3.575 scene units
-    const uranusGeo = new THREE.SphereGeometry(3.575, 32, 32);
+    this.uranusGroup = new THREE.Group();
+    const uranusGeo = new THREE.SphereGeometry(3.575, 48, 48);
     const uranusMat = new THREE.MeshStandardMaterial({ color: 0x9dd8d8, roughness: 0.4, metalness: 0.05 });
     this.uranusMesh = new THREE.Mesh(uranusGeo, uranusMat);
-    this.uranusMesh.position.set(160, -10, 150);
-    this.scene.add(this.uranusMesh);
+    this.uranusGroup.add(this.uranusMesh);
+    // Uranus texture
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_uranus.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        uranusMat.map = tex; uranusMat.color.setHex(0xffffff); uranusMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
+    // Uranus atmosphere glow (faint cyan)
+    const uranusAtmoMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPosition, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vec3 viewDir = normalize(-vPosition);
+          float fresnel = 1.0 - dot(viewDir, vNormal);
+          fresnel = pow(fresnel, 3.5);
+          vec3 col = mix(vec3(0.5, 0.85, 0.9), vec3(0.7, 0.95, 1.0), fresnel);
+          gl_FragColor = vec4(col, fresnel * 0.4);
+        }`,
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.uranusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(3.85, 32, 32), uranusAtmoMat));
+    // Uranus ring system — 13 narrow dark rings discovered by Voyager 2
+    // Real: inner epsilon ring ~1.64 Ru to outer ~2.0 Ru → 5.86 to 7.15 scene units
+    const uranusRingInner = 5.0, uranusRingOuter = 7.4;
+    const uranusRingGeo = new THREE.RingGeometry(uranusRingInner, uranusRingOuter, 128, 4);
+    const uranusRingCanvas = document.createElement('canvas');
+    uranusRingCanvas.width = 512; uranusRingCanvas.height = 64;
+    const uRCtx = uranusRingCanvas.getContext('2d')!;
+    for (let x = 0; x < 512; x++) {
+      const t = x / 512;
+      let opacity = 0;
+      // Narrow dark rings with gaps
+      if (t > 0.05 && t < 0.08) opacity = 0.12;   // Ring 6
+      if (t > 0.12 && t < 0.15) opacity = 0.1;    // Ring 5
+      if (t > 0.2 && t < 0.24) opacity = 0.15;    // Ring 4
+      if (t > 0.35 && t < 0.4) opacity = 0.12;    // Alpha ring
+      if (t > 0.45 && t < 0.52) opacity = 0.14;   // Beta ring
+      if (t > 0.6 && t < 0.65) opacity = 0.1;     // Eta ring
+      if (t > 0.7 && t < 0.72) opacity = 0.08;    // Gamma ring
+      if (t > 0.75 && t < 0.78) opacity = 0.09;   // Delta ring
+      if (t > 0.82 && t < 0.95) opacity = 0.2 + Math.sin(t * 80) * 0.05; // Epsilon ring (brightest)
+      uRCtx.fillStyle = `rgba(160,170,180,${opacity})`;
+      uRCtx.fillRect(x, 0, 1, 64);
+    }
+    const uranusRingTex = new THREE.CanvasTexture(uranusRingCanvas);
+    uranusRingTex.wrapS = THREE.ClampToEdgeWrapping;
+    const uranusRingMat = new THREE.MeshBasicMaterial({
+      map: uranusRingTex, transparent: true, side: THREE.DoubleSide, depthWrite: false
+    });
+    const urRingPos = uranusRingGeo.attributes['position'];
+    const urRingUv = uranusRingGeo.attributes['uv'] as THREE.BufferAttribute;
+    const urV3 = new THREE.Vector3();
+    for (let i = 0; i < urRingPos.count; i++) {
+      urV3.fromBufferAttribute(urRingPos as THREE.BufferAttribute, i);
+      const dist = urV3.length();
+      urRingUv.setXY(i, (dist - uranusRingInner) / (uranusRingOuter - uranusRingInner), 0.5);
+    }
+    const uranusRing = new THREE.Mesh(uranusRingGeo, uranusRingMat);
+    uranusRing.rotation.x = Math.PI / 2; // Flat ring plane
+    this.uranusGroup.add(uranusRing);
+    this.uranusGroup.position.set(160, -10, 150);
     // Uranus is tilted 98° — rotates nearly on its side
-    this.uranusMesh.rotation.z = 1.71;
+    this.uranusGroup.rotation.z = 1.71;
+    this.scene.add(this.uranusGroup);
 
     // Neptune — farthest giant planet
     // Neptune radius: 24,764 km → 24764/71492 × 10 = 3.464 scene units
-    const neptuneGeo = new THREE.SphereGeometry(3.464, 32, 32);
+    this.neptuneGroup = new THREE.Group();
+    const neptuneGeo = new THREE.SphereGeometry(3.464, 48, 48);
     const neptuneMat = new THREE.MeshStandardMaterial({ color: 0x3366cc, roughness: 0.4, metalness: 0.05 });
     this.neptuneMesh = new THREE.Mesh(neptuneGeo, neptuneMat);
-    this.neptuneMesh.position.set(-180, 15, -160);
-    this.scene.add(this.neptuneMesh);
+    this.neptuneGroup.add(this.neptuneMesh);
+    // Neptune texture
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      this.textureLoader.load('2k_neptune.jpg', (tex) => {
+        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        neptuneMat.map = tex; neptuneMat.color.setHex(0xffffff); neptuneMat.needsUpdate = true;
+        resolve();
+      }, undefined, () => resolve());
+    }));
+    // Neptune atmosphere glow (deep blue)
+    const neptuneAtmoMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPosition, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vec3 viewDir = normalize(-vPosition);
+          float fresnel = 1.0 - dot(viewDir, vNormal);
+          fresnel = pow(fresnel, 3.0);
+          vec3 col = mix(vec3(0.15, 0.3, 0.8), vec3(0.3, 0.5, 1.0), fresnel);
+          gl_FragColor = vec4(col, fresnel * 0.5);
+        }`,
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.neptuneMesh.add(new THREE.Mesh(new THREE.SphereGeometry(3.75, 32, 32), neptuneAtmoMat));
+    // Neptune ring system — faint ring arcs (Adams, Le Verrier, Galle)
+    const neptuneRingInner = 4.6, neptuneRingOuter = 8.7;
+    const neptuneRingGeo = new THREE.RingGeometry(neptuneRingInner, neptuneRingOuter, 128, 4);
+    const neptuneRingCanvas = document.createElement('canvas');
+    neptuneRingCanvas.width = 512; neptuneRingCanvas.height = 64;
+    const nRCtx = neptuneRingCanvas.getContext('2d')!;
+    for (let x = 0; x < 512; x++) {
+      const t = x / 512;
+      let opacity = 0;
+      if (t > 0.05 && t < 0.15) opacity = 0.04; // Galle ring (faint)
+      if (t > 0.35 && t < 0.42) opacity = 0.06; // Le Verrier ring
+      if (t > 0.45 && t < 0.50) opacity = 0.03; // Lassell ring (faint)
+      if (t > 0.75 && t < 0.82) opacity = 0.08 + Math.sin(t * 60) * 0.03; // Adams ring (with arcs)
+      nRCtx.fillStyle = `rgba(140,150,170,${opacity})`;
+      nRCtx.fillRect(x, 0, 1, 64);
+    }
+    const neptuneRingTex = new THREE.CanvasTexture(neptuneRingCanvas);
+    neptuneRingTex.wrapS = THREE.ClampToEdgeWrapping;
+    const neptuneRingMat = new THREE.MeshBasicMaterial({
+      map: neptuneRingTex, transparent: true, side: THREE.DoubleSide, depthWrite: false
+    });
+    const npRingPos = neptuneRingGeo.attributes['position'];
+    const npRingUv = neptuneRingGeo.attributes['uv'] as THREE.BufferAttribute;
+    const npV3 = new THREE.Vector3();
+    for (let i = 0; i < npRingPos.count; i++) {
+      npV3.fromBufferAttribute(npRingPos as THREE.BufferAttribute, i);
+      const dist = npV3.length();
+      npRingUv.setXY(i, (dist - neptuneRingInner) / (neptuneRingOuter - neptuneRingInner), 0.5);
+    }
+    const neptuneRing = new THREE.Mesh(neptuneRingGeo, neptuneRingMat);
+    neptuneRing.rotation.x = Math.PI / 2;
+    this.neptuneGroup.add(neptuneRing);
+    this.neptuneGroup.position.set(-180, 15, -160);
+    this.neptuneGroup.rotation.z = 0.494; // Neptune tilt: 28.3°
+    this.scene.add(this.neptuneGroup);
 
   }
 
@@ -3515,6 +3934,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     this.updateAtmosphere(time);
     if (this.tourActive) this.updatePlanetTour(time);
+    this.updateFalcon9(time);
     this.updateCamera();
     this.updateJupiterRotation();
 
@@ -3557,6 +3977,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Rotate Neptune
     if (this.neptuneMesh) {
       this.neptuneMesh.rotation.y += 0.0004;
+    }
+    // Rotate Earth cloud layer (slightly faster than Earth itself)
+    if (this.earthCloudsMesh) {
+      this.earthCloudsMesh.rotation.y += 0.0006;
     }
 
     // Update aurora shaders

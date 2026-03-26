@@ -702,7 +702,7 @@ export class App implements AfterViewInit {
     'zon': { title: 'De Zon', icon: '☀️', facts: ['Onze eigen ster!', '5.500°C aan de buitenkant', '1,3 miljoen keer zo groot als de aarde', 'Geeft licht en warmte aan alle planeten'] },
     'mercurius': { title: 'Mercurius', icon: '🟤', facts: ['De kleinste planeet', 'Het dichtst bij de zon', 'Overdag 430°C, \'s nachts -180°C', 'Geen dampkring, vol kraters'] },
     'venus': { title: 'Venus', icon: '🟡', facts: ['De heetste planeet: 465°C!', 'Dikke wolken van zwavelzuur', 'Draait de verkeerde kant op', 'Bijna net zo groot als de aarde'] },
-    'aarde': { title: 'De Aarde', icon: '🌍', facts: ['Ons thuis!', 'De enige planeet met vloeibaar water', 'Eén maan: de Maan', 'Perfecte afstand tot de zon voor leven'] },
+    'aarde': { title: 'De Aarde', icon: '🌍', facts: ['Ons thuis!', 'De enige planeet met vloeibaar water', 'Kijk! Een SpaceX Falcon 9 vertrekt naar Mars! 🚀', 'SpaceX wil mensen naar Mars sturen'] },
     'mars': { title: 'Mars', icon: '🔴', facts: ['De rode planeet', 'Heeft de hoogste berg: Olympus Mons', 'Robots rijden er al rond!', 'Misschien ooit water gehad'] },
     'saturnus': { title: 'Saturnus', icon: '🪐', facts: ['Beroemd om z\'n prachtige ringen!', 'De ringen zijn van ijs en rots', 'Zo licht dat het zou drijven op water', '146 manen, waaronder Titan'] },
     'uranus': { title: 'Uranus', icon: '🔵', facts: ['Draait op z\'n zij! (98° kantel)', 'IJskoud: -224°C', 'Blauw-groen door methaan', '27 manen die eromheen draaien'] },
@@ -783,8 +783,9 @@ export class App implements AfterViewInit {
     const dir = this.direction();
 
     if (this.crawlContainer?.nativeElement) {
+      const crawlEl = this.crawlContainer.nativeElement;
       animate(
-        this.crawlContainer.nativeElement,
+        crawlEl,
         { 
           y: [dir === 1 ? '40vh' : '-40vh', '0vh'],
           opacity: [0, 1],
@@ -793,7 +794,12 @@ export class App implements AfterViewInit {
           scale: [0.8, 1]
         },
         { duration: 1.2, ease: 'easeOut' }
-      ).finished.then(() => this.isTransitioning.set(false));
+      ).finished.then(() => {
+        // Clear committed inline styles so CSS classes (like opacity-0 for tour fade) can take effect
+        crawlEl.style.removeProperty('opacity');
+        crawlEl.style.removeProperty('filter');
+        this.isTransitioning.set(false);
+      });
     }
 
     if (this.slideContainer?.nativeElement) {

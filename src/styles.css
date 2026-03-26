@@ -1,0 +1,17 @@
+/* You can add global styles to this file, and also import other style files */
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+@import url('https://fonts.googleapis.com/css2?family=Pathway+Gothic+One&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-starwars: "Pathway Gothic One", sans-serif;
+  --color-starwars-yellow: #FFE81F;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #000;
+  color: white;
+}

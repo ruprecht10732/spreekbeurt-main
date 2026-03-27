@@ -885,7 +885,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Cinematic soft penumbra shadows
+    this.renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoftShadowMap is deprecated, use PCF
     this.renderer.toneMappingExposure = 1.3;
     container.appendChild(this.renderer.domElement);
 
@@ -2107,7 +2107,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunLight.shadow.camera.left = -18;
     this.sunLight.shadow.camera.right = 18;
     this.sunLight.shadow.bias = -0.0001; // Tighter bias for crisp edges
-    this.sunLight.shadow.normalBias = 0.02;
+    this.sunLight.shadow.normalBias = 0.02; // Prevents shadow acne on curved planets
+    this.sunLight.shadow.radius = 1.5; // Softens the shadow edges to replace PCFSoftShadowMap
     this.sunLight.shadow.mapSize.width = 4096;
     this.sunLight.shadow.mapSize.height = 4096;
     this.scene.add(this.sunLight);

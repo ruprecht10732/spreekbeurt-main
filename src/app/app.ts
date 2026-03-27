@@ -201,39 +201,6 @@ interface CelebrationFrameState {
             }
           </div>
         </div>
-        <!-- Planet Tour Overlay — stat cards styled like slide floating data widgets -->
-        @if (tourMode() && tourCurrentPlanet() && planetFacts[tourCurrentPlanet()]) {
-          @let pf = planetFacts[tourCurrentPlanet()];
-          <div class="absolute inset-0 pointer-events-none">
-            <!-- Readability gradients -->
-            <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/10 to-transparent"></div>
-            <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/15"></div>
-            <!-- Tour stats panel — bottom left -->
-            <div class="absolute bottom-20 left-8 md:left-12 tour-facts-card">
-              <!-- Accent bar + planet name -->
-              <div class="tour-accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_10px_rgba(255,232,31,0.35)]"></div>
-              <div class="flex items-center gap-2.5 mb-5">
-                <span class="text-3xl leading-none">{{ pf.icon }}</span>
-                <h2 class="text-3xl md:text-5xl font-starwars uppercase tracking-wider drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]"
-                    [style.color]="pf.color">{{ pf.title }}</h2>
-              </div>
-              <!-- 2x2 stat card grid -->
-              <div class="grid grid-cols-2 gap-x-10 gap-y-6">
-                @for (stat of pf.stats; track $index) {
-                  <div class="tour-stat-card" [style.animation-delay]="($index * 130 + 150) + 'ms'">
-                    <div class="text-xs font-mono tracking-[0.25em] mb-1 text-white/55">{{ stat.label }}</div>
-                    <div class="text-3xl md:text-4xl font-starwars tabular-nums leading-tight"
-                         [style.color]="pf.color"
-                         [style.text-shadow]="'0 0 20px ' + pf.color">{{ stat.value }}</div>
-                    @if (stat.sub) {
-                      <div class="text-sm text-white/50 mt-1 max-w-[170px]">{{ stat.sub }}</div>
-                    }
-                  </div>
-                }
-              </div>
-            </div>
-          </div>
-        }
       } @else {
         <!-- Gradient overlays for text readability -->
         <div class="absolute inset-0 pointer-events-none" [class]="videoRevealed() ? 'video-readability-overlay' : ''">
@@ -475,6 +442,40 @@ interface CelebrationFrameState {
             </div>
           }
 
+        </div>
+      }
+
+      <!-- Planet Tour Overlay — stat cards styled like slide floating data widgets -->
+      @if (tourMode() && tourCurrentPlanet() && planetFacts[tourCurrentPlanet()]) {
+        @let pf = planetFacts[tourCurrentPlanet()];
+        <div class="absolute inset-0 pointer-events-none">
+          <!-- Readability gradients -->
+          <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/10 to-transparent"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/15"></div>
+          <!-- Tour stats panel — bottom left -->
+          <div class="absolute bottom-20 left-8 md:left-12 tour-facts-card">
+            <!-- Accent bar + planet name -->
+            <div class="tour-accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_10px_rgba(255,232,31,0.35)]"></div>
+            <div class="flex items-center gap-2.5 mb-5">
+              <span class="text-3xl leading-none">{{ pf.icon }}</span>
+              <h2 class="text-3xl md:text-5xl font-starwars uppercase tracking-wider drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]"
+                  [style.color]="pf.color">{{ pf.title }}</h2>
+            </div>
+            <!-- 2x2 stat card grid -->
+            <div class="grid grid-cols-2 gap-x-10 gap-y-6">
+              @for (stat of pf.stats; track $index) {
+                <div class="tour-stat-card" [style.animation-delay]="($index * 130 + 150) + 'ms'">
+                  <div class="text-xs font-mono tracking-[0.25em] mb-1 text-white/55">{{ stat.label }}</div>
+                  <div class="text-3xl md:text-4xl font-starwars tabular-nums leading-tight"
+                       [style.color]="pf.color"
+                       [style.text-shadow]="'0 0 20px ' + pf.color">{{ stat.value }}</div>
+                  @if (stat.sub) {
+                    <div class="text-sm text-white/50 mt-1 max-w-[170px]">{{ stat.sub }}</div>
+                  }
+                </div>
+              }
+            </div>
+          </div>
         </div>
       }
 

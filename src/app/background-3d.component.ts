@@ -354,11 +354,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.earthMesh.position.set(-8, 2, -5);
       this.tourStops.push({ name: 'aarde' });
     }
-    if (this.moonMesh) {
-      this.tourStops.push({ name: 'maan' });
-    }
     if (this.marsMesh) {
       this.tourStops.push({ name: 'mars' });
+    }
+    if (this.moonMesh) {
+      this.tourStops.push({ name: 'maan' });
     }
     if (this.starmanGroup) {
       this.tourStops.push({ name: 'starman' });
@@ -1911,7 +1911,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Death Star with superlaser
     this.createDeathStar();
-    this.createPlutoExplosionVFX();
 
     // Lightsaber duel (Sith vs Jedi easter egg)
     this.createLightsaberDuel();
@@ -4195,6 +4194,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoMesh = new THREE.Mesh(plutoGeo, plutoMat);
       this.plutoMesh.position.set(-240, -25, -220);
       this.scene.add(this.plutoMesh);
+      this.createPlutoExplosionVFX();
       this.loadPromises.push(new Promise<void>((resolve) => {
         this.textureLoader.load('8k_moon.webp', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;

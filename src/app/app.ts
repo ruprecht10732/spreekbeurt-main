@@ -241,7 +241,9 @@ interface CelebrationFrameState {
           <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25"></div>
         </div>
 
-        <div #slideContainer class="relative w-full h-full pointer-events-auto">
+           <div #slideContainer
+             class="relative w-full h-full pointer-events-auto transition-opacity duration-[1800ms]"
+             [class.opacity-0]="currentSlide().id === 'afsluiting' && tourMode()">
 
           <!-- Floating title — top-left -->
           <div class="absolute top-10 left-10 md:left-14 z-10">
@@ -547,7 +549,9 @@ export class App implements AfterViewInit, OnDestroy {
   private audioCtx: AudioContext | null = null;
   private falconAudioPlaying = false;
   private moonAudioPlayed = false;
+  private moonAudioSequenceId = 0;
   private readonly moonAudioTimers: ReturnType<typeof setTimeout>[] = [];
+  private readonly nasaClipBufferCache = new Map<string, Promise<AudioBuffer>>();
 
   currentSlide = computed(() => this.slides[this.currentIndex()]);
   totalSlides = computed(() => this.slides.length);
@@ -1023,11 +1027,41 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   private playMoonLandingAudioSequence() {
+    const sequenceId = this.beginMoonAudioSequence();
+    void this.runMoonLandingAudioSequence(sequenceId);
+  }
+
+  private beginMoonAudioSequence(): number {
     this.clearMoonAudioTimers();
+    this.moonAudioSequenceId += 1;
     this.fadeBgMusicTo(0.08);
-    this.queueMoonAudio(1000, () => void this.playNasaClip('contact_light.mp3', 0.35));
-    this.queueMoonAudio(4000, () => void this.playNasaClip(['one_small_step.oga', 'one_small_step.mp3', 'a11_step.wav'], 0.7));
-    this.queueMoonAudio(14000, () => this.fadeBgMusicTo(0.3));
+    return this.moonAudioSequenceId;
+  }
+
+  private async runMoonLandingAudioSequence(sequenceId: number) {
+    if (!await this.waitForMoonAudio(900, sequenceId)) {
+      return;
+    }
+
+    const contactDuration = await this.playNasaClip('contact_light.mp3', 0.35, sequenceId);
+    if (!this.isMoonAudioSequenceCurrent(sequenceId)) {
+      return;
+    }
+
+    if (!await this.waitForMoonAudio(contactDuration * 1000 + 650, sequenceId)) {
+      return;
+    }
+
+    const stepDuration = await this.playNasaClip(['one_small_step.oga', 'one_small_step.mp3', 'a11_step.wav'], 0.7, sequenceId);
+    if (!this.isMoonAudioSequenceCurrent(sequenceId)) {
+      return;
+    }
+
+    if (!await this.waitForMoonAudio(stepDuration * 1000 + 800, sequenceId)) {
+      return;
+    }
+
+    this.fadeBgMusicTo(0.3);
   }
 
   private queueMoonAudio(delayMs: number, playback: () => void) {
@@ -1043,6 +1077,22 @@ export class App implements AfterViewInit, OnDestroy {
 
   private clearMoonAudioTimers() {
     this.moonAudioTimers.splice(0).forEach((timer) => clearTimeout(timer));
+    this.moonAudioSequenceId += 1;
+  }
+
+  private waitForMoonAudio(delayMs: number, sequenceId: number): Promise<boolean> {
+    return new Promise((resolve) => {
+      if (!this.isMoonAudioSequenceCurrent(sequenceId)) {
+        resolve(false);
+        return;
+      }
+
+      this.queueMoonAudio(delayMs, () => resolve(this.isMoonAudioSequenceCurrent(sequenceId)));
+    });
+  }
+
+  private isMoonAudioSequenceCurrent(sequenceId: number): boolean {
+    return this.moonAudioSequenceId === sequenceId && this.moonAudioPlayed && !this.isMuted();
   }
 
   /** Play a voice line through radio static (Web Audio + Speech Synthesis) */
@@ -1095,30 +1145,15 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   /** Play a real NASA audio clip with radio-static overlay */
-  private async playNasaClip(url: string | string[], volume: number) {
-    if (!this.isBrowser) return;
+  private async playNasaClip(url: string | string[], volume: number, sequenceId?: number): Promise<number> {
+    if (!this.isBrowser) return 0;
     const ctx = this.getOrCreateAudioContext();
     const urls = Array.isArray(url) ? url : [url];
 
     try {
-      let audioBuffer: AudioBuffer | null = null;
-      let lastError: unknown;
-      for (const candidateUrl of urls) {
-        try {
-          const response = await fetch(candidateUrl);
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status} for ${candidateUrl}`);
-          }
-          const arrayBuffer = await response.arrayBuffer();
-          audioBuffer = await ctx.decodeAudioData(arrayBuffer);
-          break;
-        } catch (error) {
-          lastError = error;
-        }
-      }
-
-      if (!audioBuffer) {
-        throw lastError ?? new Error('No NASA audio sources could be decoded');
+      const { audioBuffer } = await this.resolveNasaClip(urls);
+      if (sequenceId !== undefined && !this.isMoonAudioSequenceCurrent(sequenceId)) {
+        return 0;
       }
 
       // Play NASA audio — no extra filter, the original already has the radio quality
@@ -1153,9 +1188,50 @@ export class App implements AfterViewInit, OnDestroy {
       noiseSource.stop(ctx.currentTime + noiseDuration);
       noiseGain.gain.setValueAtTime(volume * 0.15, ctx.currentTime + noiseDuration - 0.8);
       noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + noiseDuration);
+      return audioBuffer.duration;
     } catch (e) {
       console.warn('NASA audio clip failed to load', e);
+      return 0;
     }
+  }
+
+  private async resolveNasaClip(urls: string[]): Promise<{ audioBuffer: AudioBuffer; sourceUrl: string }> {
+    let lastError: unknown;
+
+    for (const candidateUrl of urls) {
+      try {
+        const audioBuffer = await this.getCachedNasaClipBuffer(candidateUrl);
+        return { audioBuffer, sourceUrl: candidateUrl };
+      } catch (error) {
+        lastError = error;
+      }
+    }
+
+    throw lastError ?? new Error('No NASA audio sources could be decoded');
+  }
+
+  private getCachedNasaClipBuffer(url: string): Promise<AudioBuffer> {
+    const cached = this.nasaClipBufferCache.get(url);
+    if (cached) {
+      return cached;
+    }
+
+    const request = this.fetchNasaClipBuffer(url).catch((error) => {
+      this.nasaClipBufferCache.delete(url);
+      throw error;
+    });
+    this.nasaClipBufferCache.set(url, request);
+    return request;
+  }
+
+  private async fetchNasaClipBuffer(url: string): Promise<AudioBuffer> {
+    const ctx = this.getOrCreateAudioContext();
+    const response = await fetch(url);
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status} for ${url}`);
+    }
+    const arrayBuffer = await response.arrayBuffer();
+    return ctx.decodeAudioData(arrayBuffer.slice(0));
   }
 
   /** Procedural rocket launch rumble using Web Audio API */

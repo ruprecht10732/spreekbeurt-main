@@ -226,6 +226,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private superlaserFiring = false;
   private superlaserTimer = 0;
 
+  // Death Star → Pluto destruction sequence
+  private plutoDestroyed = false;
+  private deathStarPlutoAttackStarted = false;
+  private deathStarPlutoFlyTime = 0;
+  private plutoExplosion: THREE.Points | null = null;
+  private plutoExplosionTime = 0;
+
+  // JULIANASCHOOL text reveal after Pluto destruction
+  private julianaSchoolText: THREE.Points | null = null;
+  private julianaSchoolRevealTime = 0;
+
   // Lightsaber duel
   private lightsaberGroup!: THREE.Group;
   private saberRed!: THREE.Mesh;
@@ -341,6 +352,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (this.marsMesh) {
       this.tourStops.push({ name: 'mars' });
     }
+    if (this.starmanGroup) {
+      this.tourStops.push({ name: 'starman' });
+    }
     if (this.saturnGroup) {
       this.tourStops.push({ name: 'saturnus' });
     }
@@ -394,6 +408,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.tourPlanet.emit(this.tourStops[this.tourStopIndex].name);
       if (this.tourStops[this.tourStopIndex].name === 'aarde' && !this.falconLaunched) {
         setTimeout(() => this.launchFalcon9(), 1500);
+      }
+      // Trigger Death Star attack on Pluto
+      if (this.tourStops[this.tourStopIndex].name === 'pluto' && !this.deathStarPlutoAttackStarted && !this.plutoDestroyed) {
+        this.deathStarPlutoAttackStarted = true;
+        this.deathStarPlutoFlyTime = time;
       }
     } else {
       this.activeCameraAnchorKey = stop.name;
@@ -1316,13 +1335,52 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       // ─── Apollo 11 "Tranquility Base" artifacts on the Moon surface ─────
       this.tranquilityGroup = new THREE.Group();
 
-      // Lunar Module Descent Stage — gold-foil body on 4 legs
+      // Lunar Module Descent Stage — gold-foil octagonal body on 4 legs
       const lmBody = new THREE.Mesh(
-        new THREE.BoxGeometry(0.018, 0.012, 0.018),
-        new THREE.MeshStandardMaterial({ color: 0xccaa44, roughness: 0.4, metalness: 0.7 })
+        new THREE.CylinderGeometry(0.016, 0.018, 0.014, 8),
+        new THREE.MeshStandardMaterial({ color: 0xccaa44, roughness: 0.35, metalness: 0.75, emissive: 0x221800, emissiveIntensity: 0.15 })
       );
-      lmBody.position.y = 0.012;
+      lmBody.position.y = 0.014;
       this.tranquilityGroup.add(lmBody);
+
+      // Ascent Stage — upper cabin (lighter grey, boxy)
+      const ascentStage = new THREE.Mesh(
+        new THREE.BoxGeometry(0.013, 0.011, 0.013),
+        new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.45, metalness: 0.65 })
+      );
+      ascentStage.position.y = 0.027;
+      this.tranquilityGroup.add(ascentStage);
+
+      // Triangular windows on ascent stage
+      const windowMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.1, metalness: 0.9 });
+      for (let side = -1; side <= 1; side += 2) {
+        const win = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.003), windowMat);
+        win.position.set(side * 0.0066, 0.029, 0);
+        win.rotation.y = side * Math.PI / 2;
+        this.tranquilityGroup.add(win);
+      }
+
+      // RCS thrusters (small nozzles on the sides)
+      const nozzleMat = new THREE.MeshStandardMaterial({ color: 0x555555, roughness: 0.3, metalness: 0.8 });
+      for (let i = 0; i < 4; i++) {
+        const angle = (i / 4) * Math.PI * 2 + Math.PI / 4;
+        const nozzle = new THREE.Mesh(new THREE.ConeGeometry(0.0015, 0.004, 6), nozzleMat);
+        nozzle.position.set(Math.cos(angle) * 0.008, 0.027, Math.sin(angle) * 0.008);
+        nozzle.rotation.z = Math.cos(angle) * 0.5;
+        nozzle.rotation.x = Math.sin(angle) * 0.5;
+        this.tranquilityGroup.add(nozzle);
+      }
+
+      // Antenna on top
+      const antennaMat = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, roughness: 0.4, metalness: 0.7 });
+      const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.0004, 0.0004, 0.012, 4), antennaMat);
+      antenna.position.y = 0.038;
+      this.tranquilityGroup.add(antenna);
+      const antennaDish = new THREE.Mesh(new THREE.CircleGeometry(0.003, 8), antennaMat);
+      antennaDish.position.y = 0.044;
+      antennaDish.rotation.x = -0.3;
+      this.tranquilityGroup.add(antennaDish);
+
       // LM platform / base plate (silver)
       const lmBase = new THREE.Mesh(
         new THREE.CylinderGeometry(0.014, 0.014, 0.003, 8),
@@ -1330,7 +1388,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       );
       lmBase.position.y = 0.005;
       this.tranquilityGroup.add(lmBase);
-      // 4 landing legs
+      // 4 landing legs with struts
       const legMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.5, metalness: 0.6 });
       for (let i = 0; i < 4; i++) {
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.001, 0.016, 4), legMat);
@@ -1346,6 +1404,29 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         );
         pad.position.set(Math.cos(angle) * 0.018, 0.001, Math.sin(angle) * 0.018);
         this.tranquilityGroup.add(pad);
+        // Strut (diagonal support from base to mid-leg)
+        const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, 0.012, 3), legMat);
+        strut.position.set(Math.cos(angle) * 0.01, 0.008, Math.sin(angle) * 0.01);
+        strut.rotation.z = Math.cos(angle) * 0.2;
+        strut.rotation.x = Math.sin(angle) * 0.2;
+        this.tranquilityGroup.add(strut);
+      }
+
+      // Descent engine nozzle (underneath body)
+      const nozzleGeo = new THREE.ConeGeometry(0.005, 0.008, 8, 1, true);
+      const engineNozzle = new THREE.Mesh(nozzleGeo, new THREE.MeshStandardMaterial({
+        color: 0x444444, roughness: 0.3, metalness: 0.85, side: THREE.DoubleSide
+      }));
+      engineNozzle.position.y = 0.003;
+      engineNozzle.rotation.x = Math.PI;
+      this.tranquilityGroup.add(engineNozzle);
+
+      // Ladder on one leg
+      const ladderMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 });
+      for (let r = 0; r < 5; r++) {
+        const rung = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.0005, 0.001), ladderMat);
+        rung.position.set(0.016, 0.003 + r * 0.003, 0);
+        this.tranquilityGroup.add(rung);
       }
 
       // Bootprint in the dust — iconic single print
@@ -1374,6 +1455,31 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       bootprint.rotation.x = -Math.PI / 2;
       bootprint.position.set(0.025, 0.0005, 0.01);
       this.tranquilityGroup.add(bootprint);
+
+      // Second bootprint — walking away from LM
+      const bootprint2 = bootprint.clone();
+      bootprint2.position.set(0.029, 0.0005, 0.016);
+      bootprint2.rotation.z = 0.15;
+      this.tranquilityGroup.add(bootprint2);
+
+      // ALSEP science package — seismometer etc.
+      const alsep = new THREE.Group();
+      const alsepBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.004, 0.003, 0.004),
+        new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5, metalness: 0.4 })
+      );
+      alsepBody.position.y = 0.002;
+      alsep.add(alsepBody);
+      // Solar panel array on ALSEP
+      const solarPanel = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.006, 0.003),
+        new THREE.MeshStandardMaterial({ color: 0x2244aa, roughness: 0.3, metalness: 0.5, side: THREE.DoubleSide })
+      );
+      solarPanel.position.set(0, 0.004, 0);
+      solarPanel.rotation.x = -0.3;
+      alsep.add(solarPanel);
+      alsep.position.set(-0.03, 0, -0.02);
+      this.tranquilityGroup.add(alsep);
 
       // Fallen Apollo 11 flag — bleached white, lying on the surface
       const flagPole = new THREE.Mesh(
@@ -1866,6 +1972,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         return this.moonMesh?.position ?? this.getSlideCameraAnchor();
       case 'mars':
         return this.marsMesh?.position ?? this.getSlideCameraAnchor();
+      case 'starman':
+        return this.starmanGroup?.position ?? this.getSlideCameraAnchor();
       case 'saturnus':
         return this.saturnGroup?.position ?? this.getSlideCameraAnchor();
       case 'uranus':
@@ -2180,7 +2288,110 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Slow rotation
     this.deathStarGroup.rotation.y += 0.0003;
 
-    // Periodic superlaser firing (every ~30 seconds, lasts 2s)
+    // ─── Pluto destruction sequence ────────────────────────────────────
+    if (this.deathStarPlutoAttackStarted && !this.plutoDestroyed) {
+      const flyElapsed = time - this.deathStarPlutoFlyTime;
+      const flyDuration = 4; // seconds to fly to Pluto
+      const plutoPos = this.plutoMesh?.position;
+      if (!plutoPos) return;
+
+      if (flyElapsed < flyDuration) {
+        // Fly Death Star toward Pluto — approach from above-right
+        const t = flyElapsed / flyDuration;
+        const ease = t * t * (3 - 2 * t); // smoothstep
+        const targetX = plutoPos.x + 4;
+        const targetY = plutoPos.y + 3;
+        const targetZ = plutoPos.z + 4;
+        const jp = this.jupiterGroup.position;
+        const startX = jp.x + 45;
+        const startY = jp.y + 12;
+        const startZ = jp.z - 30;
+        this.deathStarGroup.position.set(
+          startX + (targetX - startX) * ease,
+          startY + (targetY - startY) * ease,
+          startZ + (targetZ - startZ) * ease
+        );
+      } else if (flyElapsed < flyDuration + 0.5) {
+        // Charge superlaser — aim at Pluto
+        if (!this.superlaserFiring) {
+          this.superlaserFiring = true;
+          this.superlaserTimer = time;
+          this.superlaserBeam.visible = true;
+          // Point beam toward Pluto
+          this.superlaserBeam.lookAt(
+            plutoPos.x - this.deathStarGroup.position.x,
+            plutoPos.y - this.deathStarGroup.position.y,
+            plutoPos.z - this.deathStarGroup.position.z
+          );
+        }
+        const chargeT = (flyElapsed - flyDuration) / 0.5;
+        const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
+        mat.uniforms['uOpacity'].value = chargeT * 0.9;
+        this.superlaserBeam.scale.set(chargeT, 1, chargeT);
+      } else if (flyElapsed < flyDuration + 2.0) {
+        // Full fire at Pluto
+        const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
+        mat.uniforms['uOpacity'].value = 0.7 + Math.random() * 0.3;
+        this.superlaserBeam.scale.set(1, 1, 1);
+      } else if (flyElapsed < flyDuration + 2.5) {
+        // Explosion! Hide Pluto, create debris
+        if (!this.plutoDestroyed) {
+          this.plutoDestroyed = true;
+          if (this.plutoMesh) this.plutoMesh.visible = false;
+          this.createPlutoExplosion(plutoPos);
+          this.plutoExplosionTime = time;
+          // Fade beam
+          const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
+          const t = (flyElapsed - (flyDuration + 2.0)) / 0.5;
+          mat.uniforms['uOpacity'].value = (1 - t) * 0.9;
+          this.superlaserBeam.scale.set(1 - t, 1, 1 - t);
+        }
+      }
+      return; // Skip normal firing logic during Pluto attack
+    }
+
+    // ─── Pluto explosion debris animation ──────────────────────────────
+    if (this.plutoExplosion) {
+      const explElapsed = time - this.plutoExplosionTime;
+      if (explElapsed < 6) {
+        const positions = this.plutoExplosion.geometry.getAttribute('position') as THREE.BufferAttribute;
+        const velocities = this.plutoExplosion.userData['velocities'] as Float32Array;
+        const count = positions.count;
+        for (let i = 0; i < count; i++) {
+          positions.setXYZ(i,
+            positions.getX(i) + velocities[i * 3] * 0.016,
+            positions.getY(i) + velocities[i * 3 + 1] * 0.016,
+            positions.getZ(i) + velocities[i * 3 + 2] * 0.016
+          );
+        }
+        positions.needsUpdate = true;
+        // Fade out over time
+        const mat = this.plutoExplosion.material as THREE.PointsMaterial;
+        mat.opacity = Math.max(0, 1 - explElapsed / 5);
+      } else {
+        this.scene.remove(this.plutoExplosion);
+        this.plutoExplosion.geometry.dispose();
+        (this.plutoExplosion.material as THREE.Material).dispose();
+        this.plutoExplosion = null;
+        // Reveal JULIANASCHOOL text
+        this.createJulianaSchoolText();
+      }
+      // Beam cleanup after explosion
+      if (this.superlaserFiring) {
+        this.superlaserBeam.visible = false;
+        this.superlaserFiring = false;
+      }
+      return;
+    }
+
+    // ─── JULIANASCHOOL text fade-in ────────────────────────────────────
+    if (this.julianaSchoolText) {
+      const revealElapsed = time - this.julianaSchoolRevealTime;
+      const mat = this.julianaSchoolText.material as THREE.PointsMaterial;
+      mat.opacity = Math.min(1, revealElapsed / 3); // 3-second fade in
+    }
+
+    // ─── Normal periodic superlaser firing (every ~30s, lasts 2s) ──────
     if (!this.superlaserFiring && time - this.superlaserTimer > 30) {
       this.superlaserFiring = true;
       this.superlaserTimer = time;
@@ -2209,6 +2420,121 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.superlaserFiring = false;
       }
     }
+  }
+
+  private createPlutoExplosion(center: THREE.Vector3) {
+    const count = 300;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+    const velocities = new Float32Array(count * 3);
+
+    for (let i = 0; i < count; i++) {
+      // Start from Pluto's center
+      positions[i * 3] = center.x + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 1] = center.y + (Math.random() - 0.5) * 0.3;
+      positions[i * 3 + 2] = center.z + (Math.random() - 0.5) * 0.3;
+
+      // Random outward velocity
+      const speed = 0.5 + Math.random() * 2;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed;
+      velocities[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
+      velocities[i * 3 + 2] = Math.cos(phi) * speed;
+
+      // Mix of orange/white/yellow debris
+      const brightness = 0.5 + Math.random() * 0.5;
+      colors[i * 3] = brightness;
+      colors[i * 3 + 1] = brightness * (0.4 + Math.random() * 0.4);
+      colors[i * 3 + 2] = brightness * Math.random() * 0.3;
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.15,
+      vertexColors: true,
+      transparent: true,
+      opacity: 1,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.plutoExplosion = new THREE.Points(geo, mat);
+    this.plutoExplosion.userData['velocities'] = velocities;
+    this.scene.add(this.plutoExplosion);
+  }
+
+  private createJulianaSchoolText() {
+    const text = 'JULIANASCHOOL';
+    // Generate star points positioned to spell the text
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d')!;
+    canvas.width = 512;
+    canvas.height = 64;
+    ctx.clearRect(0, 0, 512, 64);
+    ctx.font = 'bold 48px Inter, Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(text, 256, 32);
+
+    // Sample pixel positions to create star particles
+    const imageData = ctx.getImageData(0, 0, 512, 64);
+    const points: [number, number][] = [];
+    for (let y = 0; y < 64; y += 2) {
+      for (let x = 0; x < 512; x += 2) {
+        if (imageData.data[(y * 512 + x) * 4 + 3] > 128) {
+          points.push([x, y]);
+        }
+      }
+    }
+
+    // Use every Nth point to keep particle count reasonable
+    const maxParticles = 600;
+    const step = Math.max(1, Math.floor(points.length / maxParticles));
+    const usedPoints: [number, number][] = [];
+    for (let i = 0; i < points.length; i += step) {
+      usedPoints.push(points[i]);
+    }
+
+    const count = usedPoints.length;
+    const positions = new Float32Array(count * 3);
+    const colors = new Float32Array(count * 3);
+
+    // Center: where Pluto was
+    const center = this.plutoMesh?.position ?? new THREE.Vector3(-240, -25, -220);
+    const textScale = 0.025; // Scale text to scene units
+    const textWidth = 512 * textScale;
+    const textHeight = 64 * textScale;
+
+    for (let i = 0; i < count; i++) {
+      const [px, py] = usedPoints[i];
+      positions[i * 3] = center.x + (px * textScale - textWidth / 2) + (Math.random() - 0.5) * 0.05;
+      positions[i * 3 + 1] = center.y + 2 + (-py * textScale + textHeight / 2) + (Math.random() - 0.5) * 0.05;
+      positions[i * 3 + 2] = center.z + (Math.random() - 0.5) * 0.1;
+
+      // Warm white / gold star colors
+      const brightness = 0.7 + Math.random() * 0.3;
+      colors[i * 3] = brightness;
+      colors[i * 3 + 1] = brightness * (0.85 + Math.random() * 0.15);
+      colors[i * 3 + 2] = brightness * (0.5 + Math.random() * 0.3);
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    const mat = new THREE.PointsMaterial({
+      size: 0.12,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.julianaSchoolText = new THREE.Points(geo, mat);
+    this.julianaSchoolRevealTime = (Date.now() - this.startTime) * 0.001;
+    this.scene.add(this.julianaSchoolText);
   }
 
   private createLightsaberDuel() {
@@ -3403,7 +3729,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (light) light.intensity = 0;
     // Clear telemetry HUD
     this.ngZone.run(() => this.telemetry.emit(null));
-    // Resume planet tour — reset the stop timer so we get a full dwell before moving on
+    // Skip ahead in tour — don't return to Earth, jump to the stop after Mars
+    const marsIdx = this.tourStops.findIndex(s => s.name === 'mars');
+    if (marsIdx >= 0 && marsIdx + 1 < this.tourStops.length) {
+      this.tourStopIndex = marsIdx + 1;
+      this.activeCameraAnchorKey = this.tourStops[this.tourStopIndex].name;
+      this.transitionTheatreCameraToKey(this.tourStops[this.tourStopIndex].name);
+      this.tourPlanet.emit(this.tourStops[this.tourStopIndex].name);
+    }
     this.tourStopTime = (Date.now() - this.startTime) * 0.001;
   }
 
@@ -3491,26 +3824,39 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const mat = this.falconExhaust.material as THREE.ShaderMaterial;
     mat.uniforms['uTime'].value = time - this.falconLaunchTime;
 
-    // 3. Cinematic Camera Tracking (faster lerp for snappy follow)
+    // 3. Cinematic Camera Tracking
     this.cameraLerpSpeed = 0.06;
-    if (t < 0.3 && this.earthMesh) {
-      // Ground Tracking Cam — looking up from Earth
-      this.targetCameraX = this.earthMesh.position.x - 2;
-      this.targetCameraY = this.earthMesh.position.y + 1;
-      this.targetCameraZ = this.earthMesh.position.z + 5;
+    if (t < 0.12 && this.earthMesh) {
+      // Close-up ground cam — low angle looking up at launch
+      this.targetCameraX = this.earthMesh.position.x + 0.8;
+      this.targetCameraY = this.earthMesh.position.y + 0.3;
+      this.targetCameraZ = this.earthMesh.position.z + 1.8;
+      this.targetLookAt.copy(targetPosition);
+    } else if (t < 0.3 && this.earthMesh) {
+      // Pull-back tracking shot — wider view of ascent
+      const lerpT = (t - 0.12) / 0.18;
+      this.targetCameraX = this.earthMesh.position.x - 1.5 - lerpT * 1.5;
+      this.targetCameraY = this.earthMesh.position.y + 1.5 + lerpT * 2;
+      this.targetCameraZ = this.earthMesh.position.z + 4 + lerpT * 2;
       this.targetLookAt.copy(targetPosition);
     } else if (t < 0.8) {
-      // Chase Cam — following the rocket through space
-      const offset = new THREE.Vector3(1.5, 0.5, 3).applyQuaternion(this.falconGroup.quaternion);
+      // Chase Cam — following the rocket through space, offset rotates for visual interest
+      const chaseT = (t - 0.3) / 0.5;
+      const angle = chaseT * 0.8;
+      const offset = new THREE.Vector3(
+        Math.cos(angle) * 2.5,
+        0.8 + Math.sin(chaseT * Math.PI) * 1.0,
+        Math.sin(angle) * 2.5 + 2
+      );
       this.targetCameraX = targetPosition.x + offset.x;
       this.targetCameraY = targetPosition.y + offset.y;
       this.targetCameraZ = targetPosition.z + offset.z;
       this.targetLookAt.copy(targetPosition);
     } else if (this.marsMesh) {
-      // Landing Pad Cam — looking up from Mars
-      this.targetCameraX = this.marsMesh.position.x + 2;
-      this.targetCameraY = this.marsMesh.position.y + 0.5;
-      this.targetCameraZ = this.marsMesh.position.z + 3;
+      // Landing Pad Cam — low angle from Mars surface looking up
+      this.targetCameraX = this.marsMesh.position.x + 1.5;
+      this.targetCameraY = this.marsMesh.position.y + 0.3;
+      this.targetCameraZ = this.marsMesh.position.z + 2.5;
       this.targetLookAt.copy(targetPosition);
       // Gentle landing vibration — smooth sine-based, not random jitter
       const landT = (time - this.falconLaunchTime) * 12;
@@ -4040,6 +4386,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const neptuneLabel = this.createLabelSprite('Neptunus', 1.8);
     neptuneLabel.position.set(0, 5, 0);
     this.neptuneMesh.add(neptuneLabel);
+
+    // Pluto
+    const plutoLabel = this.createLabelSprite('Pluto', 0.8);
+    plutoLabel.position.set(0, 1, 0);
+    this.plutoMesh.add(plutoLabel);
   }
 
   private createAsteroidBelt() {
@@ -5307,7 +5658,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const showStarman = this.tourActive && (
         this.activeCameraAnchorKey === 'aarde' ||
         this.activeCameraAnchorKey === 'maan' ||
-        this.activeCameraAnchorKey === 'mars'
+        this.activeCameraAnchorKey === 'mars' ||
+        this.activeCameraAnchorKey === 'starman'
       );
       // Also show during slides that have Earth visible
       const earthVisible = this.earthMesh?.visible ?? false;

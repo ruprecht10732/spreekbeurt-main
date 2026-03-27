@@ -793,8 +793,8 @@ export class App implements AfterViewInit, OnDestroy {
     if (planetName === 'maan' && !this.moonAudioPlayed && !this.isMuted()) {
       this.moonAudioPlayed = true;
       this.fadeBgMusicTo(0.08);
-      // Brief radio static burst for "Contact light" moment
-      setTimeout(() => this.playRadioVoice('Contact light.', 0.35), 1000);
+      // Real NASA recording: "Contact light"
+      setTimeout(() => this.playNasaClip('contact_light.mp3', 0.35), 1000);
       // Real NASA recording: "That's one small step for a man..."
       setTimeout(() => this.playNasaClip('one_small_step.mp3', 0.7), 4000);
       // Restore music after the quotes
@@ -867,6 +867,13 @@ export class App implements AfterViewInit, OnDestroy {
         { value: '2', label: 'MANEN', sub: 'Phobos & Deimos' },
         { value: '-65°C', label: 'TEMPERATUUR', sub: 'gemiddeld op Mars' },
         { value: '1.9j', label: 'EEN JAAR', sub: 'op Mars duurt langer' },
+      ]},
+    'starman': { title: 'Starman', icon: '🚗', color: 'rgba(200,40,40,0.92)',
+      stats: [
+        { value: 'Tesla', label: 'ROADSTER', sub: 'rode sportwagen' },
+        { value: '2018', label: 'GELANCEERD', sub: 'SpaceX Falcon Heavy' },
+        { value: '∞', label: 'IN DE RUIMTE', sub: 'draait om de zon' },
+        { value: '🎵', label: 'DAVID BOWIE', sub: 'Space Oddity speelt' },
       ]},
     'saturnus': { title: 'Saturnus', icon: '🪐', color: 'rgba(220,195,140,0.92)',
       stats: [

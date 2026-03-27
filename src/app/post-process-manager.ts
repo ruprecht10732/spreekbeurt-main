@@ -77,15 +77,19 @@ export class PostProcessManager {
     // Cinematic grading (vignette + film grain + color grading) merged into single effect
     const gradingEffect = new CinematicGradingEffect();
 
-    // All effects in a single EffectPass — postprocessing merges compatible shaders
-    const effects: Array<InstanceType<typeof BloomEffect> | InstanceType<typeof GodRaysEffect> | InstanceType<typeof DepthOfFieldEffect> | InstanceType<typeof SMAAEffect> | InstanceType<typeof ChromaticAberrationEffect> | CinematicGradingEffect> = [];
+    // Main effect pass — all non-convolution effects merged together
+    const effects: Array<InstanceType<typeof BloomEffect> | InstanceType<typeof GodRaysEffect> | InstanceType<typeof DepthOfFieldEffect> | InstanceType<typeof SMAAEffect> | CinematicGradingEffect> = [];
     if (this.godRaysEffect) effects.push(this.godRaysEffect);
-    effects.push(this.bloomEffect, this.dofEffect, smaaEffect, chromaticAberration, gradingEffect);
+    effects.push(this.bloomEffect, this.dofEffect, smaaEffect, gradingEffect);
 
     this.effectPass = new EffectPass(camera, ...effects);
 
+    // ChromaticAberration is a convolution effect — needs its own pass
+    const chromaticPass = new EffectPass(camera, chromaticAberration);
+
     this.composer.addPass(this.renderPass);
     this.composer.addPass(this.effectPass);
+    this.composer.addPass(chromaticPass);
   }
 
   setBloomIntensity(intensity: number): void {

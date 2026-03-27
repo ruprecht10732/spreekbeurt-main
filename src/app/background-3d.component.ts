@@ -140,6 +140,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private moonMesh!: THREE.Mesh;
   private moonOrbitAngle = 0;
   private tranquilityGroup!: THREE.Group; // Apollo 11 landing site artifacts
+  private lunarDust!: THREE.Points;
+  private lunarDustVelocities!: Float32Array;
+  private lunarDustLife!: Float32Array;
+  private lunarDustActive = false;
+  private lunarDustTimer = 0;
+  private earthshineLight!: THREE.DirectionalLight;
 
   // Titan — Saturn's largest moon
   private titanMesh!: THREE.Mesh;
@@ -413,6 +419,22 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.tourStops[this.tourStopIndex].name === 'pluto' && !this.deathStarPlutoAttackStarted && !this.plutoDestroyed) {
         this.deathStarPlutoAttackStarted = true;
         this.deathStarPlutoFlyTime = time;
+      }
+      // Trigger lunar dust kickup when arriving at the Moon
+      if (this.tourStops[this.tourStopIndex].name === 'maan' && this.lunarDust && !this.lunarDustActive) {
+        this.lunarDustActive = true;
+        this.lunarDustTimer = 0;
+        const dPos = this.lunarDust.geometry.attributes['position'] as THREE.BufferAttribute;
+        for (let d = 0; d < this.lunarDustLife.length; d++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = Math.random() * 0.012;
+          dPos.setXYZ(d, Math.cos(a) * r, 0.001, Math.sin(a) * r);
+          this.lunarDustVelocities[d * 3] = (Math.random() - 0.5) * 0.00015;
+          this.lunarDustVelocities[d * 3 + 1] = Math.random() * 0.0003 + 0.0001;
+          this.lunarDustVelocities[d * 3 + 2] = (Math.random() - 0.5) * 0.00015;
+          this.lunarDustLife[d] = 1.5 + Math.random() * 2.5;
+        }
+        dPos.needsUpdate = true;
       }
     } else {
       this.activeCameraAnchorKey = stop.name;
@@ -1332,24 +1354,93 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         }, undefined, () => resolve());
       }));
 
-      // ─── Apollo 11 "Tranquility Base" artifacts on the Moon surface ─────
+      // ─── Apollo 11 "Tranquility Base" — cinematic moon landing scene ────
       this.tranquilityGroup = new THREE.Group();
 
-      // Lunar Module Descent Stage — gold-foil octagonal body on 4 legs
+      // ── High-Fidelity Terrain Patch (128×128 tessellated plane) ──────
+      const terrainSize = 0.08;
+      const terrainSeg = 128;
+      const terrainGeo = new THREE.PlaneGeometry(terrainSize, terrainSize, terrainSeg, terrainSeg);
+      terrainGeo.rotateX(-Math.PI / 2);
+      // Procedural displacement — gentle craters + noise
+      const terrainPos = terrainGeo.attributes['position'] as THREE.BufferAttribute;
+      const terrainNormals: number[] = [];
+      for (let i = 0; i < terrainPos.count; i++) {
+        const x = terrainPos.getX(i);
+        const z = terrainPos.getZ(i);
+        // Multi-octave simplex-like noise via sin combinations
+        let h = 0;
+        h += Math.sin(x * 280 + 1.3) * Math.cos(z * 310 + 0.7) * 0.0004;
+        h += Math.sin(x * 560 + 2.1) * Math.cos(z * 490 + 1.9) * 0.0002;
+        h += Math.sin(x * 1100) * Math.cos(z * 1200) * 0.0001;
+        // Small crater near center-left
+        const cx = x + 0.012, cz = z - 0.005;
+        const craterDist = Math.sqrt(cx * cx + cz * cz);
+        if (craterDist < 0.008) {
+          h -= (0.008 - craterDist) * 0.03;
+          h += Math.max(0, 0.008 - craterDist - 0.002) * 0.01; // rim
+        }
+        terrainPos.setY(i, h);
+      }
+      terrainGeo.computeVertexNormals();
+      // Procedural normal map for micro-detail
+      const normalCanvas = document.createElement('canvas');
+      normalCanvas.width = 256; normalCanvas.height = 256;
+      const nCtx = normalCanvas.getContext('2d')!;
+      const nImageData = nCtx.createImageData(256, 256);
+      for (let py = 0; py < 256; py++) {
+        for (let px = 0; px < 256; px++) {
+          const idx = (py * 256 + px) * 4;
+          // Procedural bumps
+          const nx = Math.sin(px * 0.8 + py * 0.3) * 0.15 + Math.sin(px * 2.1) * 0.1;
+          const ny = Math.cos(py * 0.9 + px * 0.2) * 0.15 + Math.cos(py * 1.8) * 0.1;
+          nImageData.data[idx] = Math.floor((nx * 0.5 + 0.5) * 255);
+          nImageData.data[idx + 1] = Math.floor((ny * 0.5 + 0.5) * 255);
+          nImageData.data[idx + 2] = 200; // Z component (mostly up)
+          nImageData.data[idx + 3] = 255;
+        }
+      }
+      nCtx.putImageData(nImageData, 0, 0);
+      const terrainNormalTex = new THREE.CanvasTexture(normalCanvas);
+      terrainNormalTex.wrapS = THREE.RepeatWrapping;
+      terrainNormalTex.wrapT = THREE.RepeatWrapping;
+
+      const terrainMat = new THREE.MeshStandardMaterial({
+        color: 0x8a8478,
+        roughness: 0.95,
+        metalness: 0.0,
+        normalMap: terrainNormalTex,
+        normalScale: new THREE.Vector2(0.6, 0.6),
+      });
+      const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
+      terrainMesh.receiveShadow = true;
+      this.tranquilityGroup.add(terrainMesh);
+
+      // ── Lunar Module — Enhanced Procedural ──────────────────────────
+      const lmGroup = new THREE.Group();
+
+      // Descent Stage — gold-foil octagonal body
+      const goldFoilMat = new THREE.MeshStandardMaterial({
+        color: 0xccaa44, roughness: 0.35, metalness: 0.75,
+        emissive: 0x221800, emissiveIntensity: 0.15,
+      });
       const lmBody = new THREE.Mesh(
         new THREE.CylinderGeometry(0.016, 0.018, 0.014, 8),
-        new THREE.MeshStandardMaterial({ color: 0xccaa44, roughness: 0.35, metalness: 0.75, emissive: 0x221800, emissiveIntensity: 0.15 })
+        goldFoilMat
       );
       lmBody.position.y = 0.014;
-      this.tranquilityGroup.add(lmBody);
+      lmBody.castShadow = true;
+      lmGroup.add(lmBody);
 
       // Ascent Stage — upper cabin (lighter grey, boxy)
+      const ascentMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.45, metalness: 0.65 });
       const ascentStage = new THREE.Mesh(
         new THREE.BoxGeometry(0.013, 0.011, 0.013),
-        new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.45, metalness: 0.65 })
+        ascentMat
       );
       ascentStage.position.y = 0.027;
-      this.tranquilityGroup.add(ascentStage);
+      ascentStage.castShadow = true;
+      lmGroup.add(ascentStage);
 
       // Triangular windows on ascent stage
       const windowMat = new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.1, metalness: 0.9 });
@@ -1357,7 +1448,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         const win = new THREE.Mesh(new THREE.PlaneGeometry(0.004, 0.003), windowMat);
         win.position.set(side * 0.0066, 0.029, 0);
         win.rotation.y = side * Math.PI / 2;
-        this.tranquilityGroup.add(win);
+        lmGroup.add(win);
       }
 
       // RCS thrusters (small nozzles on the sides)
@@ -1368,74 +1459,74 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         nozzle.position.set(Math.cos(angle) * 0.008, 0.027, Math.sin(angle) * 0.008);
         nozzle.rotation.z = Math.cos(angle) * 0.5;
         nozzle.rotation.x = Math.sin(angle) * 0.5;
-        this.tranquilityGroup.add(nozzle);
+        lmGroup.add(nozzle);
       }
 
-      // Antenna on top
+      // Antenna on top with dish
       const antennaMat = new THREE.MeshStandardMaterial({ color: 0xbbbbbb, roughness: 0.4, metalness: 0.7 });
       const antenna = new THREE.Mesh(new THREE.CylinderGeometry(0.0004, 0.0004, 0.012, 4), antennaMat);
       antenna.position.y = 0.038;
-      this.tranquilityGroup.add(antenna);
+      lmGroup.add(antenna);
       const antennaDish = new THREE.Mesh(new THREE.CircleGeometry(0.003, 8), antennaMat);
       antennaDish.position.y = 0.044;
       antennaDish.rotation.x = -0.3;
-      this.tranquilityGroup.add(antennaDish);
+      lmGroup.add(antennaDish);
 
-      // LM platform / base plate (silver)
+      // Base plate
       const lmBase = new THREE.Mesh(
         new THREE.CylinderGeometry(0.014, 0.014, 0.003, 8),
         new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.3, metalness: 0.8 })
       );
       lmBase.position.y = 0.005;
-      this.tranquilityGroup.add(lmBase);
-      // 4 landing legs with struts
+      lmBase.castShadow = true;
+      lmGroup.add(lmBase);
+
+      // 4 landing legs with struts and foot pads
       const legMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.5, metalness: 0.6 });
       for (let i = 0; i < 4; i++) {
+        const legAngle = (i / 4) * Math.PI * 2;
         const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.001, 0.016, 4), legMat);
-        const angle = (i / 4) * Math.PI * 2;
-        leg.position.set(Math.cos(angle) * 0.013, 0.005, Math.sin(angle) * 0.013);
-        leg.rotation.z = Math.cos(angle) * 0.35;
-        leg.rotation.x = Math.sin(angle) * 0.35;
-        this.tranquilityGroup.add(leg);
-        // Foot pad
-        const pad = new THREE.Mesh(
-          new THREE.CylinderGeometry(0.003, 0.003, 0.001, 6),
-          legMat
-        );
-        pad.position.set(Math.cos(angle) * 0.018, 0.001, Math.sin(angle) * 0.018);
-        this.tranquilityGroup.add(pad);
-        // Strut (diagonal support from base to mid-leg)
+        leg.position.set(Math.cos(legAngle) * 0.013, 0.005, Math.sin(legAngle) * 0.013);
+        leg.rotation.z = Math.cos(legAngle) * 0.35;
+        leg.rotation.x = Math.sin(legAngle) * 0.35;
+        leg.castShadow = true;
+        lmGroup.add(leg);
+        const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.001, 6), legMat);
+        pad.position.set(Math.cos(legAngle) * 0.018, 0.001, Math.sin(legAngle) * 0.018);
+        pad.castShadow = true;
+        lmGroup.add(pad);
         const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, 0.012, 3), legMat);
-        strut.position.set(Math.cos(angle) * 0.01, 0.008, Math.sin(angle) * 0.01);
-        strut.rotation.z = Math.cos(angle) * 0.2;
-        strut.rotation.x = Math.sin(angle) * 0.2;
-        this.tranquilityGroup.add(strut);
+        strut.position.set(Math.cos(legAngle) * 0.01, 0.008, Math.sin(legAngle) * 0.01);
+        strut.rotation.z = Math.cos(legAngle) * 0.2;
+        strut.rotation.x = Math.sin(legAngle) * 0.2;
+        lmGroup.add(strut);
       }
 
-      // Descent engine nozzle (underneath body)
-      const nozzleGeo = new THREE.ConeGeometry(0.005, 0.008, 8, 1, true);
-      const engineNozzle = new THREE.Mesh(nozzleGeo, new THREE.MeshStandardMaterial({
-        color: 0x444444, roughness: 0.3, metalness: 0.85, side: THREE.DoubleSide
-      }));
+      // Descent engine nozzle
+      const engineNozzle = new THREE.Mesh(
+        new THREE.ConeGeometry(0.005, 0.008, 8, 1, true),
+        new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.3, metalness: 0.85, side: THREE.DoubleSide })
+      );
       engineNozzle.position.y = 0.003;
       engineNozzle.rotation.x = Math.PI;
-      this.tranquilityGroup.add(engineNozzle);
+      lmGroup.add(engineNozzle);
 
       // Ladder on one leg
       const ladderMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 });
       for (let r = 0; r < 5; r++) {
         const rung = new THREE.Mesh(new THREE.BoxGeometry(0.005, 0.0005, 0.001), ladderMat);
         rung.position.set(0.016, 0.003 + r * 0.003, 0);
-        this.tranquilityGroup.add(rung);
+        lmGroup.add(rung);
       }
 
-      // Bootprint in the dust — iconic single print
+      this.tranquilityGroup.add(lmGroup);
+
+      // ── Footprint Trail — 10 bootprints from ladder outward ─────────
       const bootCanvas = document.createElement('canvas');
       bootCanvas.width = 64; bootCanvas.height = 64;
       const bCtx = bootCanvas.getContext('2d')!;
       bCtx.fillStyle = '#000000';
       bCtx.fillRect(0, 0, 64, 64);
-      // Tread pattern
       bCtx.fillStyle = '#444444';
       bCtx.beginPath();
       bCtx.ellipse(32, 32, 12, 22, 0, 0, Math.PI * 2);
@@ -1445,22 +1536,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         bCtx.fillRect(22, 14 + i * 5, 20, 2);
       }
       const bootTex = new THREE.CanvasTexture(bootCanvas);
-      const bootprint = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.006, 0.01),
-        new THREE.MeshStandardMaterial({
-          map: bootTex, transparent: true, roughness: 1.0, metalness: 0.0,
-          color: 0x888880,
-        })
-      );
-      bootprint.rotation.x = -Math.PI / 2;
-      bootprint.position.set(0.025, 0.0005, 0.01);
-      this.tranquilityGroup.add(bootprint);
+      const bootMat = new THREE.MeshStandardMaterial({
+        map: bootTex, transparent: true, roughness: 1.0, metalness: 0.0,
+        color: 0x888880,
+        polygonOffset: true, polygonOffsetFactor: -1, polygonOffsetUnits: -1,
+        depthWrite: false,
+      });
 
-      // Second bootprint — walking away from LM
-      const bootprint2 = bootprint.clone();
-      bootprint2.position.set(0.029, 0.0005, 0.016);
-      bootprint2.rotation.z = 0.15;
-      this.tranquilityGroup.add(bootprint2);
+      // 10 staggered footprints from the ladder outward
+      for (let fp = 0; fp < 10; fp++) {
+        const print = new THREE.Mesh(new THREE.PlaneGeometry(0.005, 0.008), bootMat);
+        print.rotation.x = -Math.PI / 2;
+        const t = fp / 9;
+        const xOff = 0.020 + t * 0.025; // walk outward from ladder
+        const zOff = (fp % 2 === 0 ? 1 : -1) * 0.003; // left-right stagger
+        const yOff = 0.0003; // just above terrain
+        print.position.set(xOff, yOff, zOff);
+        print.rotation.z = (fp % 2 === 0 ? -0.08 : 0.08) + (Math.random() - 0.5) * 0.06;
+        this.tranquilityGroup.add(print);
+      }
 
       // ALSEP science package — seismometer etc.
       const alsep = new THREE.Group();
@@ -1469,8 +1563,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5, metalness: 0.4 })
       );
       alsepBody.position.y = 0.002;
+      alsepBody.castShadow = true;
       alsep.add(alsepBody);
-      // Solar panel array on ALSEP
       const solarPanel = new THREE.Mesh(
         new THREE.PlaneGeometry(0.006, 0.003),
         new THREE.MeshStandardMaterial({ color: 0x2244aa, roughness: 0.3, metalness: 0.5, side: THREE.DoubleSide })
@@ -1486,35 +1580,56 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         new THREE.CylinderGeometry(0.0005, 0.0005, 0.018, 4),
         new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 })
       );
-      flagPole.rotation.z = Math.PI / 2 - 0.15; // Fallen over, slight angle
+      flagPole.rotation.z = Math.PI / 2 - 0.15;
       flagPole.position.set(-0.02, 0.002, 0.015);
+      flagPole.castShadow = true;
       this.tranquilityGroup.add(flagPole);
-      // Flag cloth — white (bleached by UV radiation)
       const flagCloth = new THREE.Mesh(
         new THREE.PlaneGeometry(0.012, 0.007),
         new THREE.MeshStandardMaterial({
-          color: 0xeeeeee, roughness: 0.9, metalness: 0.0,
-          side: THREE.DoubleSide,
+          color: 0xeeeeee, roughness: 0.9, metalness: 0.0, side: THREE.DoubleSide,
         })
       );
-      flagCloth.rotation.x = -Math.PI / 2 + 0.08; // Lying on ground, slight crumple
+      flagCloth.rotation.x = -Math.PI / 2 + 0.08;
       flagCloth.rotation.z = 0.1;
       flagCloth.position.set(-0.028, 0.001, 0.015);
       this.tranquilityGroup.add(flagCloth);
 
-      // Position on Moon surface — Sea of Tranquility is near the equator, center-right
-      // On a sphere of radius 0.28, place at ~(0.23°N, 23.5°E) normalized
-      const theta = 0.41; // longitude angle
-      const phi = 0.04;   // latitude angle (near equator)
+      // ── Lunar Dust Particle System ──────────────────────────────────
+      const lunarDustCount = 200;
+      const dustPositions = new Float32Array(lunarDustCount * 3);
+      this.lunarDustVelocities = new Float32Array(lunarDustCount * 3);
+      this.lunarDustLife = new Float32Array(lunarDustCount);
+      for (let d = 0; d < lunarDustCount; d++) {
+        dustPositions[d * 3] = 0;
+        dustPositions[d * 3 + 1] = -1; // Hidden below ground initially
+        dustPositions[d * 3 + 2] = 0;
+        this.lunarDustLife[d] = 0;
+      }
+      const dustGeo = new THREE.BufferGeometry();
+      dustGeo.setAttribute('position', new THREE.BufferAttribute(dustPositions, 3));
+      const dustMat = new THREE.PointsMaterial({
+        color: 0xaaa898,
+        size: 0.0008,
+        transparent: true,
+        opacity: 0.6,
+        depthWrite: false,
+        blending: THREE.AdditiveBlending,
+      });
+      this.lunarDust = new THREE.Points(dustGeo, dustMat);
+      this.tranquilityGroup.add(this.lunarDust);
+
+      // Position on Moon surface — Sea of Tranquility
+      const theta = 0.41;
+      const phi = 0.04;
       const moonR = 0.28;
       this.tranquilityGroup.position.set(
         moonR * Math.cos(phi) * Math.sin(theta),
         moonR * Math.sin(phi),
         moonR * Math.cos(phi) * Math.cos(theta)
       );
-      // Orient to face outward from Moon center
       this.tranquilityGroup.lookAt(0, 0, 0);
-      this.tranquilityGroup.rotateY(Math.PI); // flip to face outward
+      this.tranquilityGroup.rotateY(Math.PI);
       this.moonMesh.add(this.tranquilityGroup);
 
     // Jupiter's Faint Ring System — discovered by Voyager 1 (1979)
@@ -1722,10 +1837,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunLight.shadow.camera.bottom = -30;
     this.sunLight.shadow.camera.left = -30;
     this.sunLight.shadow.camera.right = 30;
-    this.sunLight.shadow.bias = -0.0005;
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
+    this.sunLight.shadow.bias = -0.0001;
+    this.sunLight.shadow.mapSize.width = 4096;
+    this.sunLight.shadow.mapSize.height = 4096;
     this.scene.add(this.sunLight);
+
+    // Earthshine — faint blue fill from Earth's reflected light onto the Moon
+    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.15);
+    this.earthshineLight.position.set(10, 5, -5); // will be updated to track Earth
+    this.scene.add(this.earthshineLight);
+    this.scene.add(this.earthshineLight.target);
 
     // Faint cool fill — just enough to hint at nightside silhouettes
     const fillLight = new THREE.DirectionalLight(0x060e1c, 0.08);
@@ -5607,6 +5728,36 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           this.moonMesh.rotation.y += 0.002;
         }
         this.physicsManager.setKinematicTarget(this.moonMesh, this.moonMesh.position, this.moonMesh.quaternion);
+
+        // Earthshine light tracks Earth → Moon direction
+        if (this.earthshineLight && this.earthMesh && earthVisible) {
+          this.earthshineLight.position.copy(this.earthMesh.position);
+          this.earthshineLight.target.position.copy(this.moonMesh.position);
+          this.earthshineLight.target.updateMatrixWorld();
+        }
+
+        // Lunar dust particle animation
+        if (this.lunarDust && this.lunarDustActive) {
+          this.lunarDustTimer += 0.016;
+          const dPos = this.lunarDust.geometry.attributes['position'] as THREE.BufferAttribute;
+          for (let d = 0; d < this.lunarDustLife.length; d++) {
+            if (this.lunarDustLife[d] > 0) {
+              this.lunarDustLife[d] -= 0.016;
+              // No air resistance on moon — ballistic trajectory (1/6 g)
+              this.lunarDustVelocities[d * 3 + 1] -= 0.00001; // lunar gravity
+              dPos.setXYZ(d,
+                dPos.getX(d) + this.lunarDustVelocities[d * 3],
+                Math.max(0, dPos.getY(d) + this.lunarDustVelocities[d * 3 + 1]),
+                dPos.getZ(d) + this.lunarDustVelocities[d * 3 + 2]
+              );
+            }
+          }
+          dPos.needsUpdate = true;
+          // Deactivate after particles settle
+          if (this.lunarDustTimer > 4) {
+            this.lunarDustActive = false;
+          }
+        }
       }
 
       // Titan orbits Saturn

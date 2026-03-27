@@ -167,12 +167,12 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     flareVisible: true,
   },
   maan: {
-    offset: { x: 0.15, y: 0.06, z: 0.35 },
-    lookOffset: { x: 0.02, y: -0.02, z: 0 },
-    drift: { x: 0.0003, y: 0.0001, z: -0.0002 },
-    mouseParallax: { x: 0.05, y: 0.05, z: 0 },
-    lerp: 0.035,
-    flareVisible: false,
+    offset: { x: 0.015, y: 0.005, z: 0.02 },
+    lookOffset: { x: -0.01, y: 0.02, z: -0.05 },
+    drift: { x: 0.0002, y: 0.0001, z: 0 },
+    mouseParallax: { x: 0.01, y: 0.01, z: 0 },
+    lerp: 0.015,
+    flareVisible: true,
   },
   mars: {
     offset: { x: 2.4, y: 1.2, z: 2.2 },

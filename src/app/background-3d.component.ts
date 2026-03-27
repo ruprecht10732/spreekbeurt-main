@@ -256,6 +256,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // JULIANASCHOOL star constellation after Pluto destruction
   private julianaStars!: THREE.Points;
 
+  // ASBJØRN meteorite constellation (background easter egg)
+  private asbjornMeteorRocks!: THREE.InstancedMesh;
+  private asbjornMeteorGlow!: THREE.Points;
+  private asbjornMeteorCount = 0;
+
   // Gargantua Black Hole
   private blackHoleGroup!: THREE.Group;
   private accretionDisk!: THREE.Mesh;
@@ -1976,6 +1981,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Asteroid belt between Mars and Jupiter
     this.createAsteroidBelt();
 
+    // Asbjørn meteorite constellation (subtle background easter egg)
+    this.createAsbjornMeteorStorm();
+
     // Shooting stars (meteor pool)
     this.createShootingStars();
 
@@ -2687,12 +2695,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private updateJulianaConstellation(expTime: number) {
-    if (expTime <= 3.5 || !this.julianaStars) {
+    if (expTime <= 3.0 || !this.julianaStars) {
       return;
     }
 
     const starMat = this.julianaStars.material as THREE.ShaderMaterial;
-    starMat.uniforms['uOpacity'].value = Math.min(1, (expTime - 3.5) * 0.5);
+    starMat.uniforms['uOpacity'].value = Math.min(1, (expTime - 3.0) * 0.7);
   }
 
   private updatePeriodicSuperlaser(time: number) {
@@ -2802,14 +2810,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       for (let x = 0; x < canvas.width; x += 3) {
         const idx = (y * canvas.width + x) * 4;
         if (imgData[idx] > 128) {
-          const px = (x - canvas.width / 2) * 0.08;
-          const py = -(y - canvas.height / 2) * 0.08;
-          const pz = (Math.random() - 0.5) * 2;
+          const px = (x - canvas.width / 2) * 0.06;
+          const py = -(y - canvas.height / 2) * 0.06;
+          const pz = (Math.random() - 0.5) * 0.6;
           starPositions.push(px, py, pz);
-          const isGold = Math.random() > 0.5;
+          const isGold = Math.random() > 0.4;
           const color = new THREE.Color(isGold ? 0xffe81f : 0xaaccff);
           starColors.push(color.r, color.g, color.b);
-          starSizes.push(Math.random() * 3 + 1);
+          starSizes.push(Math.random() * 4 + 2);
         }
       }
     }
@@ -2849,7 +2857,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     this.julianaStars = new THREE.Points(starGeo, starMat);
     this.julianaStars.position.copy(this.plutoMesh.position);
-    this.julianaStars.lookAt(0, 0, 0);
+    this.julianaStars.position.y += 2;
+    // Face toward the camera approach direction (pluto tour offset is roughly +x,+y,+z)
+    this.julianaStars.lookAt(
+      this.plutoMesh.position.x + 4,
+      this.plutoMesh.position.y + 3.5,
+      this.plutoMesh.position.z + 4,
+    );
     this.scene.add(this.julianaStars);
   }
 
@@ -5376,6 +5390,170 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.asteroidBelt);
   }
 
+  private createAsbjornMeteorStorm() {
+    // Canvas renders "ASBJØRN" into a pixel grid → sample lit pixels for meteorite positions
+    const canvas = document.createElement('canvas');
+    canvas.width = 512; canvas.height = 128;
+    const ctx = canvas.getContext('2d')!;
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 90px "Pathway Gothic One", Arial, sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('ASBJØRN', canvas.width / 2, canvas.height / 2);
+
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const positions: number[] = [];
+    const glowPositions: number[] = [];
+    const glowColors: number[] = [];
+    const glowSizes: number[] = [];
+
+    // Sample every 4th pixel for a subtle, diffuse look
+    for (let y = 0; y < canvas.height; y += 4) {
+      for (let x = 0; x < canvas.width; x += 4) {
+        const idx = (y * canvas.width + x) * 4;
+        if (imgData[idx] > 128) {
+          const px = (x - canvas.width / 2) * 0.18;
+          const py = -(y - canvas.height / 2) * 0.18;
+          const pz = (Math.random() - 0.5) * 3;
+          positions.push(px, py, pz);
+          // Glow particles — two per rock for density
+          glowPositions.push(px + (Math.random() - 0.5) * 0.8, py + (Math.random() - 0.5) * 0.8, pz + (Math.random() - 0.5) * 0.8);
+          const warm = 0.5 + Math.random() * 0.5;
+          glowColors.push(1.0, 0.6 * warm, 0.2 * warm);
+          glowSizes.push(1.5 + Math.random() * 3);
+        }
+      }
+    }
+
+    this.asbjornMeteorCount = positions.length / 3;
+    if (this.asbjornMeteorCount === 0) return;
+
+    // Procedural rocky texture via canvas
+    const texCanvas = document.createElement('canvas');
+    texCanvas.width = 64; texCanvas.height = 64;
+    const tCtx = texCanvas.getContext('2d')!;
+    // Base dark rock color
+    tCtx.fillStyle = '#3a3228';
+    tCtx.fillRect(0, 0, 64, 64);
+    // Rocky noise spots
+    for (let i = 0; i < 200; i++) {
+      const rx = Math.random() * 64;
+      const ry = Math.random() * 64;
+      const rs = 1 + Math.random() * 4;
+      const shade = Math.floor(30 + Math.random() * 50);
+      tCtx.fillStyle = `rgb(${shade + 20}, ${shade + 10}, ${shade})`;
+      tCtx.beginPath();
+      tCtx.arc(rx, ry, rs, 0, Math.PI * 2);
+      tCtx.fill();
+    }
+    // Lighter mineral veins
+    for (let i = 0; i < 8; i++) {
+      tCtx.strokeStyle = `rgba(${120 + Math.random() * 60}, ${100 + Math.random() * 40}, ${70 + Math.random() * 30}, 0.4)`;
+      tCtx.lineWidth = 0.5 + Math.random();
+      tCtx.beginPath();
+      tCtx.moveTo(Math.random() * 64, Math.random() * 64);
+      tCtx.quadraticCurveTo(Math.random() * 64, Math.random() * 64, Math.random() * 64, Math.random() * 64);
+      tCtx.stroke();
+    }
+    const rockTex = new THREE.CanvasTexture(texCanvas);
+
+    // InstancedMesh rocks — irregularly shaped meteorites
+    const rockGeo = new THREE.IcosahedronGeometry(0.35, 1);
+    const rockMat = new THREE.MeshStandardMaterial({
+      map: rockTex,
+      roughness: 0.95,
+      metalness: 0.15,
+      color: 0x6b5c4a,
+    });
+    this.asbjornMeteorRocks = new THREE.InstancedMesh(rockGeo, rockMat, this.asbjornMeteorCount);
+
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < this.asbjornMeteorCount; i++) {
+      dummy.position.set(positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]);
+      const s = 0.4 + Math.random() * 0.8;
+      dummy.scale.set(s, s * (0.5 + Math.random() * 0.5), s * (0.6 + Math.random() * 0.4));
+      dummy.rotation.set(Math.random() * Math.PI * 2, Math.random() * Math.PI * 2, Math.random() * Math.PI * 2);
+      dummy.updateMatrix();
+      this.asbjornMeteorRocks.setMatrixAt(i, dummy.matrix);
+      // Subtle color variation — warm browns to charcoal
+      const shade = 0.25 + Math.random() * 0.25;
+      this.asbjornMeteorRocks.setColorAt(i, new THREE.Color(shade + 0.08, shade, shade - 0.04));
+    }
+    this.asbjornMeteorRocks.instanceColor!.needsUpdate = true;
+
+    // Warm ember glow particles around each rock
+    const glowGeo = new THREE.BufferGeometry();
+    glowGeo.setAttribute('position', new THREE.Float32BufferAttribute(glowPositions, 3));
+    glowGeo.setAttribute('color', new THREE.Float32BufferAttribute(glowColors, 3));
+    glowGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(glowSizes, 1));
+
+    const glowMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: `
+        attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vColor;
+        uniform float uTime;
+        void main() {
+          vColor = color;
+          vec3 pos = position;
+          // Gentle drift — each particle oscillates slightly
+          pos.x += sin(uTime * 0.3 + position.y * 2.0) * 0.15;
+          pos.y += cos(uTime * 0.25 + position.x * 1.5) * 0.12;
+          vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = aSize * (120.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float glow = exp(-d * 5.0);
+          gl_FragColor = vec4(vColor, glow * 0.35);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+    this.asbjornMeteorGlow = new THREE.Points(glowGeo, glowMat);
+
+    // Group into a container, place far off to the upper-right of the scene
+    // visible as a subtle background feature — like a distant meteorite cloud
+    const stormGroup = new THREE.Group();
+    stormGroup.add(this.asbjornMeteorRocks);
+    stormGroup.add(this.asbjornMeteorGlow);
+    stormGroup.position.set(80, 55, -120);
+    stormGroup.rotation.set(0.15, -0.3, 0.08);
+    stormGroup.scale.setScalar(0.7);
+    this.scene.add(stormGroup);
+  }
+
+  private updateAsbjornMeteorStorm(time: number) {
+    if (!this.asbjornMeteorRocks || this.asbjornMeteorCount === 0) return;
+
+    // Slow tumble of individual rocks
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < this.asbjornMeteorCount; i++) {
+      this.asbjornMeteorRocks.getMatrixAt(i, dummy.matrix);
+      dummy.matrix.decompose(dummy.position, dummy.quaternion, dummy.scale);
+      dummy.rotation.x += 0.001 + (i % 7) * 0.0003;
+      dummy.rotation.y += 0.0008 + (i % 5) * 0.0002;
+      dummy.updateMatrix();
+      this.asbjornMeteorRocks.setMatrixAt(i, dummy.matrix);
+    }
+    this.asbjornMeteorRocks.instanceMatrix.needsUpdate = true;
+
+    // Update glow time uniform
+    if (this.asbjornMeteorGlow) {
+      (this.asbjornMeteorGlow.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
+    }
+  }
+
   private createShootingStars() {
     // Pre-create a pool of shooting star meshes (initially invisible)
     for (let i = 0; i < 5; i++) {
@@ -6674,6 +6852,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     this.updateEuropaPlumes(time);
     this.updateSolarWind();
+    this.updateAsbjornMeteorStorm(time);
     if (this.radiationBelt) {
       (this.radiationBelt.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
     }

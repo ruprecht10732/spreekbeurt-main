@@ -903,6 +903,13 @@ export class App implements AfterViewInit, OnDestroy {
         { value: '5', label: 'MANEN', sub: 'waaronder Charon' },
         { value: '-230°C', label: 'TEMPERATUUR', sub: 'ijzig koud!' },
       ]},
+    'blackhole': { title: 'Zwart Gat', icon: '🕳️', color: 'rgba(255,120,50,0.95)',
+      stats: [
+        { value: '∞', label: 'ZWAARTEKRACHT', sub: 'Licht kan niet ontsnappen' },
+        { value: 'Gargantua', label: 'CLASSIFICATIE', sub: 'Superzwaar Zwart Gat' },
+        { value: '1=7', label: 'TIJDSVERTRAGING', sub: '1 uur hier = 7 jaar op aarde' },
+        { value: 'Horizon', label: 'EVENT', sub: 'Point of no return' },
+      ]},
     'jupiter-einde': { title: 'Terug bij Jupiter', icon: '✨', color: 'rgba(255,232,31,0.92)',
       stats: [
         { value: '#1', label: 'GROOTSTE', sub: 'planeet in ons stelsel' },

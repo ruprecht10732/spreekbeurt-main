@@ -245,6 +245,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // JULIANASCHOOL star constellation after Pluto destruction
   private julianaStars!: THREE.Points;
 
+  // Gargantua Black Hole
+  private blackHoleGroup!: THREE.Group;
+  private accretionDisk!: THREE.Mesh;
+
   // Lightsaber duel
   private lightsaberGroup!: THREE.Group;
   private saberRed!: THREE.Mesh;
@@ -374,6 +378,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     if (this.plutoMesh) {
       this.tourStops.push({ name: 'pluto' });
+    }
+    if (this.blackHoleGroup) {
+      this.tourStops.push({ name: 'blackhole' });
     }
     this.tourStops.push({ name: 'jupiter-einde' });
 
@@ -2105,6 +2112,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         return this.neptuneGroup?.position ?? this.getSlideCameraAnchor();
       case 'pluto':
         return this.plutoMesh?.position ?? this.getSlideCameraAnchor();
+      case 'blackhole':
+        return this.blackHoleGroup?.position ?? this.getSlideCameraAnchor();
       case 'jupiter':
       case 'jupiter-einde':
       default:
@@ -2671,6 +2680,138 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.julianaStars.position.copy(this.plutoMesh.position);
     this.julianaStars.lookAt(0, 0, 0);
     this.scene.add(this.julianaStars);
+  }
+
+  private createBlackHole() {
+    this.blackHoleGroup = new THREE.Group();
+
+    // 1. The Event Horizon (Pure Black Sphere)
+    const horizonGeo = new THREE.SphereGeometry(6, 64, 64);
+    const horizonMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+    const eventHorizon = new THREE.Mesh(horizonGeo, horizonMat);
+    this.blackHoleGroup.add(eventHorizon);
+
+    // 2. Gravitational Lensing — high IOR refracts background skybox
+    const lensingGeo = new THREE.SphereGeometry(6.5, 64, 64);
+    const lensingMat = new THREE.MeshPhysicalMaterial({
+      transmission: 1.0,
+      opacity: 1.0,
+      ior: 2.8,
+      roughness: 0,
+      thickness: 15.0,
+      side: THREE.BackSide,
+    });
+    const lensingSphere = new THREE.Mesh(lensingGeo, lensingMat);
+    this.blackHoleGroup.add(lensingSphere);
+
+    // 3. Accretion Disk — Interstellar-style custom shader with Doppler beaming
+    const diskGeo = new THREE.RingGeometry(8, 22, 128, 64);
+    const diskMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uColor1: { value: new THREE.Color(1.0, 0.4, 0.1) },
+        uColor2: { value: new THREE.Color(1.0, 0.9, 0.5) },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        void main() {
+          vUv = uv;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        uniform vec3 uColor1;
+        uniform vec3 uColor2;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+        float noise(vec2 p) {
+          vec2 i = floor(p); vec2 f = fract(p);
+          float a = hash(i); float b = hash(i + vec2(1.0, 0.0));
+          float c = hash(i + vec2(0.0, 1.0)); float d = hash(i + vec2(1.0, 1.0));
+          vec2 u = f * f * (3.0 - 2.0 * f);
+          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+        }
+        float fbm(vec2 p) {
+          float f = 0.0;
+          f += 0.5000 * noise(p); p = p * 2.02;
+          f += 0.2500 * noise(p); p = p * 2.03;
+          f += 0.1250 * noise(p); p = p * 2.01;
+          f += 0.0625 * noise(p);
+          return f;
+        }
+
+        void main() {
+          vec2 centered = vUv - 0.5;
+          float radius = length(centered) * 2.0;
+          float angle = atan(centered.y, centered.x);
+          float spin = angle + uTime * (1.5 / max(radius, 0.01));
+          float n = fbm(vec2(spin * 4.0, radius * 10.0 - uTime));
+          float doppler = 1.0 + 0.8 * sin(angle);
+          float edgeAlpha = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.8, vUv.x);
+          float intensity = pow(n, 1.5) * doppler * edgeAlpha;
+          vec3 finalColor = mix(uColor1, uColor2, intensity) * (intensity * 3.0);
+          gl_FragColor = vec4(finalColor, intensity);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    this.accretionDisk = new THREE.Mesh(diskGeo, diskMat);
+    this.accretionDisk.rotation.x = Math.PI / 2.2;
+    this.accretionDisk.rotation.y = 0.2;
+    this.blackHoleGroup.add(this.accretionDisk);
+
+    // Position far into deep space, past Pluto
+    this.blackHoleGroup.position.set(-350, -50, -400);
+    this.scene.add(this.blackHoleGroup);
+  }
+
+  private updateBlackHole(time: number) {
+    if (!this.blackHoleGroup) return;
+
+    // Update accretion disk shader time
+    if (this.accretionDisk) {
+      (this.accretionDisk.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
+    }
+
+    // Slow ominous rotation
+    this.blackHoleGroup.rotation.y += 0.001;
+    this.blackHoleGroup.rotation.z += 0.0005;
+
+    // Cinematic gravity: suck Pluto debris toward the black hole
+    if (this.plutoDestroyed && this.plutoDebris) {
+      const dummy = new THREE.Object3D();
+      const bhPos = this.blackHoleGroup.position;
+
+      for (let i = 0; i < this.plutoDebris.count; i++) {
+        this.plutoDebris.getMatrixAt(i, dummy.matrix);
+        dummy.position.setFromMatrixPosition(dummy.matrix);
+
+        const pull = new THREE.Vector3().subVectors(bhPos, dummy.position);
+        const dist = pull.length();
+
+        if (dist > 2) {
+          pull.normalize().multiplyScalar(50 / (dist * dist));
+          this.plutoDebrisVelocities[i * 3] += pull.x;
+          this.plutoDebrisVelocities[i * 3 + 1] += pull.y;
+          this.plutoDebrisVelocities[i * 3 + 2] += pull.z;
+        } else {
+          dummy.scale.set(0, 0, 0);
+          dummy.updateMatrix();
+          this.plutoDebris.setMatrixAt(i, dummy.matrix);
+          this.plutoDebris.instanceMatrix.needsUpdate = true;
+        }
+      }
+    }
   }
 
   private createLightsaberDuel() {
@@ -4195,6 +4336,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoMesh.position.set(-240, -25, -220);
       this.scene.add(this.plutoMesh);
       this.createPlutoExplosionVFX();
+      this.createBlackHole();
       this.loadPromises.push(new Promise<void>((resolve) => {
         this.textureLoader.load('8k_moon.webp', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
@@ -5802,6 +5944,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateShootingStars();
     this.updateComet();
     this.updateDeathStar(time);
+    this.updateBlackHole(time);
     this.updateLightsaberDuel(time);
     this.updateHyperspace(deltaTime, time);
 

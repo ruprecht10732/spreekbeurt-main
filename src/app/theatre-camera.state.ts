@@ -35,7 +35,8 @@ export const THEATRE_TOUR_SEQUENCE_POSITIONS = {
   uranus: 48,
   neptunus: 52,
   pluto: 56,
-  'jupiter-einde': 60,
+  blackhole: 60,
+  'jupiter-einde': 64,
 } as const;
 
 const DEFAULT_MOUSE_PARALLAX = { x: 3, y: 3, z: 0 };
@@ -221,6 +222,14 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     mouseParallax: { x: 0.3, y: 0.3, z: 0 },
     lerp: 0.026,
     flareVisible: true,
+  },
+  blackhole: {
+    offset: { x: 30, y: 12, z: 45 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.003, y: 0.001, z: -0.002 },
+    mouseParallax: { x: 1.5, y: 1.5, z: 0 },
+    lerp: 0.015,
+    flareVisible: false,
   },
   'jupiter-einde': {
     offset: { x: 8, y: 10, z: 58 },

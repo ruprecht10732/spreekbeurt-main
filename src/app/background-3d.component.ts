@@ -5296,8 +5296,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (s2Light) s2Light.intensity = 3;
       this.falconGroup.lookAt(this.getFalconFlightTarget(Math.min(t + 0.05, 1)));
       if (this.falconFirstStage.parent === this.scene) {
-        this.falconFirstStage.rotateX(0.08);
-        this.falconFirstStage.position.y -= 0.002;
+        // Continue the flip — first stage rotates 180° for boostback
+        this.falconFirstStage.rotateX(0.10);
+        // Keep drifting apart from second stage
+        this.falconFirstStage.position.y -= 0.008;
       }
       return { thrust, phase: 'MVAC IGN' };
     }

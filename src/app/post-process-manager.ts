@@ -1,28 +1,27 @@
 import * as THREE from 'three';
 import {
   BlendFunction,
+  BloomEffect,
   ChromaticAberrationEffect,
+  DepthOfFieldEffect,
   EffectComposer,
   EffectPass,
   GodRaysEffect,
   KernelSize,
-  NormalPass,
   RenderPass,
-  SelectiveBloomEffect,
   SMAAEffect,
   SMAAPreset,
-  SSAOEffect,
   VignetteEffect,
 } from 'postprocessing';
 
-export const BLOOM_LAYER = 11;
-
 export class PostProcessManager {
   private readonly composer: EffectComposer;
-  private readonly bloomEffect: SelectiveBloomEffect;
+  private readonly bloomEffect: BloomEffect;
   private readonly renderPass: RenderPass;
   private readonly effectPass: EffectPass;
   private readonly godRaysEffect: GodRaysEffect | null;
+  private readonly chromaticAberrationEffect: ChromaticAberrationEffect;
+  private readonly dofEffect: DepthOfFieldEffect;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -35,26 +34,27 @@ export class PostProcessManager {
     });
 
     this.renderPass = new RenderPass(scene, camera);
-    this.bloomEffect = new SelectiveBloomEffect(scene, camera, {
+
+    // Standard BloomEffect with high luminance threshold — only catches HDR-bright objects
+    // (Sun, lightsabers, exhaust, superlaser) whose emissive/color exceeds 1.0 under ACES tonemapping
+    this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
       intensity: 1.6,
-      luminanceThreshold: 0.28,
-      luminanceSmoothing: 0.12,
+      luminanceThreshold: 1.0,
+      luminanceSmoothing: 0.15,
       mipmapBlur: true,
       radius: 0.74,
     });
-    this.bloomEffect.selection.layer = BLOOM_LAYER;
-    this.bloomEffect.ignoreBackground = false;
 
     this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
       blendFunction: BlendFunction.SCREEN,
-      samples: 96,
+      samples: 32,
       density: 0.84,
       decay: 0.95,
       weight: 0.22,
       exposure: 0.22,
       clampMax: 1,
-      kernelSize: KernelSize.MEDIUM,
+      kernelSize: KernelSize.LARGE,
       blur: true,
     }) : null;
 
@@ -69,25 +69,21 @@ export class PostProcessManager {
       radialModulation: true,
       modulationOffset: 0.3,
     });
+    this.chromaticAberrationEffect = chromaticAberration;
 
-    // SMAA — anti-aliasing to clean up thin geometry (lightsaber blades, ring edges)
-    const smaaEffect = new SMAAEffect({ preset: SMAAPreset.HIGH });
-
-    // SSAO — screen-space ambient occlusion for contact shadows
-    const normalPass = new NormalPass(scene, camera);
-    const ssaoEffect = new SSAOEffect(camera, normalPass.texture, {
-      blendFunction: BlendFunction.MULTIPLY,
-      samples: 16,
-      rings: 4,
-      luminanceInfluence: 0.6,
-      radius: 0.04,
-      intensity: 1.5,
-      bias: 0.025,
+    // Cinematic Depth of Field — subtle background softening only
+    this.dofEffect = new DepthOfFieldEffect(camera, {
+      focusDistance: 0.0,
+      focalLength: 0.01,
+      bokehScale: 0.5,
     });
 
+    // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)
+    const smaaEffect = new SMAAEffect({ preset: SMAAPreset.ULTRA });
+
     const effects = this.godRaysEffect
-      ? [this.bloomEffect, this.godRaysEffect, ssaoEffect, smaaEffect, vignette]
-      : [this.bloomEffect, ssaoEffect, smaaEffect, vignette];
+      ? [this.bloomEffect, this.godRaysEffect, this.dofEffect, smaaEffect, vignette]
+      : [this.bloomEffect, this.dofEffect, smaaEffect, vignette];
 
     this.effectPass = new EffectPass(camera, ...effects);
 
@@ -96,22 +92,8 @@ export class PostProcessManager {
     chromaPass.renderToScreen = true;
 
     this.composer.addPass(this.renderPass);
-    this.composer.addPass(normalPass);
     this.composer.addPass(this.effectPass);
     this.composer.addPass(chromaPass);
-  }
-
-  addBloomSelection(object: THREE.Object3D): void {
-    object.layers.enable(BLOOM_LAYER);
-    this.bloomEffect.selection.add(object);
-  }
-
-  addBloomSelectionRecursive(object: THREE.Object3D): void {
-    object.traverse((child) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        this.addBloomSelection(child);
-      }
-    });
   }
 
   setBloomIntensity(intensity: number): void {
@@ -120,6 +102,14 @@ export class PostProcessManager {
 
   getBloomIntensity(): number {
     return this.bloomEffect.intensity;
+  }
+
+  setDofFocusDistance(distance: number): void {
+    this.dofEffect.cocMaterial.uniforms['focusDistance'].value = distance;
+  }
+
+  setChromaticAberrationOffset(x: number, y: number): void {
+    this.chromaticAberrationEffect.offset = new THREE.Vector2(x, y);
   }
 
   render(deltaTime: number): void {

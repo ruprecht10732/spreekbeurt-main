@@ -1,3 +1,3048 @@
+This file is a merged representation of the entire codebase, combined into a single document by Repomix.
+
+<file_summary>
+This section contains a summary of this file.
+
+<purpose>
+This file contains a packed representation of the entire repository's contents.
+It is designed to be easily consumable by AI systems for analysis, code review,
+or other automated processes.
+</purpose>
+
+<file_format>
+The content is organized as follows:
+1. This summary section
+2. Repository information
+3. Directory structure
+4. Repository files (if enabled)
+5. Multiple file entries, each consisting of:
+  - File path as an attribute
+  - Full contents of the file
+</file_format>
+
+<usage_guidelines>
+- This file should be treated as read-only. Any changes should be made to the
+  original repository files, not this packed version.
+- When processing this file, use the file path to distinguish
+  between different files in the repository.
+- Be aware that this file may contain sensitive information. Handle it with
+  the same level of security as you would the original repository.
+</usage_guidelines>
+
+<notes>
+- Some files may have been excluded based on .gitignore rules and Repomix's configuration
+- Binary files are not included in this packed representation. Please refer to the Repository Structure section for a complete list of file paths, including binary files
+- Files matching patterns in .gitignore are excluded
+- Files matching default ignore patterns are excluded
+- Files are sorted by Git change count (files with more changes are at the bottom)
+</notes>
+
+</file_summary>
+
+<directory_structure>
+public/
+  20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg
+  2k_callisto.jpg
+  2k_earth_clouds.jpg
+  2k_earth_normal_map.jpg
+  2k_earth_specular_map.jpg
+  2k_europa.jpg
+  2k_ganymede.jpg
+  2k_io.jpg
+  2k_mars.jpg
+  2k_mercury.jpg
+  2k_moon.jpg
+  2k_neptune.jpg
+  2k_saturn_ring.png
+  2k_saturn.jpg
+  2k_stars_milky_way.jpg
+  2k_sun.jpg
+  2k_uranus.jpg
+  2k_venus_atmosphere.jpg
+  2k_venus_surface.jpg
+  8k_earth_daymap.jpg
+  8k_jupiter.jpg
+  8k_mars.jpg
+  8k_moon.jpg
+  8k_saturn.jpg
+  8k_stars_milky_way.jpg
+  8k_sun.jpg
+  death_star_-_star_wars.glb
+  favicon.ico
+  Interstellar Main Theme - Extra Extended - Soundtrack by Hans Zimmer - Cinémavore.mp3
+  Jupiter_red_dot_storm.mp4
+  jupiter_ring_texture__8k__by_digitalhourglass_dkk9nr9-pre.png
+  Jupiter_Size_Comparison_Video.mp4
+scripts/
+  fix-rapier-init-warning.mjs
+src/
+  app/
+    app.config.server.ts
+    app.config.ts
+    app.css
+    app.html
+    app.routes.server.ts
+    app.routes.ts
+    app.spec.ts
+    app.ts
+    background-3d.component.ts
+    physics-manager.ts
+    post-process-manager.ts
+    slides.data.ts
+    theatre-camera.state.ts
+  globals.d.ts
+  index.html
+  main.server.ts
+  main.ts
+  server.ts
+  styles.css
+.dockerignore
+.env.example
+.gitignore
+.postcssrc.json
+angular.json
+docker-compose.yml
+Dockerfile
+eslint.config.js
+metadata.json
+package.json
+README.md
+tsconfig.app.json
+tsconfig.json
+tsconfig.spec.json
+</directory_structure>
+
+<files>
+This section contains the contents of the repository's files.
+
+<file path="scripts/fix-rapier-init-warning.mjs">
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
+const replacements = [
+  {
+    relativePath: 'node_modules/@dimforge/rapier3d-compat/rapier.mjs',
+    oldText:
+      'void 0!==I&&(Object.getPrototypeOf(I)===Object.prototype?({module_or_path:I}=I):console.warn("using deprecated parameters for the initialization function; pass a single object instead")),void 0===I&&',
+    newText:
+      'void 0!==I&&(("object"==typeof I&&null!==I&&Object.getPrototypeOf(I)===Object.prototype)||(I={module_or_path:I}),({module_or_path:I}=I)),void 0===I&&',
+  },
+  {
+    relativePath: 'node_modules/@dimforge/rapier3d-compat/rapier.cjs',
+    oldText:
+      'void 0!==I&&(Object.getPrototypeOf(I)===Object.prototype?({module_or_path:I}=I):console.warn("using deprecated parameters for the initialization function; pass a single object instead")),void 0===I&&',
+    newText:
+      'void 0!==I&&(("object"==typeof I&&null!==I&&Object.getPrototypeOf(I)===Object.prototype)||(I={module_or_path:I}),({module_or_path:I}=I)),void 0===I&&',
+  },
+];
+
+for (const replacement of replacements) {
+  const filePath = join(process.cwd(), replacement.relativePath);
+  const source = readFileSync(filePath, 'utf8');
+
+  if (source.includes(replacement.newText)) {
+    continue;
+  }
+
+  if (!source.includes(replacement.oldText)) {
+    throw new Error(`Could not find expected Rapier init snippet in ${replacement.relativePath}`);
+  }
+
+  writeFileSync(filePath, source.replace(replacement.oldText, replacement.newText));
+}
+</file>
+
+<file path="src/app/app.config.server.ts">
+import {ApplicationConfig, mergeApplicationConfig} from '@angular/core';
+import {provideServerRendering, withRoutes} from '@angular/ssr';
+import {appConfig} from './app.config';
+import {serverRoutes} from './app.routes.server';
+
+const serverConfig: ApplicationConfig = {
+  providers: [provideServerRendering(withRoutes(serverRoutes))],
+};
+
+export const config = mergeApplicationConfig(appConfig, serverConfig);
+</file>
+
+<file path="src/app/app.css">
+
+</file>
+
+<file path="src/app/app.html">
+<router-outlet />
+</file>
+
+<file path="src/app/app.routes.ts">
+import {Routes} from '@angular/router';
+
+export const routes: Routes = [];
+</file>
+
+<file path="src/app/app.spec.ts">
+import {TestBed} from '@angular/core/testing';
+import {App} from './app';
+
+describe('App', () => {
+  beforeEach(async () => {
+    await TestBed.configureTestingModule({
+      imports: [App],
+    }).compileComponents();
+  });
+
+  it('should create the app', () => {
+    const fixture = TestBed.createComponent(App);
+    const app = fixture.componentInstance;
+    expect(app).toBeTruthy();
+  });
+});
+</file>
+
+<file path="src/app/physics-manager.ts">
+import * as THREE from 'three';
+import RAPIER, {
+  type Collider,
+  ColliderDesc,
+  type RigidBody,
+  RigidBodyDesc,
+  type World,
+} from '@dimforge/rapier3d-compat';
+
+export type PhysicsBodyKind = 'dynamic' | 'kinematic' | 'fixed';
+export type PhysicsColliderKind = 'ball' | 'box' | 'capsule';
+
+export interface PhysicsBridgeOptions {
+  kind: PhysicsBodyKind;
+  collider: PhysicsColliderKind;
+  radius?: number;
+  halfExtents?: THREE.Vector3;
+  halfHeight?: number;
+  mass?: number;
+  linearDamping?: number;
+  angularDamping?: number;
+  ccd?: boolean;
+  canSleep?: boolean;
+  gravityScale?: number;
+}
+
+interface PhysicsBridge {
+  object: THREE.Object3D;
+  body: RigidBody;
+  collider: Collider;
+  kind: PhysicsBodyKind;
+}
+
+export class PhysicsManager {
+  readonly scale = 100;
+
+  private world!: World;
+  private readonly fixedTimestep = 1 / 60;
+  private accumulator = 0;
+  private lastStepTime = 0;
+  private initialized = false;
+  private readonly bridges = new Map<THREE.Object3D, PhysicsBridge>();
+  private playerObject: THREE.Object3D | null = null;
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    await RAPIER.init();
+    this.world = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    this.world.timestep = this.fixedTimestep;
+    this.initialized = true;
+  }
+
+  bridge(object: THREE.Object3D, options: PhysicsBridgeOptions): RigidBody {
+    if (!this.initialized) {
+      throw new Error('PhysicsManager must be initialized before bridging objects.');
+    }
+
+    const position = object.position;
+    const rotation = object.quaternion;
+    let desc = this.createRigidBodyDesc(options.kind);
+    desc = desc
+      .setTranslation(position.x / this.scale, position.y / this.scale, position.z / this.scale)
+      .setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w })
+      .setGravityScale(options.gravityScale ?? 0)
+      .setLinearDamping(options.linearDamping ?? 0.15)
+      .setAngularDamping(options.angularDamping ?? 0.4)
+      .setCanSleep(options.canSleep ?? options.kind !== 'dynamic');
+
+    if (options.mass && options.kind === 'dynamic') {
+      desc = desc.setAdditionalMass(options.mass);
+    }
+
+    if (options.ccd) {
+      desc = desc.setCcdEnabled(true);
+    }
+
+    const body = this.world.createRigidBody(desc);
+    const colliderDesc = this.createColliderDesc(options);
+    const collider = this.world.createCollider(colliderDesc, body);
+
+    this.bridges.set(object, { object, body, collider, kind: options.kind });
+    this.syncObjectFromBody(object, body);
+    return body;
+  }
+
+  has(object: THREE.Object3D): boolean {
+    return this.bridges.has(object);
+  }
+
+  setPlayerObject(object: THREE.Object3D): void {
+    this.playerObject = object;
+  }
+
+  getPlayerPosition(): THREE.Vector3 | null {
+    if (!this.playerObject) return null;
+    return this.getObjectPosition(this.playerObject);
+  }
+
+  getObjectPosition(object: THREE.Object3D): THREE.Vector3 {
+    const bridge = this.bridges.get(object);
+    if (!bridge) {
+      return object.position.clone();
+    }
+
+    const translation = bridge.body.translation();
+    return new THREE.Vector3(
+      translation.x * this.scale,
+      translation.y * this.scale,
+      translation.z * this.scale,
+    );
+  }
+
+  getLinearVelocity(object: THREE.Object3D): THREE.Vector3 {
+    const bridge = this.bridges.get(object);
+    if (!bridge) return new THREE.Vector3();
+    const velocity = bridge.body.linvel();
+    return new THREE.Vector3(
+      velocity.x * this.scale,
+      velocity.y * this.scale,
+      velocity.z * this.scale,
+    );
+  }
+
+  setTranslation(object: THREE.Object3D, position: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) {
+      object.position.copy(position);
+      return;
+    }
+
+    bridge.body.setTranslation({
+      x: position.x / this.scale,
+      y: position.y / this.scale,
+      z: position.z / this.scale,
+    }, wakeUp);
+    object.position.copy(position);
+  }
+
+  setLinvel(object: THREE.Object3D, velocity: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) return;
+    bridge.body.setLinvel({
+      x: velocity.x / this.scale,
+      y: velocity.y / this.scale,
+      z: velocity.z / this.scale,
+    }, wakeUp);
+  }
+
+  setKinematicTarget(object: THREE.Object3D, position: THREE.Vector3, quaternion?: THREE.Quaternion): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) {
+      object.position.copy(position);
+      if (quaternion) object.quaternion.copy(quaternion);
+      return;
+    }
+
+    if (bridge.kind !== 'kinematic') {
+      this.setTranslation(object, position, true);
+      if (quaternion) {
+        bridge.body.setRotation(quaternion, true);
+      }
+      return;
+    }
+
+    bridge.body.setNextKinematicTranslation({
+      x: position.x / this.scale,
+      y: position.y / this.scale,
+      z: position.z / this.scale,
+    });
+
+    if (quaternion) {
+      bridge.body.setNextKinematicRotation({
+        x: quaternion.x,
+        y: quaternion.y,
+        z: quaternion.z,
+        w: quaternion.w,
+      });
+    }
+
+    object.position.copy(position);
+    if (quaternion) object.quaternion.copy(quaternion);
+  }
+
+  applyImpulse(object: THREE.Object3D, impulse: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) return;
+    bridge.body.applyImpulse({
+      x: impulse.x / this.scale,
+      y: impulse.y / this.scale,
+      z: impulse.z / this.scale,
+    }, wakeUp);
+  }
+
+  applyForce(object: THREE.Object3D, force: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) return;
+    bridge.body.addForce({
+      x: force.x / this.scale,
+      y: force.y / this.scale,
+      z: force.z / this.scale,
+    }, wakeUp);
+  }
+
+  applyInverseSquareGravity(
+    object: THREE.Object3D,
+    sources: Array<{ position: THREE.Vector3; mass: number }>,
+    gravitationalConstant: number,
+  ): void {
+    const bridge = this.bridges.get(object);
+    if (bridge?.kind !== 'dynamic') return;
+
+    const bodyPosition = this.getObjectPosition(object);
+    const bodyMass = Math.max(bridge.body.mass(), 0.0001);
+    const totalForce = new THREE.Vector3();
+
+    for (const source of sources) {
+      const direction = source.position.clone().sub(bodyPosition);
+      const distanceSq = Math.max(direction.lengthSq(), 16);
+      direction.normalize();
+      const forceMagnitude = gravitationalConstant * source.mass * bodyMass / distanceSq;
+      totalForce.addScaledVector(direction, forceMagnitude);
+    }
+
+    this.applyForce(object, totalForce, true);
+  }
+
+  step(elapsedSeconds: number): void {
+    if (!this.initialized) return;
+
+    if (this.lastStepTime === 0) {
+      this.lastStepTime = elapsedSeconds;
+    }
+
+    const frameDelta = Math.min(elapsedSeconds - this.lastStepTime, 1 / 15);
+    this.lastStepTime = elapsedSeconds;
+    this.accumulator += Math.max(frameDelta, 0);
+
+    while (this.accumulator >= this.fixedTimestep) {
+      this.world.step();
+      this.accumulator -= this.fixedTimestep;
+    }
+
+    this.syncAllObjectsFromBodies();
+  }
+
+  shiftWorld(shiftInThreeUnits: THREE.Vector3): void {
+    if (!this.initialized) return;
+
+    for (const bridge of this.bridges.values()) {
+      const position = this.getObjectPosition(bridge.object).sub(shiftInThreeUnits);
+      bridge.body.setTranslation({
+        x: position.x / this.scale,
+        y: position.y / this.scale,
+        z: position.z / this.scale,
+      }, false);
+      this.syncObjectFromBody(bridge.object, bridge.body);
+    }
+  }
+
+  dispose(): void {
+    this.bridges.clear();
+    this.playerObject = null;
+  }
+
+  private syncAllObjectsFromBodies(): void {
+    for (const bridge of this.bridges.values()) {
+      this.syncObjectFromBody(bridge.object, bridge.body);
+    }
+  }
+
+  private syncObjectFromBody(object: THREE.Object3D, body: RigidBody): void {
+    const translation = body.translation();
+    const rotation = body.rotation();
+    object.position.set(
+      translation.x * this.scale,
+      translation.y * this.scale,
+      translation.z * this.scale,
+    );
+    object.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+  }
+
+  private createRigidBodyDesc(kind: PhysicsBodyKind): RigidBodyDesc {
+    switch (kind) {
+      case 'dynamic':
+        return RigidBodyDesc.dynamic();
+      case 'kinematic':
+        return RigidBodyDesc.kinematicPositionBased();
+      default:
+        return RigidBodyDesc.fixed();
+    }
+  }
+
+  private createColliderDesc(options: PhysicsBridgeOptions): ColliderDesc {
+    switch (options.collider) {
+      case 'ball': {
+        const radius = (options.radius ?? 1) / this.scale;
+        return ColliderDesc.ball(radius);
+      }
+      case 'capsule': {
+        const radius = (options.radius ?? 0.5) / this.scale;
+        const halfHeight = (options.halfHeight ?? 0.5) / this.scale;
+        return ColliderDesc.capsule(halfHeight, radius);
+      }
+      default: {
+        const halfExtents = options.halfExtents ?? new THREE.Vector3(0.5, 0.5, 0.5);
+        return ColliderDesc.cuboid(
+          halfExtents.x / this.scale,
+          halfExtents.y / this.scale,
+          halfExtents.z / this.scale,
+        );
+      }
+    }
+  }
+}
+</file>
+
+<file path="src/app/post-process-manager.ts">
+import * as THREE from 'three';
+import {
+  BlendFunction,
+  ChromaticAberrationEffect,
+  EffectComposer,
+  EffectPass,
+  GodRaysEffect,
+  KernelSize,
+  NormalPass,
+  RenderPass,
+  SelectiveBloomEffect,
+  SMAAEffect,
+  SMAAPreset,
+  SSAOEffect,
+  VignetteEffect,
+} from 'postprocessing';
+
+export const BLOOM_LAYER = 11;
+
+export class PostProcessManager {
+  private readonly composer: EffectComposer;
+  private readonly bloomEffect: SelectiveBloomEffect;
+  private readonly renderPass: RenderPass;
+  private readonly effectPass: EffectPass;
+  private readonly godRaysEffect: GodRaysEffect | null;
+  private readonly chromaticAberrationEffect: ChromaticAberrationEffect;
+
+  constructor(
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    lightSource?: THREE.Mesh | THREE.Points,
+  ) {
+    this.composer = new EffectComposer(renderer, {
+      frameBufferType: THREE.HalfFloatType,
+    });
+
+    this.renderPass = new RenderPass(scene, camera);
+    this.bloomEffect = new SelectiveBloomEffect(scene, camera, {
+      blendFunction: BlendFunction.SCREEN,
+      intensity: 1.6,
+      luminanceThreshold: 0.28,
+      luminanceSmoothing: 0.12,
+      mipmapBlur: true,
+      radius: 0.74,
+    });
+    this.bloomEffect.selection.layer = BLOOM_LAYER;
+    this.bloomEffect.ignoreBackground = false;
+
+    this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
+      blendFunction: BlendFunction.SCREEN,
+      samples: 96,
+      density: 0.84,
+      decay: 0.95,
+      weight: 0.22,
+      exposure: 0.22,
+      clampMax: 1,
+      kernelSize: KernelSize.MEDIUM,
+      blur: true,
+    }) : null;
+
+    const vignette = new VignetteEffect({
+      eskil: false,
+      darkness: 0.38,
+      offset: 0.22,
+    });
+
+    const chromaticAberration = new ChromaticAberrationEffect({
+      offset: new THREE.Vector2(0.0006, 0.0006),
+      radialModulation: true,
+      modulationOffset: 0.3,
+    });
+    this.chromaticAberrationEffect = chromaticAberration;
+
+    // SMAA — anti-aliasing to clean up thin geometry (lightsaber blades, ring edges)
+    const smaaEffect = new SMAAEffect({ preset: SMAAPreset.HIGH });
+
+    // SSAO — screen-space ambient occlusion for contact shadows
+    const normalPass = new NormalPass(scene, camera);
+    const ssaoEffect = new SSAOEffect(camera, normalPass.texture, {
+      blendFunction: BlendFunction.MULTIPLY,
+      samples: 16,
+      rings: 4,
+      luminanceInfluence: 0.6,
+      radius: 0.04,
+      intensity: 1.5,
+      bias: 0.025,
+    });
+
+    const effects = this.godRaysEffect
+      ? [this.bloomEffect, this.godRaysEffect, ssaoEffect, smaaEffect, vignette]
+      : [this.bloomEffect, ssaoEffect, smaaEffect, vignette];
+
+    this.effectPass = new EffectPass(camera, ...effects);
+
+    // ChromaticAberration is a convolution effect — it must live in its own pass
+    const chromaPass = new EffectPass(camera, chromaticAberration);
+    chromaPass.renderToScreen = true;
+
+    this.composer.addPass(this.renderPass);
+    this.composer.addPass(normalPass);
+    this.composer.addPass(this.effectPass);
+    this.composer.addPass(chromaPass);
+  }
+
+  addBloomSelection(object: THREE.Object3D): void {
+    object.layers.enable(BLOOM_LAYER);
+    this.bloomEffect.selection.add(object);
+  }
+
+  addBloomSelectionRecursive(object: THREE.Object3D): void {
+    object.traverse((child) => {
+      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
+        this.addBloomSelection(child);
+      }
+    });
+  }
+
+  setBloomIntensity(intensity: number): void {
+    this.bloomEffect.intensity = intensity;
+  }
+
+  getBloomIntensity(): number {
+    return this.bloomEffect.intensity;
+  }
+
+  setChromaticAberrationOffset(x: number, y: number): void {
+    this.chromaticAberrationEffect.offset = new THREE.Vector2(x, y);
+  }
+
+  render(deltaTime: number): void {
+    this.composer.render(deltaTime);
+  }
+
+  setSize(width: number, height: number): void {
+    this.composer.setSize(width, height);
+  }
+
+  dispose(): void {
+    this.composer.dispose();
+  }
+}
+</file>
+
+<file path="src/app/theatre-camera.state.ts">
+import type { __UNSTABLE_Project_OnDiskState } from '@theatre/core';
+
+type CameraShot = {
+  offset: { x: number; y: number; z: number };
+  lookOffset: { x: number; y: number; z: number };
+  drift: { x: number; y: number; z: number };
+  mouseParallax: { x: number; y: number; z: number };
+  lerp: number;
+  flareVisible: boolean;
+};
+
+export const THEATRE_SLIDE_SEQUENCE_POSITIONS = {
+  title: 0,
+  inhoud: 1,
+  h1: 2,
+  h2: 3,
+  h3: 4,
+  h4: 5,
+  h5: 6,
+  extra: 7,
+  quiz: 8,
+  afsluiting: 9,
+} as const;
+
+export const THEATRE_TOUR_SEQUENCE_POSITIONS = {
+  jupiter: 20,
+  zon: 24,
+  mercurius: 28,
+  venus: 32,
+  aarde: 36,
+  mars: 40,
+  saturnus: 44,
+  uranus: 48,
+  neptunus: 52,
+  pluto: 56,
+  'jupiter-einde': 60,
+} as const;
+
+const DEFAULT_MOUSE_PARALLAX = { x: 3, y: 3, z: 0 };
+const SMOOTH_HANDLES = [0.5, 1, 0.5, 0] as const;
+const HOLD_HANDLES = [0.5, 1, 0.5, 0] as const;
+
+const SHOTS: Record<keyof typeof THEATRE_SLIDE_SEQUENCE_POSITIONS, CameraShot> = {
+  title: {
+    offset: { x: -7, y: 8, z: 52 },
+    lookOffset: { x: 0, y: 1, z: 0 },
+    drift: { x: 0, y: -0.002, z: -0.008 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.015,
+    flareVisible: true,
+  },
+  inhoud: {
+    offset: { x: 28, y: 14, z: 34 },
+    lookOffset: { x: 0, y: 1.4, z: 0 },
+    drift: { x: -0.009, y: 0, z: -0.004 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.025,
+    flareVisible: true,
+  },
+  h1: {
+    offset: { x: -16, y: 3.2, z: 18 },
+    lookOffset: { x: -1.1, y: 0.5, z: -0.3 },
+    drift: { x: 0.0025, y: 0, z: -0.0025 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.03,
+    flareVisible: false,
+  },
+  h2: {
+    offset: { x: -3.5, y: -3.2, z: 5.4 },
+    lookOffset: { x: 0.6, y: -2.5, z: -8.8 },
+    drift: { x: -0.001, y: 0.002, z: 0 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.02,
+    flareVisible: false,
+  },
+  h3: {
+    offset: { x: -12, y: 14, z: 32 },
+    lookOffset: { x: -10, y: 0, z: 2 },
+    drift: { x: 0.005, y: -0.002, z: 0 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.02,
+    flareVisible: true,
+  },
+  h4: {
+    offset: { x: -22, y: -8, z: 16 },
+    lookOffset: { x: 2, y: 0, z: 0 },
+    drift: { x: 0.015, y: 0.004, z: -0.003 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.018,
+    flareVisible: false,
+  },
+  h5: {
+    offset: { x: -2, y: -18, z: 13 },
+    lookOffset: { x: 0, y: 6, z: -1 },
+    drift: { x: -0.002, y: 0.006, z: 0 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.025,
+    flareVisible: false,
+  },
+  extra: {
+    offset: { x: 5, y: 38, z: 22 },
+    lookOffset: { x: 0, y: 0, z: -2 },
+    drift: { x: -0.008, y: 0, z: 0.005 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.02,
+    flareVisible: true,
+  },
+  quiz: {
+    offset: { x: -2, y: 2, z: 17 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.01, y: 0, z: -0.008 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.04,
+    flareVisible: true,
+  },
+  afsluiting: {
+    offset: { x: -5, y: 5, z: 38 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0, y: 0.002, z: 0.005 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.015,
+    flareVisible: true,
+  },
+};
+
+const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraShot> = {
+  jupiter: {
+    offset: { x: -22, y: 6, z: 19 },
+    lookOffset: { x: 0, y: 0.5, z: 0 },
+    drift: { x: 0.002, y: 0.0006, z: -0.0015 },
+    mouseParallax: { x: 0.8, y: 0.8, z: 0 },
+    lerp: 0.02,
+    flareVisible: false,
+  },
+  zon: {
+    offset: { x: 22, y: 7, z: 16 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.002, y: 0.0008, z: 0.001 },
+    mouseParallax: { x: 0.6, y: 0.6, z: 0 },
+    lerp: 0.022,
+    flareVisible: true,
+  },
+  mercurius: {
+    offset: { x: 2.0, y: 0.8, z: 1.6 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.0008, y: 0.0004, z: 0.0008 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.026,
+    flareVisible: true,
+  },
+  venus: {
+    offset: { x: 3.0, y: 1.2, z: 2.8 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.001, y: 0.0004, z: -0.0007 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.026,
+    flareVisible: true,
+  },
+  aarde: {
+    offset: { x: 2.8, y: 1.4, z: 3.0 },
+    lookOffset: { x: 0.1, y: 0.3, z: 0.1 },
+    drift: { x: 0.0012, y: 0.0003, z: -0.0008 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.028,
+    flareVisible: true,
+  },
+  mars: {
+    offset: { x: 2.4, y: 1.2, z: 2.2 },
+    lookOffset: { x: 0.1, y: 0.3, z: 0.1 },
+    drift: { x: 0.0009, y: 0.0002, z: -0.0008 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.028,
+    flareVisible: true,
+  },
+  saturnus: {
+    offset: { x: -28, y: 13, z: 23 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.0024, y: 0.0008, z: -0.0015 },
+    mouseParallax: { x: 0.75, y: 0.75, z: 0 },
+    lerp: 0.021,
+    flareVisible: true,
+  },
+  uranus: {
+    offset: { x: -12, y: 4.5, z: 11 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.0014, y: 0.0003, z: -0.001 },
+    mouseParallax: { x: 0.5, y: 0.5, z: 0 },
+    lerp: 0.022,
+    flareVisible: true,
+  },
+  neptunus: {
+    offset: { x: 12, y: 4.2, z: 11 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.0014, y: 0.0004, z: 0.001 },
+    mouseParallax: { x: 0.5, y: 0.5, z: 0 },
+    lerp: 0.022,
+    flareVisible: true,
+  },
+  pluto: {
+    offset: { x: 2.0, y: 0.9, z: 2.0 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.0011, y: 0.0005, z: -0.0007 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.026,
+    flareVisible: true,
+  },
+  'jupiter-einde': {
+    offset: { x: 8, y: 10, z: 58 },
+    lookOffset: { x: 0, y: 0.5, z: 0 },
+    drift: { x: -0.0012, y: 0.0007, z: 0.0022 },
+    mouseParallax: { x: 0.9, y: 0.9, z: 0 },
+    lerp: 0.017,
+    flareVisible: true,
+  },
+};
+
+function encodedPath(path: string[]): string {
+  return JSON.stringify(path);
+}
+
+function numericTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => number) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+        id: `${debugName}-${slideId}`,
+        value: readValue(SHOTS[slideId]),
+        position,
+        handles: [...SMOOTH_HANDLES],
+        connectedRight: true,
+        type: 'bezier' as const,
+      })),
+    },
+  };
+}
+
+function booleanTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => boolean) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+        id: `${debugName}-${slideId}`,
+        value: readValue(SHOTS[slideId]),
+        position,
+        handles: [...HOLD_HANDLES],
+        connectedRight: false,
+        type: 'hold' as const,
+      })),
+    },
+  };
+}
+
+function numericCombinedTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => number) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: [
+        ...Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+          id: `${debugName}-${slideId}`,
+          value: readValue(SHOTS[slideId]),
+          position,
+          handles: [...SMOOTH_HANDLES],
+          connectedRight: true,
+          type: 'bezier' as const,
+        })),
+        ...Object.entries(THEATRE_TOUR_SEQUENCE_POSITIONS).map(([stopId, position]) => ({
+          id: `tour-${debugName}-${stopId}`,
+          value: readValue(TOUR_SHOTS[stopId]),
+          position,
+          handles: [...SMOOTH_HANDLES],
+          connectedRight: true,
+          type: 'bezier' as const,
+        })),
+      ],
+    },
+  };
+}
+
+function booleanCombinedTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => boolean) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: [
+        ...Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+          id: `${debugName}-${slideId}`,
+          value: readValue(SHOTS[slideId]),
+          position,
+          handles: [...HOLD_HANDLES],
+          connectedRight: false,
+          type: 'hold' as const,
+        })),
+        ...Object.entries(THEATRE_TOUR_SEQUENCE_POSITIONS).map(([stopId, position]) => ({
+          id: `tour-${debugName}-${stopId}`,
+          value: readValue(TOUR_SHOTS[stopId]),
+          position,
+          handles: [...HOLD_HANDLES],
+          connectedRight: false,
+          type: 'hold' as const,
+        })),
+      ],
+    },
+  };
+}
+
+const allTracks = [
+  numericCombinedTrack('offset.x', ['offset', 'x'], (shot) => shot.offset.x),
+  numericCombinedTrack('offset.y', ['offset', 'y'], (shot) => shot.offset.y),
+  numericCombinedTrack('offset.z', ['offset', 'z'], (shot) => shot.offset.z),
+  numericCombinedTrack('lookOffset.x', ['lookOffset', 'x'], (shot) => shot.lookOffset.x),
+  numericCombinedTrack('lookOffset.y', ['lookOffset', 'y'], (shot) => shot.lookOffset.y),
+  numericCombinedTrack('lookOffset.z', ['lookOffset', 'z'], (shot) => shot.lookOffset.z),
+  numericCombinedTrack('drift.x', ['drift', 'x'], (shot) => shot.drift.x),
+  numericCombinedTrack('drift.y', ['drift', 'y'], (shot) => shot.drift.y),
+  numericCombinedTrack('drift.z', ['drift', 'z'], (shot) => shot.drift.z),
+  numericCombinedTrack('mouseParallax.x', ['mouseParallax', 'x'], (shot) => shot.mouseParallax.x),
+  numericCombinedTrack('mouseParallax.y', ['mouseParallax', 'y'], (shot) => shot.mouseParallax.y),
+  numericCombinedTrack('mouseParallax.z', ['mouseParallax', 'z'], (shot) => shot.mouseParallax.z),
+  numericCombinedTrack('lerp', ['lerp'], (shot) => shot.lerp),
+  booleanCombinedTrack('flareVisible', ['flareVisible'], (shot) => shot.flareVisible),
+];
+
+export const THEATRE_CAMERA_PROJECT_STATE = {
+  definitionVersion: '0.4.0',
+  revisionHistory: [],
+  sheetsById: {
+    'slide-camera': {
+      staticOverrides: {
+        byObject: {},
+      },
+      sequence: {
+        type: 'PositionalSequence',
+        length: 60,
+        subUnitsPerUnit: 30,
+        tracksByObject: {
+          'jupiter-camera': {
+            trackIdByPropPath: Object.fromEntries(allTracks.map((track) => [track.path, track.trackId])),
+            trackData: Object.fromEntries(allTracks.map((track) => [track.trackId, track.data])),
+          },
+        },
+      },
+    },
+  },
+} as unknown as __UNSTABLE_Project_OnDiskState;
+</file>
+
+<file path="src/globals.d.ts">
+declare const GEMINI_API_KEY: string;
+</file>
+
+<file path="src/index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jupiter - Spreekbeurt v1.0</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  </head>
+  <body>
+    <app-root></app-root>
+  </body>
+</html>
+</file>
+
+<file path="src/main.server.ts">
+import {
+  BootstrapContext,
+  bootstrapApplication,
+} from '@angular/platform-browser';
+import {App} from './app/app';
+import {config} from './app/app.config.server';
+
+const bootstrap = (context: BootstrapContext) =>
+  bootstrapApplication(App, config, context);
+
+export default bootstrap;
+</file>
+
+<file path="src/main.ts">
+import {bootstrapApplication} from '@angular/platform-browser';
+import {App} from './app/app';
+import {appConfig} from './app/app.config';
+
+bootstrapApplication(App, appConfig).catch((err) => console.error(err));
+</file>
+
+<file path=".dockerignore">
+node_modules
+dist
+.git
+.gitignore
+.angular
+*.md
+*.spec.ts
+.vscode
+.idea
+.env
+docker-compose.yml
+Dockerfile
+</file>
+
+<file path=".gitignore">
+# See https://docs.github.com/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+
+# Env variables
+.env*
+!.env.example
+
+# Compiled output
+/dist
+/tmp
+/out-tsc
+/bazel-out
+
+# Node
+node_modules/
+npm-debug.log
+yarn-error.log
+
+# IDEs and editors
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+.settings/
+*.sublime-workspace
+
+# Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+.history/*
+
+# Miscellaneous
+/.angular/cache
+.sass-cache/
+/connect.lock
+/coverage
+/libpeerconnection.log
+testem.log
+/typings
+__screenshots__/
+
+# System files
+.DS_Store
+Thumbs.db
+</file>
+
+<file path=".postcssrc.json">
+{
+  "plugins": {
+    "@tailwindcss/postcss": {}
+  }
+}
+</file>
+
+<file path="eslint.config.js">
+// @ts-check
+const eslint = require('@eslint/js');
+const {defineConfig} = require('eslint/config');
+const tseslint = require('typescript-eslint');
+const angular = require('angular-eslint');
+
+module.exports = defineConfig([
+  {
+    files: ['**/*.ts'],
+    extends: [
+      eslint.configs.recommended,
+      tseslint.configs.recommended,
+      tseslint.configs.stylistic,
+      angular.configs.tsRecommended,
+    ],
+    processor: angular.processInlineTemplates,
+    rules: {
+      '@angular-eslint/directive-selector': [
+        'error',
+        {
+          type: 'attribute',
+          prefix: 'app',
+          style: 'camelCase',
+        },
+      ],
+      '@angular-eslint/component-selector': [
+        'error',
+        {
+          type: 'element',
+          prefix: 'app',
+          style: 'kebab-case',
+        },
+      ],
+    },
+  },
+  {
+    files: ['**/*.html'],
+    extends: [
+      angular.configs.templateRecommended,
+      angular.configs.templateAccessibility,
+    ],
+    rules: {},
+  }
+]);
+</file>
+
+<file path="metadata.json">
+{
+  "name": "Jupiter Spreekbeurt",
+  "description": "Een interactieve 3D presentatie over Jupiter in Star Wars stijl.",
+  "requestFramePermissions": []
+}
+</file>
+
+<file path="README.md">
+<div align="center">
+<img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
+</div>
+
+# Run and deploy your AI Studio app
+
+This contains everything you need to run your app locally.
+
+View your app in AI Studio: https://ai.studio/apps/a4383605-988e-4ce8-829f-34ac0a410958
+
+## Run Locally
+
+**Prerequisites:**  Node.js
+
+
+1. Install dependencies:
+   `npm install`
+2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
+3. Run the app:
+   `npm run dev`
+</file>
+
+<file path="tsconfig.app.json">
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/app",
+    "types": [
+      "node"
+    ]
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts"]
+}
+</file>
+
+<file path="tsconfig.json">
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  "compileOnSave": false,
+  "compilerOptions": {
+    "strict": true,
+    "noImplicitOverride": true,
+    "noPropertyAccessFromIndexSignature": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "experimentalDecorators": true,
+    "importHelpers": true,
+    "target": "ES2022",
+    "module": "preserve"
+  },
+  "angularCompilerOptions": {
+    "enableI18nLegacyMessageIdFormat": false,
+    "strictInjectionParameters": true,
+    "strictInputAccessModifiers": true,
+    "strictTemplates": true
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.app.json"
+    },
+    {
+      "path": "./tsconfig.spec.json"
+    }
+  ]
+}
+</file>
+
+<file path="tsconfig.spec.json">
+/* To learn more about Typescript configuration file: https://www.typescriptlang.org/docs/handbook/tsconfig-json.html. */
+/* To learn more about Angular compiler options: https://angular.dev/reference/configs/angular-compiler-options. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "outDir": "./out-tsc/spec",
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*.d.ts", "src/**/*.spec.ts"]
+}
+</file>
+
+<file path="src/app/app.config.ts">
+import {
+  ApplicationConfig,
+  provideBrowserGlobalErrorListeners,
+} from '@angular/core';
+import {provideRouter} from '@angular/router';
+import {provideHttpClient, withFetch} from '@angular/common/http';
+
+import {routes} from './app.routes';
+
+export const appConfig: ApplicationConfig = {
+  providers: [provideBrowserGlobalErrorListeners(), provideRouter(routes), provideHttpClient(withFetch())],
+};
+</file>
+
+<file path="src/app/app.routes.server.ts">
+import {RenderMode, ServerRoute} from '@angular/ssr';
+
+export const serverRoutes: ServerRoute[] = [
+  {
+    path: '**',
+    renderMode: RenderMode.Client,
+  },
+];
+</file>
+
+<file path="src/server.ts">
+import {
+  AngularNodeAppEngine,
+  createNodeRequestHandler,
+  isMainModule,
+  writeResponseToNodeResponse,
+} from '@angular/ssr/node';
+import express from 'express';
+import {join} from 'node:path';
+
+const browserDistFolder = join(import.meta.dirname, '../browser');
+
+const app = express();
+const angularApp = new AngularNodeAppEngine();
+
+/**
+ * Example Express Rest API endpoints can be defined here.
+ * Uncomment and define endpoints as necessary.
+ *
+ * Example:
+ * ```ts
+ * app.get('/api/{*splat}', (req, res) => {
+ *   // Handle API request
+ * });
+ * ```
+ */
+
+/**
+ * Serve static files from /browser
+ */
+app.use(
+  express.static(browserDistFolder, {
+    maxAge: '1y',
+    index: false,
+    redirect: false,
+  }),
+);
+
+/**
+ * Handle all other requests by rendering the Angular application.
+ */
+app.use((req, res, next) => {
+  angularApp
+    .handle(req)
+    .then((response) =>
+      response ? writeResponseToNodeResponse(response, res) : next(),
+    )
+    .catch(next);
+});
+
+/**
+ * Start the server if this module is the main entry point, or it is ran via PM2.
+ * The server listens on the port defined by the `PORT` environment variable, or defaults to 4000.
+ */
+if (isMainModule(import.meta.url) || process.env['pm_id']) {
+  const port = Number(process.env['PORT']) || 4000;
+  app.listen(port, '0.0.0.0', (error) => {
+    if (error) {
+      throw error;
+    }
+
+    console.log(`Node Express server listening on port ${port}`);
+  });
+}
+
+/**
+ * Request handler used by the Angular CLI (for dev-server and during build) or Firebase Cloud Functions.
+ */
+export const reqHandler = createNodeRequestHandler(app);
+</file>
+
+<file path="src/styles.css">
+/* You can add global styles to this file, and also import other style files */
+@import url('https://fonts.googleapis.com/icon?family=Material+Icons');
+@import url('https://fonts.googleapis.com/css2?family=Pathway+Gothic+One&family=Inter:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-starwars: "Pathway Gothic One", sans-serif;
+  --color-starwars-yellow: #FFE81F;
+}
+
+body {
+  margin: 0;
+  overflow: hidden;
+  background-color: #000;
+  color: white;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(255, 232, 31, 0.3);
+  color: white;
+}
+</file>
+
+<file path=".env.example">
+# No environment variables required
+</file>
+
+<file path="angular.json">
+{
+  "$schema": "./node_modules/@angular/cli/lib/config/schema.json",
+  "version": 1,
+  "cli": {
+    "packageManager": "npm",
+    "schematicCollections": [
+      "angular-eslint"
+    ],
+    "analytics": false
+  },
+  "newProjectRoot": "projects",
+  "projects": {
+    "app": {
+      "projectType": "application",
+      "schematics": {},
+      "root": "",
+      "sourceRoot": "src",
+      "prefix": "app",
+      "architect": {
+        "build": {
+          "builder": "@angular/build:application",
+          "options": {
+            "define": {
+              "GEMINI_API_KEY": "'YOUR_GEMINI_API_KEY'"
+            },
+            "browser": "src/main.ts",
+            "tsConfig": "tsconfig.app.json",
+            "assets": [
+              {
+                "glob": "**/*",
+                "input": "public"
+              }
+            ],
+            "styles": [
+              "src/styles.css"
+            ],
+            "server": "src/main.server.ts",
+            "outputMode": "server",
+            "ssr": {
+              "entry": "src/server.ts"
+            }
+          },
+          "configurations": {
+            "production": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "2MB",
+                  "maximumError": "4MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all"
+            },
+            "development": {
+              "optimization": false,
+              "extractLicenses": false,
+              "sourceMap": true
+            }
+          },
+          "defaultConfiguration": "production"
+        },
+        "serve": {
+          "builder": "@angular/build:dev-server",
+          "configurations": {
+            "production": {
+              "buildTarget": "app:build:production"
+            },
+            "development": {
+              "buildTarget": "app:build:development"
+            }
+          },
+          "defaultConfiguration": "development"
+        },
+        "test": {
+          "builder": "@angular/build:unit-test"
+        },
+        "lint": {
+          "builder": "@angular-eslint/builder:lint",
+          "options": {
+            "lintFilePatterns": [
+              "src/**/*.ts",
+              "src/**/*.html"
+            ]
+          }
+        }
+      }
+    }
+  }
+}
+</file>
+
+<file path="package.json">
+{
+  "name": "ai-studio-angular-app",
+  "version": "0.0.0",
+  "scripts": {
+    "ng": "ng",
+    "start": "ng serve",
+    "dev": "cross-env ng serve --port=3000 --host=0.0.0.0 --define=\"GEMINI_API_KEY=\\'${GEMINI_API_KEY}\\'\" ${DISABLE_HMR:+--live-reload=false}",
+    "build": "ng build",
+    "postinstall": "node scripts/fix-rapier-init-warning.mjs",
+    "watch": "ng build --watch --configuration development",
+    "test": "ng test",
+    "lint": "ng lint",
+    "serve:ssr:app": "node dist/app/server/server.mjs"
+  },
+  "private": true,
+  "dependencies": {
+    "@angular/cdk": "^21.0.0",
+    "@angular/common": "^21.0.0",
+    "@angular/compiler": "^21.0.0",
+    "@angular/core": "^21.0.0",
+    "@angular/forms": "^21.0.0",
+    "@angular/material": "^21.0.0",
+    "@angular/platform-browser": "^21.0.0",
+    "@angular/platform-server": "^21.0.0",
+    "@angular/router": "^21.0.0",
+    "@angular/ssr": "^21.0.0",
+    "@dimforge/rapier3d-compat": "^0.19.3",
+    "@google/genai": "^1.27.0",
+    "@theatre/core": "^0.7.2",
+    "canvas-confetti": "^1.9.4",
+    "express": "^5.1.0",
+    "motion": "^12.23.24",
+    "postprocessing": "^6.39.0",
+    "rxjs": "~7.8.0",
+    "three": "^0.183.2",
+    "tslib": "^2.3.0"
+  },
+  "devDependencies": {
+    "@angular/build": "^21.0.0",
+    "@angular/cli": "^21.0.0",
+    "@angular/compiler-cli": "^21.0.0",
+    "@tailwindcss/postcss": "^4.1.12",
+    "@theatre/studio": "^0.7.2",
+    "@types/canvas-confetti": "^1.9.0",
+    "@types/express": "^5.0.1",
+    "@types/node": "^20.17.19",
+    "@types/three": "^0.183.1",
+    "angular-eslint": "21.1.0",
+    "cross-env": "^10.1.0",
+    "eslint": "^9.39.1",
+    "jsdom": "^27.0.0",
+    "postcss": "^8.5.3",
+    "tailwindcss": "^4.1.12",
+    "typescript": "~5.9.2",
+    "typescript-eslint": "8.47.0",
+    "vitest": "^4.0.0"
+  }
+}
+</file>
+
+<file path="docker-compose.yml">
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "${PORT:-3000}:3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+          cpus: "1.0"
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+</file>
+
+<file path="Dockerfile">
+# Stage 1: Build
+FROM node:22-alpine AS build
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY . .
+
+RUN npx ng build --configuration production
+
+# Stage 2: Production runtime
+FROM node:22-alpine AS production
+
+ENV NODE_ENV=production
+ENV PORT=3000
+
+WORKDIR /app
+
+COPY --from=build /app/dist/app ./dist/app
+
+# Only install production dependencies
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+# Don't run as root
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+USER appuser
+
+EXPOSE 3000
+
+CMD ["node", "dist/app/server/server.mjs"]
+</file>
+
+<file path="src/app/slides.data.ts">
+export interface Slide {
+  id: string;
+  title: string;
+  content: string[];
+  experiment?: {
+    title: string;
+    description: string;
+    instructions: string[];
+  };
+  quiz?: {
+    question: string;
+    options: string[];
+    correctOptionIndex: number;
+    explanation?: string;
+  }[];
+  isTitleSlide?: boolean;
+  video?: string;
+}
+
+export const SLIDES: Slide[] = [
+  {
+    id: 'title',
+    title: 'Spreekbeurt over Jupiter',
+    content: [
+      'Gemaakt door: Asbjørn Oost',
+      'Klas: Groep 7'
+    ],
+    isTitleSlide: true
+  },
+  {
+    id: 'inhoud',
+    title: 'De Inhoud',
+    content: [
+      '1. Waar is Jupiter van gemaakt?',
+      '2. De Grote Rode Vlek (Met proefje!)',
+      '3. Hoe ver is Jupiter weg?',
+      '4. Hoe oud is Jupiter?',
+      '5. Is Jupiter een normale planeet? (Met proefje!)',
+      'Extra: Kunnen we er wonen?',
+      'Afsluiting: De Grote Jupiter-Quiz!'
+    ]
+  },
+  {
+    id: 'h1',
+    title: '1. Waar is Jupiter van gemaakt?',
+    content: [
+      '• Geen steen of zand zoals de aarde',
+      '• Jupiter is een reusachtige gasbol!',
+      '• 90% waterstof en 10% helium',
+      '• De dampkring is wel 1000 km dik',
+      '• Je kunt er niet op landen, want er is geen grond'
+    ]
+  },
+  {
+    id: 'h2',
+    title: '2. Waar komt de rode vlek vandaan?',
+    content: [
+      '• Geen vulkaan of eiland',
+      '• Reusachtige storm (orkaan)',
+      '• Raast al honderden jaren',
+      '• Groter dan de hele aarde!',
+      '• Rode kleur door zonnestraling'
+    ],
+    video: 'Jupiter_red_dot_storm.mp4',
+    experiment: {
+      title: 'Maak je eigen Rode Vlek!',
+      description: 'Nodig: Glazen pot met water, lepel, rode limonadesiroop.',
+      instructions: [
+        'Roer hard met de lepel voor een draaikolk.',
+        'Druppel in het midden rode kleurstof.',
+        'Kijk hoe de vlek blijft draaien!'
+      ]
+    }
+  },
+  {
+    id: 'h3',
+    title: '3. Hoe ver is Jupiter weg?',
+    content: [
+      '• De afstand verandert de hele tijd!',
+      '• Dichtstbij: 588 miljoen km',
+      '• Verst weg: 968 miljoen km',
+      '• Licht doet er 33 tot 54 minuten over',
+      '• Met de auto zou je honderden jaren rijden!'
+    ]
+  },
+  {
+    id: 'h4',
+    title: '4. Hoe oud is Jupiter?',
+    content: [
+      '• Ongeveer 4,5 miljard jaar oud!',
+      '• De oudste planeet in ons zonnestelsel',
+      '• Razendsnel ontstaan: binnen 1 miljoen jaar',
+      '• Gemaakt van gas en stof uit de ruimte'
+    ]
+  },
+  {
+    id: 'h5',
+    title: '5. Is Jupiter een normale planeet?',
+    content: [
+      '• De allergrootste planeet — een gasreus!',
+      '• Meer dan 300× zwaarder dan de aarde',
+      '• Draait super snel om zijn as',
+      '• Eén dag duurt maar 9 uur en 55 minuten',
+      '• Je weegt er 2,5× meer dan op aarde!'
+    ],
+    video: 'Jupiter_Size_Comparison_Video.mp4',
+    experiment: {
+      title: 'Hoe zwaar ben je op Jupiter?',
+      description: 'Nodig: Tasje met 1 kilo suiker, tasje met 2,5 kilo suiker.',
+      instructions: [
+        'Voel het tasje van 1 kilo (gewicht op aarde).',
+        'Voel het tasje van 2,5 kilo (gewicht op Jupiter).',
+        'Verschil: Je bent op Jupiter ruim 2x zo zwaar!'
+      ]
+    }
+  },
+  {
+    id: 'extra',
+    title: 'Extra: Kunnen we op Jupiter wonen?',
+    content: [
+      '• Nee! Geen grond, enorme druk en keiharde wind',
+      '• Maar... Jupiter heeft 95 manen!',
+      '• Op de maan Europa zit misschien een oceaan onder het ijs',
+      '• Jupiter trekt zo hard aan de maan Io dat die opwarmt',
+      '• Misschien is daar ooit leven te vinden?'
+    ]
+  },
+  {
+    id: 'quiz',
+    title: '🏆 De Grote Jupiter-Afvalrace!',
+    content: [
+      'Iedereen gaat staan!',
+      'Kies A (handen op je hoofd) of B (handen op je rug).',
+      'Fout? Dan moet je gaan zitten!',
+      'Wie blijft er als laatste over?'
+    ],
+    quiz: [
+      {
+        question: '1. Uit welke gassen bestaat Jupiter vooral?',
+        options: ['A: Zuurstof en Stikstof', 'B: Waterstof en Helium'],
+        correctOptionIndex: 1,
+        explanation: 'Net als de zon bestaat Jupiter vooral uit waterstof en helium!'
+      },
+      {
+        question: '2. Wat is de Grote Rode Vlek?',
+        options: ['A: Een reusachtige storm', 'B: Een grote vulkaan'],
+        correctOptionIndex: 0,
+        explanation: 'Het is een storm die al honderden jaren raast en groter is dan de aarde!'
+      },
+      {
+        question: '3. Hoe lang duurt een dag op Jupiter?',
+        options: ['A: Bijna 10 uur', 'B: Bijna 24 uur'],
+        correctOptionIndex: 0,
+        explanation: 'Jupiter draait super snel om zijn as, dus een dag is heel kort.'
+      },
+      {
+        question: '4. Hoeveel manen heeft Jupiter (ongeveer)?',
+        options: ['A: 1 (net als de aarde)', 'B: 95'],
+        correctOptionIndex: 1,
+        explanation: 'Jupiter heeft een enorme zwaartekracht en houdt wel 95 manen in zijn baan!'
+      },
+      {
+        question: '5. Is Jupiter zwaarder of lichter dan de aarde?',
+        options: ['A: Meer dan 300× zwaarder', 'B: 10× lichter'],
+        correctOptionIndex: 0,
+        explanation: 'Jupiter is de zwaarste planeet van ons hele zonnestelsel.'
+      }
+    ]
+  },
+  {
+    id: 'afsluiting',
+    title: 'Einde',
+    content: [
+      'Dit was mijn spreekbeurt!',
+      'Zijn er nog vragen?'
+    ],
+    isTitleSlide: true
+  }
+];
+</file>
+
+<file path="src/app/app.ts">
+import { ChangeDetectionStrategy, Component, HostListener, signal, computed, effect, ViewChild, ElementRef, AfterViewInit, PLATFORM_ID, inject } from '@angular/core';
+import { isPlatformBrowser } from '@angular/common';
+import { MatIconModule } from '@angular/material/icon';
+import { Background3DComponent } from './background-3d.component';
+import { SLIDES } from './slides.data';
+import { animate, stagger, cubicBezier } from 'motion';
+
+@Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
+  selector: 'app-root',
+  imports: [Background3DComponent, MatIconModule],
+  template: `
+    <!-- Background audio for entire presentation -->
+    <audio #bgAudio [src]="bgAudioSrc" loop preload="auto" class="hidden"></audio>
+
+    <!-- Space celebration canvas -->
+    <canvas #celebrationCanvas class="fixed inset-0 w-full h-full z-[15] pointer-events-none" [class.hidden]="!celebrationActive()"></canvas>
+
+    <!-- Full-screen video background (behind 3D, revealed on zoom) -->
+    @if (currentSlide().video) {
+      <video #bgVideo
+        class="fixed inset-0 w-full h-full object-cover z-[1] transition-opacity duration-1000"
+        [class.opacity-0]="!videoRevealed()"
+        [src]="currentSlide().video"
+        loop playsinline autoplay>
+      </video>
+      <!-- Video scrim overlay for readability -->
+      @if (videoRevealed()) {
+        <div class="fixed inset-0 z-[2] pointer-events-none video-scrim"></div>
+      }
+    }
+
+    <app-background-3d 
+      [slideIndex]="currentIndex()" 
+      [slideId]="currentSlide().id"
+      [fadeOut]="videoRevealed()"
+      [tourMode]="tourMode()"
+      (loaded)="onSceneLoaded()"
+      (distanceKm)="onDistanceUpdate($event)"
+      (tourPlanet)="onTourPlanet($event)"
+      class="transition-opacity duration-[2000ms] ease-in-out"
+      [class.opacity-0]="videoRevealed()">
+    </app-background-3d>
+
+    <div class="relative z-10 w-full h-screen overflow-hidden flex flex-col items-center justify-center pointer-events-none">
+      
+      <!-- Star Wars Crawl for Title Slide -->
+      @if (currentSlide().isTitleSlide) {
+        <div class="absolute inset-0 flex items-center justify-center perspective-[800px]">
+          <div #crawlContainer class="w-[80%] max-w-3xl text-center text-[var(--color-starwars-yellow)] font-starwars transform-gpu rotate-x-[20deg] origin-bottom transition-opacity duration-[3000ms]" [class.opacity-0]="tourMode()">
+            <h1 class="text-7xl md:text-9xl mb-8 uppercase tracking-widest title-shimmer">{{ currentSlide().title }}</h1>
+            @if (currentSlide().id === 'title') {
+              <p class="text-sm md:text-xl mb-4 uppercase tracking-[0.5em] opacity-50 font-starwars">Gemaakt door</p>
+              <div class="name-backdrop relative mb-6">
+                @for (char of nameChars; track $index) {
+                  <span class="name-char relative inline-block text-5xl md:text-8xl font-starwars uppercase"
+                        [style.animation-delay]="($index * 120) + 'ms'"
+                        [style.min-width]="char === ' ' ? '0.4em' : 'auto'">{{ char }}</span>
+                }
+              </div>
+              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-45 name-subtitle">Klas: Groep 7</p>
+            } @else {
+              @for (line of currentSlide().content; track $index) {
+                <p class="text-3xl md:text-5xl mb-4 uppercase tracking-wider">{{ line }}</p>
+              }
+            }
+            @if (currentSlide().id === 'title' && !hasStarted()) {
+              @if (sceneLoaded()) {
+                <button (click)="startPresentation()" class="mt-12 pointer-events-auto group flex flex-col items-center gap-4 mx-auto focus:outline-none">
+                  <div class="w-28 h-28 rounded-full bg-[var(--color-starwars-yellow)]/20 border-2 border-[var(--color-starwars-yellow)] flex items-center justify-center group-hover:bg-[var(--color-starwars-yellow)]/40 group-hover:scale-110 active:scale-95 transition-all duration-300 shadow-[0_0_40px_rgba(255,232,31,0.3)] group-hover:shadow-[0_0_60px_rgba(255,232,31,0.5)] play-pulse">
+                    <mat-icon class="!text-6xl !w-14 !h-14 text-[var(--color-starwars-yellow)] ml-1" style="font-size:56px;width:56px;height:56px;">play_arrow</mat-icon>
+                  </div>
+                  <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">Klik om te beginnen</span>
+                </button>
+              } @else {
+                <div class="mt-12 flex flex-col items-center gap-4">
+                  <div class="w-28 h-28 rounded-full bg-white/5 border-2 border-white/20 flex items-center justify-center">
+                    <div class="w-10 h-10 border-3 border-[var(--color-starwars-yellow)]/40 border-t-[var(--color-starwars-yellow)] rounded-full animate-spin"></div>
+                  </div>
+                  <span class="text-xl opacity-50">Laden...</span>
+                </div>
+              }
+            } @else if (currentSlide().id === 'title' && hasStarted()) {
+              <p class="mt-12 text-xl opacity-70 animate-pulse">Druk op spatie of pijltje naar rechts om verder te gaan</p>
+            }
+          </div>
+        </div>
+        <!-- Planet Tour Overlay — stat cards styled like slide floating data widgets -->
+        @if (tourMode() && tourCurrentPlanet() && planetFacts[tourCurrentPlanet()]) {
+          @let pf = planetFacts[tourCurrentPlanet()];
+          <div class="absolute inset-0 pointer-events-none">
+            <!-- Readability gradients -->
+            <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/10 to-transparent"></div>
+            <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/15"></div>
+            <!-- Tour stats panel — bottom left -->
+            <div class="absolute bottom-20 left-8 md:left-12 tour-facts-card">
+              <!-- Accent bar + planet name -->
+              <div class="tour-accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_10px_rgba(255,232,31,0.35)]"></div>
+              <div class="flex items-center gap-2.5 mb-5">
+                <span class="text-3xl leading-none">{{ pf.icon }}</span>
+                <h2 class="text-3xl md:text-5xl font-starwars uppercase tracking-wider drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]"
+                    [style.color]="pf.color">{{ pf.title }}</h2>
+              </div>
+              <!-- 2x2 stat card grid -->
+              <div class="grid grid-cols-2 gap-x-10 gap-y-6">
+                @for (stat of pf.stats; track $index) {
+                  <div class="tour-stat-card" [style.animation-delay]="($index * 130 + 150) + 'ms'">
+                    <div class="text-xs font-mono tracking-[0.25em] mb-1 text-white/55">{{ stat.label }}</div>
+                    <div class="text-3xl md:text-4xl font-starwars tabular-nums leading-tight"
+                         [style.color]="pf.color"
+                         [style.text-shadow]="'0 0 20px ' + pf.color">{{ stat.value }}</div>
+                    @if (stat.sub) {
+                      <div class="text-sm text-white/50 mt-1 max-w-[170px]">{{ stat.sub }}</div>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          </div>
+        }
+      } @else {
+        <!-- Gradient overlays for text readability -->
+        <div class="absolute inset-0 pointer-events-none" [class]="videoRevealed() ? 'video-readability-overlay' : ''">
+          <div class="absolute inset-0 bg-gradient-to-r from-black/70 via-black/25 to-transparent"></div>
+          <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/25"></div>
+        </div>
+
+        <div #slideContainer class="relative w-full h-full pointer-events-auto">
+
+          <!-- Floating title — top-left -->
+          <div class="absolute top-10 left-10 md:left-14 z-10">
+            <div class="accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_12px_rgba(255,232,31,0.4)] origin-left"></div>
+            <h2 class="slide-title text-3xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_20px_rgba(255,232,31,0.3)]">
+              {{ currentSlide().title }}
+            </h2>
+          </div>
+
+          <!-- ═══ H1: COMPOSITION — floating data around the planet ═══ -->
+          @if (currentSlide().id === 'h1') {
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="slide-item absolute top-[14%] right-[16%] text-right">
+                <div class="text-xs font-mono text-cyan-400/70 tracking-[0.3em] mb-1">CLASSIFICATIE</div>
+                <div class="text-4xl md:text-6xl font-starwars text-cyan-300/90 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GASREUS</div>
+                <div class="text-sm text-white/60 mt-1">Geen steen of zand zoals de aarde</div>
+              </div>
+              <div class="slide-item absolute top-[38%] right-[6%] md:right-[10%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-6xl md:text-8xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_30px_rgba(255,232,31,0.4)] tabular-nums">90</span>
+                  <span class="text-2xl text-[var(--color-starwars-yellow)]/70 font-starwars">%</span>
+                </div>
+                <div class="text-sm text-white/60 tracking-wider">WATERSTOF (H₂)</div>
+              </div>
+              <div class="slide-item absolute top-[55%] right-[18%] md:right-[22%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-4xl md:text-6xl font-starwars text-orange-300/85 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">10</span>
+                  <span class="text-xl text-orange-300/60 font-starwars">%</span>
+                </div>
+                <div class="text-sm text-white/55 tracking-wider">HELIUM (He)</div>
+              </div>
+              <div class="slide-item absolute bottom-[28%] right-[10%] md:right-[14%]">
+                <div class="flex items-center gap-3">
+                  <div class="w-10 h-px bg-gradient-to-r from-transparent to-cyan-400/40"></div>
+                  <div>
+                    <div class="flex items-baseline gap-1">
+                      <span class="text-3xl md:text-4xl font-starwars text-cyan-200/80 tabular-nums">1000</span>
+                      <span class="text-sm text-cyan-200/55 tracking-wider">KM</span>
+                    </div>
+                    <div class="text-xs text-white/50 tracking-wider">DAMPKRING DIKTE</div>
+                  </div>
+                </div>
+              </div>
+              <div class="slide-item absolute bottom-[18%] right-[22%]">
+                <div class="text-sm text-red-300/70 italic flex items-center gap-2">
+                  <div class="w-1.5 h-1.5 rounded-full bg-red-400/60"></div>
+                  Geen vaste grond om op te landen
+                </div>
+              </div>
+            </div>
+
+          <!-- ═══ H5: SIZE / GRAVITY — floating comparison stats ═══ -->
+          } @else if (currentSlide().id === 'h5') {
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="slide-item absolute top-[12%] right-[14%] text-right">
+                <div class="text-xs font-mono text-purple-400/70 tracking-[0.3em] mb-1">MASSA</div>
+                <div class="flex items-baseline gap-1 justify-end">
+                  <span class="text-5xl md:text-7xl font-starwars text-purple-300/90 drop-shadow-[0_0_25px_rgba(180,130,255,0.4)] tabular-nums">300</span>
+                  <span class="text-xl text-purple-300/70 font-starwars">×</span>
+                </div>
+                <div class="text-sm text-white/60">zwaarder dan de aarde</div>
+              </div>
+              <div class="slide-item absolute top-[35%] right-[6%] md:right-[8%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-4xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_20px_rgba(255,232,31,0.3)] tabular-nums">9u 55m</span>
+                </div>
+                <div class="text-sm text-white/55 tracking-wider">ÉÉN DAG OP JUPITER</div>
+              </div>
+              <div class="slide-item absolute top-[52%] right-[16%] md:right-[20%]">
+                <div class="flex items-baseline gap-1">
+                  <span class="text-5xl md:text-6xl font-starwars text-orange-300/90 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">2.5</span>
+                  <span class="text-xl text-orange-300/65 font-starwars">×</span>
+                </div>
+                <div class="text-sm text-white/55 tracking-wider">ZWAARTEKRACHT</div>
+                <div class="text-xs text-white/50 mt-0.5">Je weegt er flink meer!</div>
+              </div>
+              <div class="slide-item absolute bottom-[25%] right-[12%]">
+                <div class="text-sm text-cyan-300/65 flex items-center gap-2">
+                  <div class="w-8 h-px bg-gradient-to-r from-transparent to-cyan-400/45"></div>
+                  Allergrootste planeet — een gasreus
+                </div>
+              </div>
+            </div>
+            @if (currentSlide().experiment) {
+              <div class="absolute bottom-28 left-10 md:left-14 max-w-[35%] slide-item">
+                <div class="pl-4 border-l-2 border-green-500/30">
+                  <h3 class="text-base font-starwars text-green-400/80 mb-2 flex items-center gap-2">
+                    <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
+                  </h3>
+                  <p class="text-green-200/65 mb-2 text-sm">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1.5 text-green-100/70 text-sm">
+                    @for (instruction of currentSlide().experiment?.instructions; track $index) {
+                      <li class="flex items-start gap-1.5">
+                        <span class="text-green-500/60 mt-0.5 text-xs">▶</span>
+                        <span>{{ instruction }}</span>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              </div>
+            }
+
+          <!-- ═══ EXTRA: MOONS — floating moon data ═══ -->
+          } @else if (currentSlide().id === 'extra') {
+            <div class="absolute inset-0 pointer-events-none">
+              <div class="slide-item absolute top-[12%] right-[18%] text-right">
+                <div class="text-xs font-mono text-blue-400/70 tracking-[0.3em] mb-1">MAANSYSTEEM</div>
+                <div class="flex items-baseline gap-1 justify-end">
+                  <span class="text-6xl md:text-8xl font-starwars text-blue-300/90 drop-shadow-[0_0_30px_rgba(100,150,255,0.4)] tabular-nums">95</span>
+                </div>
+                <div class="text-sm text-white/60">manen in een baan om Jupiter</div>
+              </div>
+              <div class="slide-item absolute top-[38%] right-[6%] md:right-[8%]">
+                <div class="text-xl md:text-2xl font-starwars text-cyan-200/85 drop-shadow-[0_0_15px_rgba(100,210,255,0.3)]">EUROPA</div>
+                <div class="text-sm text-white/55 mt-1 max-w-[220px]">Oceaan onder het ijs — misschien leven?</div>
+              </div>
+              <div class="slide-item absolute top-[56%] right-[18%] md:right-[22%]">
+                <div class="text-xl md:text-2xl font-starwars text-yellow-300/85 drop-shadow-[0_0_15px_rgba(255,200,50,0.3)]">IO</div>
+                <div class="text-sm text-white/55 mt-1 max-w-[200px]">Vulkanen door Jupiters zwaartekracht</div>
+              </div>
+              <div class="slide-item absolute bottom-[24%] right-[14%]">
+                <div class="text-sm text-red-300/65 italic flex items-center gap-2">
+                  <div class="w-1.5 h-1.5 rounded-full bg-red-400/60"></div>
+                  Extreme druk, wind en geen grond
+                </div>
+              </div>
+            </div>
+
+          <!-- ═══ QUIZ — interactive layout ═══ -->
+          } @else if (currentSlide().quiz) {
+            @let quiz = currentSlide().quiz!;
+            <div class="absolute top-28 left-10 md:left-14 bottom-28 max-w-[45%] overflow-y-auto">
+              @if (currentQuizQuestionIndex() < quiz.length) {
+                @let q = quiz[currentQuizQuestionIndex()];
+                <div class="slide-item">
+                  <span class="text-blue-400/60 font-starwars text-base tracking-widest mb-3 block">Vraag {{ currentQuizQuestionIndex() + 1 }} / {{ quiz.length }}</span>
+                  <p class="text-2xl md:text-3xl text-white/90 font-medium mb-6 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ q.question }}</p>
+                  <div class="grid grid-cols-1 gap-3 mb-6">
+                    @for (option of q.options; track $index) {
+                      <div (click)="!isAnswerRevealed() && selectQuizOption($index)"
+                           class="quiz-option px-5 py-4 rounded-lg transition-all duration-300 flex items-center text-lg md:text-xl font-semibold backdrop-blur-sm"
+                           [class]="isAnswerRevealed() 
+                                    ? ($index === q.correctOptionIndex 
+                                        ? 'bg-green-500/15 border-l-3 border-green-400 text-white shadow-[0_0_15px_rgba(74,222,128,0.2)]' 
+                                        : 'bg-white/[0.03] border-l-3 border-red-500/20 text-gray-500 opacity-40')
+                                    : selectedQuizOption() === $index
+                                      ? 'bg-[var(--color-starwars-yellow)]/10 border-l-3 border-[var(--color-starwars-yellow)] text-white cursor-pointer'
+                                      : 'bg-white/[0.03] border-l-3 border-white/10 text-white/70 hover:bg-white/[0.06] cursor-pointer hover:border-white/20'">
+                        <span class="mr-3 text-xs opacity-40 font-starwars">{{ ['A','B','C','D'][$index] }}</span>
+                        {{ option }}
+                      </div>
+                    }
+                  </div>
+                  @if (isAnswerRevealed()) {
+                    <div class="mb-6 pl-4 border-l-2 border-green-500/25 animate-fade-in">
+                      <p class="text-green-200/75 text-base">{{ q.explanation }}</p>
+                    </div>
+                  }
+                  <div class="flex justify-start gap-3">
+                    @if (!isAnswerRevealed()) {
+                      <button (click)="revealAnswer()" 
+                              [disabled]="selectedQuizOption() === -1"
+                              class="px-5 py-2.5 bg-[var(--color-starwars-yellow)]/90 text-black font-starwars text-sm tracking-widest rounded-lg hover:bg-[var(--color-starwars-yellow)] transition-all disabled:opacity-20 disabled:cursor-not-allowed">
+                        {{ selectedQuizOption() === -1 ? 'Kies een antwoord' : 'Toon Antwoord' }}
+                      </button>
+                    } @else {
+                      <button (click)="nextQuizQuestion()" class="px-5 py-2.5 bg-blue-500/50 text-white font-starwars text-sm tracking-widest rounded-lg hover:bg-blue-400/50 transition-colors">
+                        {{ currentQuizQuestionIndex() === quiz.length - 1 ? 'Einde Afvalrace' : 'Volgende Vraag' }}
+                      </button>
+                    }
+                  </div>
+                </div>
+              } @else {
+                <div class="text-left quiz-complete slide-item">
+                  <mat-icon class="text-5xl text-[var(--color-starwars-yellow)] mb-3 drop-shadow-[0_0_15px_rgba(255,232,31,0.4)] trophy-bounce" style="height: 50px; width: 50px; font-size: 50px;">emoji_events</mat-icon>
+                  <h3 class="text-3xl font-starwars text-[var(--color-starwars-yellow)] mb-3 tracking-widest title-shimmer">Gefeliciteerd!</h3>
+                  <p class="text-xl text-green-100/70">Jullie zijn de ultieme Jupiter-experts!</p>
+                </div>
+              }
+            </div>
+            <div class="absolute bottom-16 left-10 md:left-14 max-w-[35%]">
+              <div class="space-y-1.5">
+                @for (line of currentSlide().content; track $index) {
+                  <p class="slide-item text-sm text-white/55 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                }
+              </div>
+            </div>
+
+          <!-- ═══ DEFAULT: subtle content bottom-left ═══ -->
+          } @else {
+            <div class="absolute bottom-20 left-10 md:left-14 max-w-[38%] flex flex-col gap-6">
+              <div class="space-y-3">
+                @for (line of currentSlide().content; track $index) {
+                  <p class="slide-item text-base md:text-lg text-white/85 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                }
+              </div>
+              @if (currentSlide().experiment) {
+                <div class="slide-item pl-4 border-l-2 border-green-500/30">
+                  <h3 class="text-base font-starwars text-green-400/80 mb-2 flex items-center gap-2">
+                    <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
+                  </h3>
+                  <p class="text-green-200/65 mb-2 text-sm">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1.5 text-green-100/70 text-sm">
+                    @for (instruction of currentSlide().experiment?.instructions; track $index) {
+                      <li class="flex items-start gap-1.5">
+                        <span class="text-green-500/60 mt-0.5 text-xs">▶</span>
+                        <span>{{ instruction }}</span>
+                      </li>
+                    }
+                  </ul>
+                </div>
+              }
+            </div>
+          }
+
+          <!-- Distance counter (h3) — floating near the beam -->
+          @if (currentSlide().id === 'h3' && currentDistance() > 0) {
+            <div class="absolute right-[10%] top-1/2 -translate-y-1/2 slide-item text-right pointer-events-none">
+              <div class="text-xs text-[var(--color-starwars-yellow)]/65 font-starwars tracking-[0.3em] mb-1">HUIDIGE AFSTAND</div>
+              <div class="flex items-baseline gap-1 justify-end">
+                <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
+                <span class="text-sm text-[var(--color-starwars-yellow)]/60 font-starwars tracking-wider">M KM</span>
+              </div>
+              <div class="mt-2 text-sm text-[var(--color-starwars-yellow)]/55 font-mono tracking-wider">
+                ☀️ Licht: {{ lightTravelMinutes() }} min
+              </div>
+            </div>
+          }
+
+        </div>
+      }
+
+      <!-- Mute Toggle -->
+      @if (hasStarted()) {
+        <button (click)="toggleMute()" 
+                class="absolute top-6 right-6 z-20 p-2 rounded-full bg-black/40 border border-white/10 text-white/50 hover:text-white hover:bg-black/60 transition-all duration-300 pointer-events-auto backdrop-blur-sm">
+          <mat-icon>{{ isMuted() ? 'volume_off' : 'volume_up' }}</mat-icon>
+        </button>
+      }
+
+      <!-- Navigation Controls -->
+      <div class="absolute bottom-4 left-0 right-0 flex items-center justify-between px-12 pointer-events-auto z-20">
+        <button 
+          (click)="prevSlide()" 
+          [disabled]="currentIndex() === 0 || isTransitioning()"
+          class="p-3 rounded-full bg-black/40 border border-white/10 text-[var(--color-starwars-yellow)] hover:bg-[var(--color-starwars-yellow)] hover:text-black hover:scale-110 active:scale-95 transition-all duration-300 disabled:opacity-20 disabled:hover:scale-100 disabled:hover:bg-black/40 disabled:hover:text-[var(--color-starwars-yellow)] backdrop-blur-sm">
+          <mat-icon>chevron_left</mat-icon>
+        </button>
+        
+        <!-- Progress Dots -->
+        <div class="flex items-center gap-2">
+          @for (slide of slides; track $index) {
+            <div class="transition-all duration-500 rounded-full" 
+                 [class]="$index === currentIndex() 
+                   ? 'w-8 h-2 bg-[var(--color-starwars-yellow)] shadow-[0_0_12px_rgba(255,232,31,0.6)]' 
+                   : $index < currentIndex() 
+                     ? 'w-2 h-2 bg-[var(--color-starwars-yellow)]/50' 
+                     : 'w-2 h-2 bg-white/20'">
+            </div>
+          }
+        </div>
+
+        <button 
+          (click)="nextSlide()" 
+          [disabled]="currentIndex() === totalSlides() - 1 || isTransitioning()"
+          class="p-3 rounded-full bg-black/40 border border-white/10 text-[var(--color-starwars-yellow)] hover:bg-[var(--color-starwars-yellow)] hover:text-black hover:scale-110 active:scale-95 transition-all duration-300 disabled:opacity-20 disabled:hover:scale-100 disabled:hover:bg-black/40 disabled:hover:text-[var(--color-starwars-yellow)] backdrop-blur-sm">
+          <mat-icon>chevron_right</mat-icon>
+        </button>
+      </div>
+    </div>
+  `,
+  styles: [`
+    :host {
+      perspective: 1200px;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(10px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shimmer {
+      0%, 100% { text-shadow: 0 0 20px rgba(255, 232, 31, 0.3), 0 0 40px rgba(255, 232, 31, 0.1); }
+      50% { text-shadow: 0 0 40px rgba(255, 232, 31, 0.6), 0 0 80px rgba(255, 232, 31, 0.3), 0 0 120px rgba(255, 232, 31, 0.1); }
+    }
+    .title-shimmer {
+      animation: shimmer 3s ease-in-out infinite;
+    }
+    @keyframes starBirth {
+      0% {
+        opacity: 0;
+        transform: scale(0) rotate(-20deg);
+        text-shadow: none;
+        filter: blur(20px);
+      }
+      12% {
+        opacity: 1;
+        transform: scale(3) rotate(8deg);
+        text-shadow: 0 0 80px #fff, 0 0 160px rgba(255, 232, 31, 0.9), 0 0 300px rgba(100, 150, 255, 0.6);
+        filter: blur(3px);
+        color: white;
+      }
+      30% {
+        transform: scale(0.85) rotate(-3deg);
+        text-shadow: 0 0 50px rgba(255, 232, 31, 0.8), 0 0 100px rgba(255, 232, 31, 0.4);
+        filter: blur(0px);
+      }
+      50% {
+        transform: scale(1.08) rotate(1deg);
+      }
+      70% {
+        transform: scale(0.97) rotate(0deg);
+      }
+      100% {
+        opacity: 1;
+        transform: scale(1) rotate(0deg);
+        text-shadow: 0 0 15px rgba(255, 232, 31, 0.5), 0 0 50px rgba(255, 232, 31, 0.2), 0 0 100px rgba(100, 150, 255, 0.08);
+        filter: blur(0px);
+      }
+    }
+    .name-char {
+      opacity: 0;
+      animation: starBirth 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      will-change: transform, opacity, filter;
+    }
+    .name-char::after {
+      content: '✦';
+      position: absolute;
+      top: -0.2em;
+      right: -0.05em;
+      font-size: 0.15em;
+      opacity: 0;
+      animation: sparkleOut 2.5s ease-out forwards;
+      animation-delay: inherit;
+      pointer-events: none;
+    }
+    @keyframes sparkleOut {
+      0% { opacity: 0; transform: scale(0); }
+      12% { opacity: 1; transform: scale(3); color: white; }
+      30% { opacity: 0.8; transform: scale(1.5); color: #ffe81f; }
+      100% { opacity: 0; transform: scale(0) translateY(-30px); }
+    }
+    .name-backdrop::before {
+      content: '';
+      position: absolute;
+      inset: -80px -100px;
+      background: radial-gradient(ellipse at center, rgba(255, 232, 31, 0.07) 0%, rgba(100, 150, 255, 0.04) 35%, transparent 70%);
+      border-radius: 50%;
+      animation: nameGlow 5s ease-in-out 2.5s infinite;
+      pointer-events: none;
+    }
+    @keyframes nameGlow {
+      0%, 100% { opacity: 0.5; transform: scale(1); }
+      50% { opacity: 1; transform: scale(1.2); }
+    }
+    .name-subtitle {
+      animation: fadeIn 1s ease-out 1.8s forwards;
+      opacity: 0;
+    }
+    @keyframes playPulse {
+      0%, 100% { box-shadow: 0 0 40px rgba(255, 232, 31, 0.3); }
+      50% { box-shadow: 0 0 60px rgba(255, 232, 31, 0.6), 0 0 100px rgba(255, 232, 31, 0.2); }
+    }
+    .play-pulse {
+      animation: playPulse 2s ease-in-out infinite;
+    }
+    @keyframes trophyBounce {
+      0%, 100% { transform: translateY(0) rotate(0deg); }
+      25% { transform: translateY(-8px) rotate(-5deg); }
+      75% { transform: translateY(-4px) rotate(5deg); }
+    }
+    .trophy-bounce {
+      animation: trophyBounce 2s ease-in-out infinite;
+    }
+    .animate-fade-in {
+      animation: fadeIn 0.5s ease-out forwards;
+    }
+    @keyframes annotationFloat {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-4px); }
+    }
+    .annotation-layer > div {
+      animation: annotationFloat 6s ease-in-out infinite;
+    }
+    .annotation-layer > div:nth-child(2) { animation-delay: -1s; }
+    .annotation-layer > div:nth-child(3) { animation-delay: -2s; }
+    .annotation-layer > div:nth-child(4) { animation-delay: -3s; }
+    .annotation-layer > div:nth-child(5) { animation-delay: -4s; }
+    .perspective-1000 { perspective: 1000px; }
+    .transform-style-3d { transform-style: preserve-3d; }
+    .backface-hidden { backface-visibility: hidden; }
+    .rotate-y-180 { transform: rotateY(180deg); }
+    .perspective-\\[800px\\] {
+      perspective: 800px;
+    }
+    .rotate-x-\\[20deg\\] {
+      transform: rotateX(20deg);
+    }
+    /* Space-overlay text readability — multi-layer dark halo behind all text */
+    .slide-item,
+    .slide-item * {
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+    }
+    .slide-item {
+      background: rgba(0,0,0,0.15);
+      padding: 0.375rem 0.625rem;
+      border-radius: 0.375rem;
+      backdrop-filter: blur(2px);
+    }
+    .slide-title {
+      text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 30px rgba(0,0,0,0.5), 0 0 60px rgba(0,0,0,0.3);
+    }
+    .quiz-option,
+    .quiz-option * {
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.5);
+    }
+    .quiz-complete,
+    .quiz-complete * {
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6);
+    }
+    /* Video background scrim — cinematic vignette for readability */
+    .video-scrim {
+      background:
+        radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%),
+        linear-gradient(to right, rgba(0,0,0,0.5) 0%, transparent 40%, transparent 70%, rgba(0,0,0,0.3) 100%),
+        linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 30%);
+      animation: scrimFadeIn 1.2s ease-out forwards;
+    }
+    @keyframes scrimFadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+    /* Extra readability overlay when video plays behind text */
+    .video-readability-overlay > div:first-child {
+      background: linear-gradient(to right, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 45%, transparent 100%) !important;
+    }
+    /* Planet tour animations */
+    .tour-facts-card {
+      animation: tourCardIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+    @keyframes tourCardIn {
+      from { opacity: 0; transform: translateX(-40px) translateY(20px); filter: blur(8px); }
+      to { opacity: 1; transform: translateX(0) translateY(0); filter: blur(0px); }
+    }
+    .tour-fact-item {
+      opacity: 0;
+      animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+    }
+    .tour-stat-card {
+      opacity: 0;
+      animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+      background: rgba(0,0,0,0.25);
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      backdrop-filter: blur(4px);
+    }
+    @keyframes tourFactIn {
+      from { opacity: 0; transform: translateX(-20px); filter: blur(4px); }
+      to { opacity: 1; transform: translateX(0); filter: blur(0px); }
+    }
+    .tour-accent-line {
+      animation: tourLineIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+      transform-origin: left;
+      transform: scaleX(0);
+      opacity: 0;
+    }
+    @keyframes tourLineIn {
+      from { transform: scaleX(0); opacity: 0; }
+      to { transform: scaleX(1); opacity: 1; }
+    }
+  `]
+})
+export class App implements AfterViewInit {
+  slides = SLIDES;
+  nameChars = [...'Asbjørn Oost'];
+  currentIndex = signal(0);
+  currentQuizQuestionIndex = signal(0);
+  isAnswerRevealed = signal(false);
+  isTransitioning = signal(false);
+  direction = signal<1 | -1>(1);
+  videoRevealed = signal(false);
+  hasStarted = signal(false);
+  isMuted = signal(false);
+  selectedQuizOption = signal(-1);
+  sceneLoaded = signal(false);
+  currentDistance = signal(0);
+  celebrationActive = signal(false);
+  tourMode = signal(false);
+  tourCurrentPlanet = signal('');
+  private tourTimer: ReturnType<typeof setTimeout> | null = null;
+  // t = d/c: light-travel time in minutes (c = 299,792 km/s)
+  lightTravelMinutes = computed(() => (this.currentDistance() * 1_000_000 / 299_792 / 60).toFixed(1));
+  // 1 AU = 149,597,870.7 km
+  lightTravelAU = computed(() => (this.currentDistance() * 1_000_000 / 149_597_870.7).toFixed(2));
+  private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
+  private bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
+  private isBrowser: boolean;
+  private platformId = inject(PLATFORM_ID);
+
+  currentSlide = computed(() => this.slides[this.currentIndex()]);
+  totalSlides = computed(() => this.slides.length);
+
+  @ViewChild('slideContainer') slideContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild('crawlContainer') crawlContainer?: ElementRef<HTMLDivElement>;
+  @ViewChild('bgVideo') bgVideo?: ElementRef<HTMLVideoElement>;
+  @ViewChild('bgAudio') bgAudio?: ElementRef<HTMLAudioElement>;
+  @ViewChild('celebrationCanvas') celebrationCanvas?: ElementRef<HTMLCanvasElement>;
+  private celebrationAnimId: number | null = null;
+
+  bgAudioSrc = 'Interstellar Main Theme - Extra Extended - Soundtrack by Hans Zimmer - Cinémavore.mp3';
+
+  constructor() {
+    this.isBrowser = isPlatformBrowser(this.platformId);
+    
+    effect(() => {
+      // Reset quiz state when slide changes
+      const current = this.currentSlide();
+      if (current.quiz) {
+        this.currentQuizQuestionIndex.set(0);
+        this.isAnswerRevealed.set(false);
+        this.selectedQuizOption.set(-1);
+      }
+
+      // Fire space celebration on the "Einde" slide
+      if (current.id === 'afsluiting' && this.isBrowser) {
+        setTimeout(() => this.fireSpaceCelebration('finale'), 600);
+        // After 10 seconds, fade out text and start planet tour
+        if (this.tourTimer) clearTimeout(this.tourTimer);
+        this.tourTimer = setTimeout(() => {
+          this.tourMode.set(true);
+        }, 10000);
+      } else {
+        // Cancel tour if navigating away from afsluiting
+        if (this.tourTimer) { clearTimeout(this.tourTimer); this.tourTimer = null; }
+        this.tourMode.set(false);
+        this.tourCurrentPlanet.set('');
+      }
+      
+      // Animate new slide content
+      if (this.isBrowser) {
+        // Clear any pending video reveal
+        if (this.videoRevealTimer) { clearTimeout(this.videoRevealTimer); this.videoRevealTimer = null; }
+        this.videoRevealed.set(false);
+
+        setTimeout(() => {
+          this.animateSlideIn();
+          // If slide has a video, start playback and schedule the 3D fade-out reveal
+          if (current.video) {
+            const vid = this.bgVideo?.nativeElement;
+            if (vid) {
+              if (current.id === 'h5') {
+                vid.volume = 0;
+                vid.muted = true;
+                vid.playbackRate = 0.7;
+              } else {
+                vid.volume = 0.15;
+                vid.muted = false;
+                vid.playbackRate = 1;
+              }
+              vid.play().catch(() => {});
+            }
+            // Duck the background music while video plays
+            this.fadeBgMusicTo(0.1);
+            this.videoRevealTimer = setTimeout(() => this.videoRevealed.set(true), 1800);
+          } else {
+            // Restore background music on non-video slides
+            this.fadeBgMusicTo(0.3);
+          }
+        }, 50);
+      }
+    });
+  }
+
+  ngAfterViewInit() {
+    if (this.isBrowser) {
+      this.animateSlideIn();
+    }
+  }
+
+  onSceneLoaded() {
+    this.sceneLoaded.set(true);
+  }
+
+  onDistanceUpdate(km: number) {
+    this.currentDistance.set(km);
+  }
+
+  onTourPlanet(planetName: string) {
+    this.tourCurrentPlanet.set(planetName);
+  }
+
+  // Planet facts for the tour — each planet has 4 stat cards (value + label + sub)
+  // styled like the slide floating data widgets for visual consistency.
+  readonly planetFacts: Record<string, {
+    title: string; icon: string; color: string;
+    stats: { value: string; label: string; sub?: string }[];
+  }> = {
+    'jupiter': { title: 'Jupiter', icon: '🪐', color: 'rgba(255,232,31,0.92)',
+      stats: [
+        { value: '95', label: 'MANEN', sub: 'in baan om Jupiter' },
+        { value: '300×', label: 'MASSA', sub: 'zwaarder dan de Aarde' },
+        { value: '90%', label: 'WATERSTOF', sub: '+ 10% helium' },
+        { value: 'GRS', label: 'SUPERSTORM', sub: 'Grote Rode Vlek' },
+      ]},
+    'zon': { title: 'De Zon', icon: '☀️', color: 'rgba(255,200,60,0.92)',
+      stats: [
+        { value: '5.500°C', label: 'BUITENKANT', sub: 'kern: 15 mln °C' },
+        { value: '1,3 MLN×', label: 'VOLUME', sub: 'groter dan de Aarde' },
+        { value: '8 min', label: 'LICHT REISTIJD', sub: 'zon → aarde' },
+        { value: 'G2V', label: 'STERTYPE', sub: 'gele dwergster' },
+      ]},
+    'mercurius': { title: 'Mercurius', icon: '🪨', color: 'rgba(210,195,175,0.90)',
+      stats: [
+        { value: '430°C', label: 'OVERDAG', sub: '-180°C \'s nachts' },
+        { value: '88d', label: 'EEN JAAR', sub: 'kortste omloop' },
+        { value: '0', label: 'MANEN', sub: 'geheel alleen' },
+        { value: '0.4×', label: 'GROOTTE', sub: 'vs. Aarde' },
+      ]},
+    'venus': { title: 'Venus', icon: '🌕', color: 'rgba(220,185,100,0.90)',
+      stats: [
+        { value: '465°C', label: 'TEMPERATUUR', sub: 'heetste planeet!' },
+        { value: 'H₂SO₄', label: 'WOLKEN', sub: 'zwavelzuur' },
+        { value: '−1', label: 'ROTATIE', sub: 'draait andersom' },
+        { value: '0.9×', label: 'GROOTTE', sub: 'vs. Aarde' },
+      ]},
+    'aarde': { title: 'De Aarde', icon: '🌍', color: 'rgba(100,200,255,0.92)',
+      stats: [
+        { value: '71%', label: 'WATEROPPERVLAK', sub: 'uniek in ons stelsel' },
+        { value: '1', label: 'MAAN', sub: 'Luna, onze trouwe maan' },
+        { value: '24u', label: 'EEN DAG', sub: 'aardse dag' },
+        { value: '🚀', label: 'FALCON 9', sub: 'nu op weg naar Mars!' },
+      ]},
+    'mars': { title: 'Mars', icon: '🔴', color: 'rgba(230,100,60,0.92)',
+      stats: [
+        { value: '21 km', label: 'OLYMPUS MONS', sub: 'hoogste berg ooit' },
+        { value: '2', label: 'MANEN', sub: 'Phobos & Deimos' },
+        { value: '-65°C', label: 'TEMPERATUUR', sub: 'gemiddeld op Mars' },
+        { value: '1.9j', label: 'EEN JAAR', sub: 'op Mars duurt langer' },
+      ]},
+    'saturnus': { title: 'Saturnus', icon: '🪐', color: 'rgba(220,195,140,0.92)',
+      stats: [
+        { value: '146', label: 'MANEN', sub: 'waaronder Titan' },
+        { value: '0.7', label: 'DICHTHEID', sub: 'drijft op water!' },
+        { value: '300.000', label: 'RING BREEDTE', sub: 'km — slechts 1 km dik' },
+        { value: '10.7u', label: 'EEN DAG', sub: 'op Saturnus' },
+      ]},
+    'uranus': { title: 'Uranus', icon: '🔵', color: 'rgba(100,230,210,0.92)',
+      stats: [
+        { value: '98°', label: 'KANTELHOEK', sub: 'draait op z\'n zij!' },
+        { value: '-224°C', label: 'TEMPERATUUR', sub: 'koudste planeet' },
+        { value: '27', label: 'MANEN', sub: 'Shakespeare-namen' },
+        { value: '84j', label: 'EEN JAAR', sub: 'op Uranus' },
+      ]},
+    'neptunus': { title: 'Neptunus', icon: '🔵', color: 'rgba(80,130,255,0.92)',
+      stats: [
+        { value: '2100 km/u', label: 'WIND', sub: 'snelste winden!' },
+        { value: '4,5 mrd', label: 'ZON-AFSTAND', sub: 'km van de Zon' },
+        { value: '165j', label: 'EEN JAAR', sub: 'op Neptunus' },
+        { value: '14', label: 'MANEN', sub: 'waaronder Triton' },
+      ]},
+    'pluto': { title: 'Pluto', icon: '🌑', color: 'rgba(196,168,130,0.90)',
+      stats: [
+        { value: 'DWERG', label: 'PLANEETSTATUS', sub: 'geen echte planeet' },
+        { value: '248j', label: 'EEN JAAR', sub: 'op Pluto' },
+        { value: '5', label: 'MANEN', sub: 'waaronder Charon' },
+        { value: '-230°C', label: 'TEMPERATUUR', sub: 'ijzig koud!' },
+      ]},
+    'jupiter-einde': { title: 'Terug bij Jupiter', icon: '✨', color: 'rgba(255,232,31,0.92)',
+      stats: [
+        { value: '#1', label: 'GROOTSTE', sub: 'planeet in ons stelsel' },
+        { value: '95', label: 'MANEN', sub: 'en nog meer ontdekt!' },
+        { value: '1300×', label: 'VOLUME', sub: 'vs. de Aarde' },
+        { value: '♾️', label: 'BEDANKT!', sub: 'voor het kijken!' },
+      ]},
+  };
+
+    startPresentation() {
+    if (!this.sceneLoaded()) return;
+    this.hasStarted.set(true);
+    this.startBgAudio();
+    // Auto-advance to the next slide after a short moment
+    setTimeout(() => this.nextSlide(), 800);
+  }
+
+  private startBgAudio() {
+    const audio = this.bgAudio?.nativeElement;
+    if (!audio) return;
+    audio.volume = 0.3;
+    audio.play().catch(() => {
+      // Autoplay blocked — start on first user interaction
+      const resume = () => {
+        audio.play().catch(() => {});
+        document.removeEventListener('click', resume);
+        document.removeEventListener('keydown', resume);
+      };
+      document.addEventListener('click', resume, { once: true });
+      document.addEventListener('keydown', resume, { once: true });
+    });
+  }
+
+  async animateSlideOut(dir: number) {
+    if (!this.isBrowser) return;
+    
+    const customEase = cubicBezier(0.4, 0, 0.2, 1);
+    const animations: Promise<unknown>[] = [];
+
+    if (this.crawlContainer?.nativeElement) {
+      animations.push(
+        animate(
+          this.crawlContainer.nativeElement,
+          { 
+            y: [0, dir === 1 ? '-40vh' : '40vh'],
+            opacity: [1, 0],
+            filter: ['blur(0px)', 'blur(16px)'],
+            scale: [1, 0.8]
+          },
+          { duration: 0.6, ease: customEase }
+        ).finished
+      );
+    }
+
+    if (this.slideContainer?.nativeElement) {
+      animations.push(
+        animate(
+          this.slideContainer.nativeElement,
+          { 
+            x: [0, dir === 1 ? -200 : 200],
+            y: [0, dir === 1 ? -30 : 30],
+            opacity: [1, 0],
+            filter: ['blur(0px)', 'blur(16px)'],
+            scale: [1, 0.85]
+          },
+          { duration: 0.6, ease: customEase }
+        ).finished
+      );
+    }
+
+    if (animations.length > 0) {
+      await Promise.all(animations);
+    }
+  }
+
+  animateSlideIn() {
+    if (!this.isBrowser) return;
+
+    const customEase = cubicBezier(0.16, 1, 0.3, 1);
+    const dir = this.direction();
+
+    if (this.crawlContainer?.nativeElement) {
+      const crawlEl = this.crawlContainer.nativeElement;
+      animate(
+        crawlEl,
+        { 
+          y: [dir === 1 ? '40vh' : '-40vh', '0vh'],
+          opacity: [0, 1],
+          rotateX: [40, 20],
+          filter: ['blur(16px)', 'blur(0px)'],
+          scale: [0.8, 1]
+        },
+        { duration: 1.2, ease: 'easeOut' }
+      ).finished.then(() => {
+        // Clear ALL committed inline styles — motion/WAAPI persists opacity, filter,
+        // transform, will-change and scale as inline styles after animation ends,
+        // overriding any CSS class bindings (like [class.opacity-0]="tourMode()").
+        crawlEl.style.removeProperty('opacity');
+        crawlEl.style.removeProperty('filter');
+        crawlEl.style.removeProperty('transform');
+        crawlEl.style.removeProperty('will-change');
+        crawlEl.style.removeProperty('scale');
+        this.isTransitioning.set(false);
+      });
+    }
+
+    if (this.slideContainer?.nativeElement) {
+      const container = this.slideContainer.nativeElement;
+      const items = container.querySelectorAll('.slide-item');
+      const accentLine = container.querySelector('.accent-line');
+      
+      // Main container entrance
+      animate(
+        container,
+        { 
+          opacity: [0, 1], 
+          scale: [0.85, 1],
+          x: [dir === 1 ? 200 : -200, 0],
+          y: [dir === 1 ? 30 : -30, 0],
+          filter: ['blur(16px)', 'blur(0px)']
+        },
+        { duration: 0.9, ease: customEase }
+      ).finished.then(() => {
+        this.isTransitioning.set(false);
+      });
+
+      // Accent line draws in from left
+      if (accentLine) {
+        animate(
+          accentLine,
+          { scaleX: [0, 1], opacity: [0, 1] },
+          { duration: 0.8, delay: 0.2, ease: customEase }
+        );
+      }
+
+      // Staggered items with vertical offset
+      if (items.length > 0) {
+        animate(
+          items,
+          { 
+            opacity: [0, 1], 
+            x: [dir === 1 ? 40 : -40, 0],
+            y: [15, 0],
+            filter: ['blur(6px)', 'blur(0px)']
+          },
+          { delay: stagger(0.12), duration: 0.8, ease: customEase }
+        );
+      }
+    } else if (!this.crawlContainer?.nativeElement) {
+       setTimeout(() => this.isTransitioning.set(false), 500);
+    }
+  }
+
+  @HostListener('window:keydown', ['$event'])
+  handleKeyDown(event: KeyboardEvent) {
+    if (this.isTransitioning()) return;
+    // Block keyboard nav until presentation has started
+    if (!this.hasStarted()) {
+      if ((event.key === ' ' || event.key === 'Enter') && this.sceneLoaded()) {
+        this.startPresentation();
+      }
+      return;
+    }
+    if (event.key === 'm' || event.key === 'M') {
+      this.toggleMute();
+    } else if (event.key === 'ArrowRight' || event.key === ' ') {
+      this.nextSlide();
+    } else if (event.key === 'ArrowLeft') {
+      this.prevSlide();
+    }
+  }
+
+  async nextSlide() {
+    if (this.currentIndex() < this.totalSlides() - 1 && !this.isTransitioning()) {
+      this.isTransitioning.set(true);
+      this.direction.set(1);
+      await this.animateSlideOut(1);
+      this.currentIndex.update(i => i + 1);
+    }
+  }
+
+  async prevSlide() {
+    if (this.currentIndex() > 0 && !this.isTransitioning()) {
+      this.isTransitioning.set(true);
+      this.direction.set(-1);
+      await this.animateSlideOut(-1);
+      this.currentIndex.update(i => i - 1);
+    }
+  }
+
+  selectQuizOption(index: number) {
+    this.selectedQuizOption.set(index);
+  }
+
+  revealAnswer() {
+    this.isAnswerRevealed.set(true);
+    if (this.isBrowser) {
+      this.fireSpaceCelebration('answer');
+    }
+  }
+
+  nextQuizQuestion() {
+    this.isAnswerRevealed.set(false);
+    this.selectedQuizOption.set(-1);
+    const quiz = this.currentSlide().quiz;
+    const nextIdx = this.currentQuizQuestionIndex() + 1;
+    this.currentQuizQuestionIndex.set(nextIdx);
+    // Fire grand space celebration when quiz is completed
+    if (quiz && nextIdx >= quiz.length && this.isBrowser) {
+      setTimeout(() => this.fireSpaceCelebration('finale'), 300);
+    }
+  }
+
+  toggleMute() {
+    const audio = this.bgAudio?.nativeElement;
+    if (!audio) return;
+    this.isMuted.update(m => !m);
+    audio.muted = this.isMuted();
+  }
+
+  private fadeBgMusicTo(target: number) {
+    const audio = this.bgAudio?.nativeElement;
+    if (!audio || this.isMuted()) return;
+    if (this.bgMusicVolumeTween) clearInterval(this.bgMusicVolumeTween);
+    this.bgMusicVolumeTween = setInterval(() => {
+      const diff = target - audio.volume;
+      if (Math.abs(diff) < 0.01) {
+        audio.volume = target;
+        clearInterval(this.bgMusicVolumeTween!);
+        this.bgMusicVolumeTween = null;
+      } else {
+        audio.volume += diff * 0.15;
+      }
+    }, 50);
+  }
+
+  private meteorEdgeX(W: number) { return Math.random() > 0.5 ? -20 : W + 20; }
+  private meteorSideAngle() { return Math.random() > 0.5 ? Math.PI / 6 : Math.PI * 5 / 6; }
+
+  /** Spectacular space-themed celebration: shooting stars, nova bursts, sparkling stars */
+  private fireSpaceCelebration(type: 'answer' | 'finale') {
+    const canvas = this.celebrationCanvas?.nativeElement;
+    if (!canvas) return;
+    this.celebrationActive.set(true);
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    const ctx = canvas.getContext('2d')!;
+    const W = canvas.width, H = canvas.height;
+    const isFinale = type === 'finale';
+
+    interface Star { x: number; y: number; r: number; alpha: number; decay: number; color: string; pulse: number; }
+    interface Meteor { x: number; y: number; vx: number; vy: number; len: number; alpha: number; decay: number; color: string; trail: { x: number; y: number }[]; }
+    interface Nova { x: number; y: number; r: number; maxR: number; alpha: number; color: string; ring: number; }
+    interface Spark { x: number; y: number; vx: number; vy: number; alpha: number; decay: number; size: number; color: string; }
+
+    const stars: Star[] = [];
+    const meteors: Meteor[] = [];
+    const novas: Nova[] = [];
+    const sparks: Spark[] = [];
+
+    const colors = ['#ffe81f', '#88bbff', '#ff6644', '#4ade80', '#c084fc', '#38bdf8', '#fbbf24', '#f472b6'];
+    const pick = () => colors[Math.floor(Math.random() * colors.length)];
+
+    // Spawn initial stars
+    const starCount = isFinale ? 120 : 50;
+    for (let i = 0; i < starCount; i++) {
+      stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 2.5 + 0.5, alpha: 0, decay: 0.003 + Math.random() * 0.006, color: pick(), pulse: Math.random() * Math.PI * 2 });
+    }
+
+    // Spawn meteors in waves
+    const spawnMeteor = () => {
+      const fromTop = Math.random() > 0.3;
+      const x = fromTop ? Math.random() * W : this.meteorEdgeX(W);
+      const y = fromTop ? -20 : Math.random() * H * 0.4;
+      const angle = fromTop ? (Math.PI / 4 + Math.random() * Math.PI / 4) : this.meteorSideAngle();
+      const speed = 6 + Math.random() * 8;
+      meteors.push({ x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, len: 40 + Math.random() * 80, alpha: 1, decay: 0.008 + Math.random() * 0.005, color: pick(), trail: [] });
+    };
+
+    // Spawn novas (expanding ring flashes)
+    const spawnNova = (cx?: number, cy?: number) => {
+      novas.push({ x: cx ?? Math.random() * W, y: cy ?? Math.random() * H, r: 0, maxR: 60 + Math.random() * (isFinale ? 120 : 60), alpha: 1, color: pick(), ring: 0 });
+    };
+
+    // Spawn sparks radiating from a point
+    const spawnSparks = (cx: number, cy: number, count: number) => {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 1 + Math.random() * 4;
+        sparks.push({ x: cx, y: cy, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed, alpha: 1, decay: 0.015 + Math.random() * 0.02, size: Math.random() * 2.5 + 0.5, color: pick() });
+      }
+    };
+
+    // Schedule waves
+    const meteorCount = isFinale ? 30 : 10;
+    for (let i = 0; i < meteorCount; i++) setTimeout(spawnMeteor, i * (isFinale ? 80 : 150) + Math.random() * 200);
+    const novaCount = isFinale ? 8 : 3;
+    for (let i = 0; i < novaCount; i++) setTimeout(() => { const nx = Math.random() * W; const ny = Math.random() * H; spawnNova(nx, ny); spawnSparks(nx, ny, isFinale ? 30 : 12); }, 200 + i * (isFinale ? 300 : 500));
+    if (isFinale) {
+      // Massive center nova starburst
+      setTimeout(() => { spawnNova(W / 2, H / 2); spawnSparks(W / 2, H / 2, 60); }, 800);
+      // Extra meteors in second wave
+      for (let i = 0; i < 20; i++) setTimeout(spawnMeteor, 1500 + i * 60);
+    }
+
+    let frame = 0;
+    const maxFrames = isFinale ? 300 : 180; // ~5s or ~3s at 60fps
+
+    const renderFrame = () => {
+      frame++;
+      ctx.clearRect(0, 0, W, H);
+
+      // Twinkling stars — fade in then hold
+      for (const s of stars) {
+        if (s.alpha < 1 && frame < maxFrames * 0.6) s.alpha = Math.min(1, s.alpha + 0.03);
+        if (frame > maxFrames * 0.7) s.alpha = Math.max(0, s.alpha - 0.02);
+        const twinkle = 0.5 + 0.5 * Math.sin(frame * 0.08 + s.pulse);
+        ctx.globalAlpha = s.alpha * twinkle;
+        // Draw star with glow
+        const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 4);
+        grad.addColorStop(0, s.color);
+        grad.addColorStop(0.3, s.color + '88');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r * 4, 0, Math.PI * 2);
+        ctx.fill();
+        // Core
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(s.x, s.y, s.r * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      // Meteors with trails
+      for (let i = meteors.length - 1; i >= 0; i--) {
+        const m = meteors[i];
+        m.trail.push({ x: m.x, y: m.y });
+        if (m.trail.length > 20) m.trail.shift();
+        m.x += m.vx;
+        m.y += m.vy;
+        // Draw trail
+        for (let t = 0; t < m.trail.length; t++) {
+          const frac = t / m.trail.length;
+          ctx.globalAlpha = m.alpha * frac * 0.6;
+          ctx.fillStyle = m.color;
+          ctx.beginPath();
+          ctx.arc(m.trail[t].x, m.trail[t].y, (1 + frac * 2), 0, Math.PI * 2);
+          ctx.fill();
+        }
+        // Head glow
+        ctx.globalAlpha = m.alpha;
+        const headGrad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 8);
+        headGrad.addColorStop(0, '#fff');
+        headGrad.addColorStop(0.3, m.color);
+        headGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = headGrad;
+        ctx.beginPath();
+        ctx.arc(m.x, m.y, 8, 0, Math.PI * 2);
+        ctx.fill();
+        // Fade and remove
+        if (m.x < -50 || m.x > W + 50 || m.y > H + 50) { meteors.splice(i, 1); continue; }
+        m.alpha -= m.decay;
+        if (m.alpha <= 0) meteors.splice(i, 1);
+      }
+
+      // Nova bursts — expanding rings of light
+      for (let i = novas.length - 1; i >= 0; i--) {
+        const n = novas[i];
+        n.r += (n.maxR - n.r) * 0.08;
+        n.alpha *= 0.96;
+        n.ring += 2;
+        // Outer ring
+        ctx.globalAlpha = n.alpha * 0.6;
+        ctx.strokeStyle = n.color;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.stroke();
+        // Inner glow fill
+        ctx.globalAlpha = n.alpha * 0.15;
+        const novaGrad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
+        novaGrad.addColorStop(0, n.color);
+        novaGrad.addColorStop(1, 'transparent');
+        ctx.fillStyle = novaGrad;
+        ctx.beginPath();
+        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+        ctx.fill();
+        if (n.alpha < 0.02) novas.splice(i, 1);
+      }
+
+      // Sparks
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const sp = sparks[i];
+        sp.x += sp.vx;
+        sp.y += sp.vy;
+        sp.vx *= 0.98;
+        sp.vy *= 0.98;
+        sp.alpha -= sp.decay;
+        if (sp.alpha <= 0) { sparks.splice(i, 1); continue; }
+        ctx.globalAlpha = sp.alpha;
+        ctx.fillStyle = sp.color;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.size, 0, Math.PI * 2);
+        ctx.fill();
+        // Tiny glow
+        ctx.globalAlpha = sp.alpha * 0.3;
+        ctx.beginPath();
+        ctx.arc(sp.x, sp.y, sp.size * 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = 1;
+
+      if (frame < maxFrames) {
+        this.celebrationAnimId = requestAnimationFrame(renderFrame);
+      } else {
+        ctx.clearRect(0, 0, W, H);
+        this.celebrationActive.set(false);
+        this.celebrationAnimId = null;
+      }
+    };
+
+    // Cancel any running celebration
+    if (this.celebrationAnimId) cancelAnimationFrame(this.celebrationAnimId);
+    this.celebrationAnimId = requestAnimationFrame(renderFrame);
+  }
+}
+</file>
+
+<file path="src/app/background-3d.component.ts">
 import { Component, ElementRef, OnInit, OnDestroy, ViewChild, ChangeDetectionStrategy, NgZone, PLATFORM_ID, Input, Output, EventEmitter, OnChanges, SimpleChanges, inject } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import * as THREE from 'three';
@@ -32,8 +3077,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   @Input() tourMode = false;
   @Output() loaded = new EventEmitter<void>();
   @Output() tourPlanet = new EventEmitter<string>();
-  @Output() telemetry = new EventEmitter<{altitude: number, speed: number, phase: string} | null>();
-  @Output() loadProgress = new EventEmitter<number>();
   @ViewChild('canvasContainer', { static: true }) canvasContainer!: ElementRef<HTMLDivElement>;
 
   private scene!: THREE.Scene;
@@ -48,7 +3091,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // 95 Moons: 4 Galilean + 91 small moons
   private readonly galileanMoons: { mesh: THREE.Mesh, distance: number, speed: number, angle: number }[] = [];
   private smallMoons!: THREE.InstancedMesh;
-  private smallMoonTimeUniform = { value: 0 };
   private readonly smallMoonsData: { distance: number, speed: number, angle: number, inclination: number }[] = [];
   
   private stars!: THREE.Points;
@@ -58,16 +3100,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private lastRenderTime = 0;
   private readonly isBrowser: boolean;
   private readonly startTime = Date.now();
-  private prefersReducedMotion = false;
-  private tabHidden = false;
   private readonly floatingOriginThreshold = 10_000;
   private readonly projectionMatrix = new THREE.Matrix4();
   private readonly frustum = new THREE.Frustum();
-  private readonly tempSphere = new THREE.Sphere();
   private readonly frustumCullTargets: Array<{ object: THREE.Object3D; radius: number }> = [];
   private readonly resizeHandler = () => this.onWindowResize();
   private readonly mouseMoveHandler = (event: MouseEvent) => this.onMouseMove(event);
-  private readonly visibilityHandler = () => this.onVisibilityChange();
   
   // Camera transition targets
   private targetCameraX = 0;
@@ -129,8 +3167,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     orbitAngle: number;
     orbitY: number;
     orbitInclination: number;
-    trail: THREE.Line | null;
-    trailLength: number;
   }[] = [];
   private targetShipSpeedMultiplier = 1;
   private currentShipSpeedMultiplier = 1;
@@ -195,7 +3231,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Sun with corona
   private sunMesh!: THREE.Mesh;
   private sunFlare!: THREE.Mesh;
-  private sunLight!: THREE.DirectionalLight;
 
   // Jupiter night-side lightning
   private readonly lightningFlashes: { mesh: THREE.Mesh, timer: number, cooldown: number }[] = [];
@@ -267,7 +3302,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // SpaceX Falcon 9 rocket launch
   private falconGroup!: THREE.Group;
   private falconExhaust!: THREE.Mesh;
-  private falconLegs: THREE.Group[] = [];
   private falconLaunched = false;
   private falconLaunchTime = 0;
   private falconHyperspaceTriggered = false;
@@ -489,8 +3523,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       });
       globalThis.addEventListener('resize', this.resizeHandler);
       globalThis.addEventListener('mousemove', this.mouseMoveHandler);
-      document.addEventListener('visibilitychange', this.visibilityHandler);
-      this.prefersReducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     }
   }
 
@@ -501,7 +3533,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
       globalThis.removeEventListener('resize', this.resizeHandler);
       globalThis.removeEventListener('mousemove', this.mouseMoveHandler);
-      document.removeEventListener('visibilitychange', this.visibilityHandler);
       if (this.renderer) {
         this.renderer.dispose();
       }
@@ -522,19 +3553,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
   }
 
-  private onVisibilityChange() {
-    if (document.hidden) {
-      this.tabHidden = true;
-    } else {
-      // Reset time tracking so we don't get a massive delta spike
-      this.lastRenderTime = (Date.now() - this.startTime) * 0.001;
-      this.tabHidden = false;
-    }
-  }
-
-  /** Generates a procedural Jupiter placeholder texture (low-res — real 8K texture replaces it) */
+  /** Generates a high-fidelity 4K procedural Jupiter texture with Perlin-noise bands */
   private generateJupiterTexture(): THREE.CanvasTexture {
-    const W = 2048, H = 1024;
+    const W = 4096, H = 2048;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d')!;
@@ -747,7 +3768,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
-      antialias: false,
+      antialias: true,
       alpha: true,
       powerPreference: 'high-performance',
       logarithmicDepthBuffer: true,
@@ -755,8 +3776,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     this.renderer.toneMappingExposure = 1.0;
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     container.appendChild(this.renderer.domElement);
@@ -785,7 +3804,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     // Milky Way skybox — immersive backdrop sphere
-    const skyGeo = new THREE.SphereGeometry(500, 64, 64);
+    const skyGeo = new THREE.SphereGeometry(500, 32, 32);
     const skyMat = new THREE.MeshBasicMaterial({
       color: 0x111122,
       side: THREE.BackSide,
@@ -793,22 +3812,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false
     });
     this.scene.add(new THREE.Mesh(skyGeo, skyMat));
-    // Shared loading manager for progress tracking
-    const loadingManager = new THREE.LoadingManager();
-    loadingManager.onProgress = (_url, itemsLoaded, itemsTotal) => {
-      const pct = (itemsLoaded / itemsTotal) * 100;
-      this.ngZone.run(() => this.loadProgress.emit(pct));
-      if ((globalThis as Record<string, unknown>)['__loadPct__'] !== undefined) {
-        (globalThis as Record<string, unknown>)['__loadPct__'] = pct;
-      }
-    };
-    loadingManager.onError = (url) => {
-      console.warn('Failed to load:', url);
-    };
     // Load milky way texture onto skybox
-    this.textureLoader = new THREE.TextureLoader(loadingManager);
+    this.textureLoader = new THREE.TextureLoader();
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('8k_stars_milky_way.webp', (tex) => {
+      this.textureLoader.load('8k_stars_milky_way.jpg', (tex) => {
         skyMat.map = tex;
         skyMat.color.setHex(0x222233); // muted blue-grey — natural deep-space tint
         skyMat.needsUpdate = true;
@@ -890,8 +3897,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          // Subtle atmospheric scintillation (twinkling) — seed from vertex color to avoid hyperspace strobe
-          float twinkle = sin(uTime * 1.8 + color.r * 100.0 + color.g * 73.0) * 0.25 + 0.75;
+          // Subtle atmospheric scintillation (twinkling)
+          float twinkle = sin(uTime * 1.8 + position.x * 0.12 + position.y * 0.17) * 0.25 + 0.75;
           float sz = aSize * twinkle * (300.0 / -mvPosition.z);
           vSize = sz;
           gl_PointSize = sz;
@@ -945,7 +3952,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       opacity: 0.25 
     });
     this.dustSystem = new THREE.Points(dustGeometry, dustMaterial);
-    this.dustSystem.frustumCulled = false;
     this.scene.add(this.dustSystem);
 
     // Deep-space nebula clouds
@@ -1022,7 +4028,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const fallbackTexture = this.generateJupiterTexture();
     fallbackTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     
-    const jupiterGeometry = new THREE.SphereGeometry(10, 128, 128);
+    const jupiterGeometry = new THREE.SphereGeometry(10, 256, 256);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
       roughness: 0.6,
@@ -1056,7 +4062,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     };
     
     this.jupiter = new THREE.Mesh(jupiterGeometry, jupiterMaterial);
-    this.jupiter.receiveShadow = true;
     this.jupiterGroup.add(this.jupiter);
 
     // Load high-res 8K Jupiter texture (Solar System Scope, CC BY 4.0)
@@ -1079,7 +4084,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         undefined,
         () => {
           // Fallback to NASA OPAL texture
-          textureLoader.load('20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.webp', (tex) => {
+          textureLoader.load('20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg', (tex) => {
             if ('SRGBColorSpace' in THREE) {
               tex.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
             }
@@ -1113,7 +4118,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Earth Texture from local 8K asset
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load(
-        '8k_earth_daymap.webp',
+        '8k_earth_daymap.jpg',
         (texture) => {
           if ('SRGBColorSpace' in THREE) {
             texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
@@ -1133,7 +4138,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
     // Earth normal map for surface relief
     this.loadPromises.push(new Promise<void>((resolve) => {
-      textureLoader.load('2k_earth_normal_map.webp', (tex) => {
+      textureLoader.load('2k_earth_normal_map.jpg', (tex) => {
         tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         earthMaterial.normalMap = tex;
@@ -1144,7 +4149,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
     // Earth specular map (oceans are shiny, land is rough)
     this.loadPromises.push(new Promise<void>((resolve) => {
-      textureLoader.load('2k_earth_specular_map.webp', (tex) => {
+      textureLoader.load('2k_earth_specular_map.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         earthMaterial.metalnessMap = tex;
         earthMaterial.roughness = 0.65;
@@ -1162,7 +4167,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.earthCloudsMesh = new THREE.Mesh(earthCloudGeo, earthCloudMat);
     this.earthMesh.add(this.earthCloudsMesh);
     this.loadPromises.push(new Promise<void>((resolve) => {
-      textureLoader.load('2k_earth_clouds.webp', (tex) => {
+      textureLoader.load('2k_earth_clouds.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         earthCloudMat.alphaMap = tex;
         earthCloudMat.map = tex;
@@ -1212,7 +4217,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.moonMesh.visible = false;
       this.scene.add(this.moonMesh);
       this.loadPromises.push(new Promise<void>((resolve) => {
-        textureLoader.load('8k_moon.webp', (tex) => {
+        textureLoader.load('8k_moon.jpg', (tex) => {
           tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           moonMat.map = tex; moonMat.color.setHex(0xffffff); moonMat.needsUpdate = true;
@@ -1282,25 +4287,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         vec3 sunDir = normalize(uSunDirection);
         float sunDot = dot(vNormalWorld, sunDir);
 
-        // Day/night transition with Rayleigh scattering at the terminator
+        // Jupiter's visible "atmosphere" should read as a thin neutral limb haze,
+        // strongest near the sunlit edge and only slightly enhanced at the terminator.
         float daySide = smoothstep(-0.05, 0.35, sunDot);
         float terminator = 1.0 - smoothstep(0.0, 0.16, abs(sunDot));
         float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 6.0);
         float baseHaze = pow(fresnel, 4.8);
         float pulse = mix(1.0, 1.04, uPulse * 0.15);
 
-        // Deep orange/red "sunset" band at the terminator edge (Rayleigh scattering through dense gas)
-        vec3 sunsetColor = vec3(1.0, 0.3, 0.05);
-        float sunsetIntensity = smoothstep(-0.05, 0.05, sunDot) * smoothstep(0.15, 0.0, sunDot);
-        vec3 dayColor = mix(vec3(0.92, 0.88, 0.8), vec3(0.98, 0.95, 0.86), daySide);
+        float alpha = baseHaze * (daySide * 0.2 + terminator * 0.35 + forwardScatter * 0.08) * pulse;
+        vec3 hazeColor = mix(vec3(0.92, 0.88, 0.8), vec3(0.98, 0.95, 0.86), daySide);
 
-        // Blend nightside black → sunset orange → day color
-        vec3 finalAtmoColor = mix(vec3(0.0), sunsetColor, sunsetIntensity);
-        finalAtmoColor = mix(finalAtmoColor, dayColor, daySide);
-
-        float alpha = baseHaze * (daySide * 0.2 + terminator * 0.35 + sunsetIntensity * 0.4 + forwardScatter * 0.08) * pulse;
-
-        gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.25));
+        gl_FragColor = vec4(hazeColor, clamp(alpha, 0.0, 0.2));
       }
     `;
 
@@ -1340,8 +4338,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const geo = new THREE.SphereGeometry(config.size, 32, 32);
       const mat = new THREE.MeshStandardMaterial({ color: config.color, roughness: 0.8, bumpScale: 0.05 });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
       this.jupiterGroup.add(mesh);
       this.galileanMoons.push({ mesh, distance: config.distance, speed: config.speed, angle: Math.random() * Math.PI * 2 });
 
@@ -1357,50 +4353,35 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }));
     });
 
-    // The remaining 91 small moons (Total 95) — GPU-driven orbits via vertex shader
+    // The remaining 91 small moons (Total 95)
     const smallMoonGeo = new THREE.SphereGeometry(0.08, 8, 8);
     const smallMoonMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
-    smallMoonMat.onBeforeCompile = (shader) => {
-      shader.uniforms['uTime'] = this.smallMoonTimeUniform;
-      shader.vertexShader = 'attribute float aOrbitRadius;\nattribute float aOrbitSpeed;\nattribute float aOrbitAngle;\nattribute float aOrbitInclination;\nuniform float uTime;\n' + shader.vertexShader;
-      shader.vertexShader = shader.vertexShader.replace(
-        '#include <begin_vertex>',
-        `float currentAngle = aOrbitAngle + uTime * aOrbitSpeed;
-         float ca = cos(currentAngle);
-         float sa = sin(currentAngle);
-         float si = sin(aOrbitInclination);
-         float ci = cos(aOrbitInclination);
-         vec3 orbitOffset = vec3(aOrbitRadius * ca, aOrbitRadius * sa * si, aOrbitRadius * sa * ci);
-         vec3 transformed = position + orbitOffset;`
-      );
-    };
     this.smallMoons = new THREE.InstancedMesh(smallMoonGeo, smallMoonMat, 91);
-
-    const orbitRadii = new Float32Array(91);
-    const orbitSpeeds = new Float32Array(91);
-    const orbitAngles = new Float32Array(91);
-    const orbitInclinations = new Float32Array(91);
     
+    const dummy = new THREE.Object3D();
     for (let i = 0; i < 91; i++) {
+      // Inner moons (Metis, Adrastea, Amalthea, Thebe) orbit at 1.8-3.1 Rj = 18-31 scene units
+      // Irregular moons (Himalia group, retrograde groups) orbit much farther out
+      // We distribute: ~8 inner (12-17), rest spread from Callisto outward (40-90)
       const isInner = i < 8;
       const distance = isInner ? 12 + Math.random() * 5 : 40 + Math.random() * 50;
       const speed = (Math.random() * 0.005 + 0.001) * (Math.random() > 0.5 ? 1 : -1);
       const angle = Math.random() * Math.PI * 2;
+      // Inner moons have low inclination; irregular moons can be highly inclined or retrograde
       const inclination = isInner
-        ? (Math.random() - 0.5) * 0.1
-        : (Math.random() - 0.5) * Math.PI * 0.8;
+        ? (Math.random() - 0.5) * 0.1  // near-equatorial
+        : (Math.random() - 0.5) * Math.PI * 0.8; // Up to ~72° (some retrograde)
       
-      orbitRadii[i] = distance;
-      orbitSpeeds[i] = speed;
-      orbitAngles[i] = angle;
-      orbitInclinations[i] = inclination;
+      this.smallMoonsData.push({ distance, speed, angle, inclination });
+      
+      dummy.position.set(
+        distance * Math.cos(angle),
+        distance * Math.sin(angle) * Math.sin(inclination),
+        distance * Math.sin(angle) * Math.cos(inclination)
+      );
+      dummy.updateMatrix();
+      this.smallMoons.setMatrixAt(i, dummy.matrix);
     }
-    
-    smallMoonGeo.setAttribute('aOrbitRadius', new THREE.InstancedBufferAttribute(orbitRadii, 1));
-    smallMoonGeo.setAttribute('aOrbitSpeed', new THREE.InstancedBufferAttribute(orbitSpeeds, 1));
-    smallMoonGeo.setAttribute('aOrbitAngle', new THREE.InstancedBufferAttribute(orbitAngles, 1));
-    smallMoonGeo.setAttribute('aOrbitInclination', new THREE.InstancedBufferAttribute(orbitInclinations, 1));
-    
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — cinematic deep-space look with enough fill to read detail
@@ -1408,18 +4389,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(ambientLight);
 
     // Main sun light — warm white (≈5778 K blackbody)
-    this.sunLight = new THREE.DirectionalLight(0xfff3dd, 3.8);
-    this.sunLight.position.set(-50, 10, 30);
-    this.sunLight.target = this.jupiterGroup;
-    this.sunLight.castShadow = true;
-    this.sunLight.shadow.camera.top = 30;
-    this.sunLight.shadow.camera.bottom = -30;
-    this.sunLight.shadow.camera.left = -30;
-    this.sunLight.shadow.camera.right = 30;
-    this.sunLight.shadow.bias = -0.0005;
-    this.sunLight.shadow.mapSize.width = 2048;
-    this.sunLight.shadow.mapSize.height = 2048;
-    this.scene.add(this.sunLight);
+    const sunLight = new THREE.DirectionalLight(0xfff3dd, 3.8);
+    sunLight.position.set(-50, 10, 30);
+    sunLight.target = this.jupiterGroup;
+    this.scene.add(sunLight);
 
     // Cool fill from opposite side — keeps nightside detail without washing out contrast
     const fillLight = new THREE.DirectionalLight(0x1e3050, 0.45);
@@ -1472,7 +4445,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       transparent: true
     });
     this.sunFlare = new THREE.Mesh(flareGeo, flareMat);
-    this.sunFlare.position.copy(this.sunLight.position);
+    this.sunFlare.position.copy(sunLight.position);
     this.scene.add(this.sunFlare);
 
     // Post-processing setup (Film Grain, Vignette, Bloom & Color Grading)
@@ -1751,28 +4724,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         // Disable OrbitControls when slide-driven camera is active to prevent fighting
         this.controls.enabled = false;
 
-        // "Apollo" handheld camera feel — compound sine waves at prime frequencies
+        // Smooth sinusoidal drift (prevents unbounded accumulation)
         const driftTime = (Date.now() - this.startTime) * 0.001 - this.slideStartTime;
-        const t = driftTime * 0.5;
-        if (this.prefersReducedMotion) {
-          this.cameraDriftX = 0;
-          this.cameraDriftY = 0;
-          this.cameraDriftZ = 0;
-          this.camera.rotation.z = 0;
-        } else {
-          // Stacked frequencies for organic "handheld" motion
-          const breatheX = Math.sin(t * 0.5) + Math.sin(t * 1.3) * 0.5 + Math.sin(t * 2.7) * 0.2;
-          const breatheY = Math.cos(t * 0.6) + Math.sin(t * 1.7) * 0.4 + Math.cos(t * 3.1) * 0.15;
-          const breatheZ = Math.sin(t * 0.4) + Math.cos(t * 1.1) * 0.6 + Math.sin(t * 2.2) * 0.25;
-
-          this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 25;
-          this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 25;
-          this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 25;
-
-          // "Dutch Angle" Z-axis roll for zero-gravity cinematic feel
-          const targetRoll = breatheX * 0.015;
-          this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.05;
-        }
+        this.cameraDriftX = Math.sin(driftTime * this.cameraDriftSpeedX * 8) * Math.abs(this.cameraDriftSpeedX) * 40;
+        this.cameraDriftY = Math.sin(driftTime * this.cameraDriftSpeedY * 8 + 1.2) * Math.abs(this.cameraDriftSpeedY) * 40;
+        this.cameraDriftZ = Math.sin(driftTime * this.cameraDriftSpeedZ * 8 + 2.4) * Math.abs(this.cameraDriftSpeedZ) * 40;
 
         const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
         this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
@@ -1812,7 +4768,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
     }
   }
-  private updateMoons(time: number) {
+
+  private updateMoons() {
     this.galileanMoons.forEach(moon => {
       moon.angle += moon.speed * this.currentMoonSpeedMultiplier;
       moon.mesh.position.x = Math.cos(moon.angle) * moon.distance;
@@ -1820,8 +4777,21 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       moon.mesh.rotation.y += 0.01 * this.currentMoonSpeedMultiplier;
     });
 
-    // Small moons orbit entirely on GPU — just update the time uniform
-    this.smallMoonTimeUniform.value = time * this.currentMoonSpeedMultiplier;
+    if (this.smallMoons) {
+      const dummy = new THREE.Object3D();
+      for (let i = 0; i < 91; i++) {
+        const data = this.smallMoonsData[i];
+        data.angle += data.speed * this.currentMoonSpeedMultiplier;
+        dummy.position.set(
+          data.distance * Math.cos(data.angle),
+          data.distance * Math.sin(data.angle) * Math.sin(data.inclination),
+          data.distance * Math.sin(data.angle) * Math.cos(data.inclination)
+        );
+        dummy.updateMatrix();
+        this.smallMoons.setMatrixAt(i, dummy.matrix);
+      }
+      this.smallMoons.instanceMatrix.needsUpdate = true;
+    }
   }
 
   private updateStarsAndDust(time: number) {
@@ -1895,25 +4865,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         jupiterPos.z + cfg.radius * Math.sin(angle) * cosI
       );
       this.scene.add(group);
-
-      // Create ribbon trail — glowing line tracing the ship's flight path
-      const trailLength = 20;
-      const trailPositions = new Float32Array(trailLength * 3);
-      for (let i = 0; i < trailLength; i++) {
-        trailPositions[i * 3] = group.position.x;
-        trailPositions[i * 3 + 1] = group.position.y;
-        trailPositions[i * 3 + 2] = group.position.z;
-      }
-      const trailGeo = new THREE.BufferGeometry();
-      trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
-      const trailColor = cfg.type === 'tie' ? 0x4466ff : cfg.type === 'shuttle' ? 0x4488ff : 0xff5577;
-      const trailLine = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({
-        color: trailColor, transparent: true, opacity: 0.25,
-        blending: THREE.AdditiveBlending
-      }));
-      trailLine.frustumCulled = false;
-      this.scene.add(trailLine);
-
       this.spaceshipData.push({
         group,
         orbitRadius: cfg.radius,
@@ -1921,8 +4872,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         orbitAngle: angle,
         orbitY: cfg.y,
         orbitInclination: cfg.incl,
-        trail: trailLine,
-        trailLength,
       });
     });
   }
@@ -2314,7 +5263,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Chromatic aberration: spike during warp, fade out
     const caBase = 0.0006;
     if (t < 0.2) {
-    if (this.prefersReducedMotion) return; // Skip warp for motion-sensitive users
       const caT = t / 0.2;
       this.postProcessManager?.setChromaticAberrationOffset(
         THREE.MathUtils.lerp(caBase, 0.012, caT),
@@ -2679,34 +5627,27 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const sinI = Math.sin(ship.orbitInclination);
       const cosI = Math.cos(ship.orbitInclination);
 
-      // Pure math orbital position (no physics engine needed)
-      ship.group.position.set(
+      const targetPosition = new THREE.Vector3(
         jupiterPos.x + ship.orbitRadius * cosA,
         jupiterPos.y + ship.orbitY + ship.orbitRadius * sinA * sinI,
         jupiterPos.z + ship.orbitRadius * sinA * cosI
       );
 
-      // Look ahead along orbit path
-      const ahead = ship.orbitAngle + Math.sign(ship.orbitSpeed) * 0.1;
-      ship.group.lookAt(
+      const currentPosition = this.physicsManager.getObjectPosition(ship.group);
+      const steeringImpulse = targetPosition.sub(currentPosition).multiplyScalar(0.018);
+      this.physicsManager.applyImpulse(ship.group, steeringImpulse, true);
+      this.physicsManager.applyInverseSquareGravity(ship.group, this.getGravitySources(), 0.08);
+
+      const velocity = this.physicsManager.getLinearVelocity(ship.group);
+      if (velocity.lengthSq() > 0.0001) {
+        ship.group.lookAt(ship.group.position.clone().add(velocity));
+      } else {
+        const ahead = ship.orbitAngle + Math.sign(ship.orbitSpeed) * 0.1;
+        ship.group.lookAt(
         jupiterPos.x + ship.orbitRadius * Math.cos(ahead),
         jupiterPos.y + ship.orbitY + ship.orbitRadius * Math.sin(ahead) * sinI,
         jupiterPos.z + ship.orbitRadius * Math.sin(ahead) * cosI
-      );
-
-      // Update ribbon trail
-      if (ship.trail) {
-        // Shift history forward
-        const posArr = ship.trail.geometry.attributes['position'] as THREE.BufferAttribute;
-        for (let i = ship.trailLength - 1; i > 0; i--) {
-          posArr.setXYZ(i,
-            posArr.getX(i - 1),
-            posArr.getY(i - 1),
-            posArr.getZ(i - 1)
-          );
-        }
-        posArr.setXYZ(0, ship.group.position.x, ship.group.position.y, ship.group.position.z);
-        posArr.needsUpdate = true;
+        );
       }
     });
   }
@@ -2892,8 +5833,32 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private registerBloomTargets() {
-    // Bloom is now luminance-threshold based (objects with color > 1.0 glow automatically).
-    // No per-object selection needed — this eliminates an entire extra render pass.
+    if (!this.postProcessManager) return;
+
+    if (this.sunMesh) {
+      this.postProcessManager.addBloomSelectionRecursive(this.sunMesh);
+    }
+    if (this.falconExhaust) {
+      this.postProcessManager.addBloomSelectionRecursive(this.falconExhaust);
+    }
+    if (this.auroraTop) this.postProcessManager.addBloomSelection(this.auroraTop);
+    if (this.auroraBottom) this.postProcessManager.addBloomSelection(this.auroraBottom);
+    this.spaceshipData.forEach((ship) => {
+      ship.group.traverse((child) => {
+        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
+          this.postProcessManager?.addBloomSelection(child);
+        }
+      });
+    });
+
+    // Lightsaber blades + glow layers on bloom layer (Selective Bloom)
+    if (this.saberRed) this.postProcessManager.addBloomSelection(this.saberRed);
+    if (this.saberGreen) this.postProcessManager.addBloomSelection(this.saberGreen);
+    if (this.saberGlowRed) this.postProcessManager.addBloomSelection(this.saberGlowRed);
+    if (this.saberGlowGreen) this.postProcessManager.addBloomSelection(this.saberGlowGreen);
+    if (this.saberClashSparks) this.postProcessManager.addBloomSelection(this.saberClashSparks);
+    // Death Star superlaser beam on bloom layer
+    if (this.superlaserBeam) this.postProcessManager.addBloomSelection(this.superlaserBeam);
   }
 
   private registerPhysicsBodies() {
@@ -2919,12 +5884,23 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       canSleep: false,
     });
 
-    this.spaceshipData.forEach((ship) => {
-      ship.group.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-        }
+    this.spaceshipData.forEach((ship, index) => {
+      const box = new THREE.Box3().setFromObject(ship.group);
+      const size = new THREE.Vector3();
+      box.getSize(size).multiplyScalar(0.5);
+      this.physicsManager.bridge(ship.group, {
+        kind: 'dynamic',
+        collider: 'box',
+        halfExtents: size.max(new THREE.Vector3(0.03, 0.03, 0.03)),
+        mass: 0.7,
+        linearDamping: 0.18,
+        angularDamping: 0.45,
+        ccd: true,
+        canSleep: false,
       });
+      if (index === 0) {
+        this.physicsManager.setPlayerObject(ship.group);
+      }
     });
   }
 
@@ -2950,17 +5926,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     for (const target of this.frustumCullTargets) {
       if (!target.object) continue;
-      this.tempSphere.set(target.object.position, target.radius);
-      target.object.visible = this.frustum.intersectsSphere(this.tempSphere);
+      const sphere = new THREE.Sphere(target.object.position.clone(), target.radius);
+      target.object.visible = this.frustum.intersectsSphere(sphere);
     }
   }
 
   private getGravitySources() {
     return [
-      { position: this.jupiterGroup.position, mass: 120_000 },
-      { position: this.sunMesh.position, mass: 240_000 },
-      { position: this.earthMesh.position, mass: 3_000 },
-      { position: this.marsMesh.position, mass: 1_800 },
+      { position: this.jupiterGroup.position.clone(), mass: 120_000 },
+      { position: this.sunMesh.position.clone(), mass: 240_000 },
+      { position: this.earthMesh.position.clone(), mass: 3_000 },
+      { position: this.marsMesh.position.clone(), mass: 1_800 },
     ];
   }
 
@@ -3031,28 +6007,24 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     logoStrip.position.y = 0.12;
     group.add(logoStrip);
 
-    // Landing legs — grouped for pivot animation
+    // Landing legs (4 folded legs at base)
     const legMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.5 });
-    this.falconLegs = [];
     for (let i = 0; i < 4; i++) {
-      const legGroup = new THREE.Group();
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.06, 0.015), legMat);
-      leg.position.set(0, -0.03, 0); // Offset so pivot is at the top
-      legGroup.add(leg);
-
       const angle = (i * Math.PI) / 2 + Math.PI / 4;
-      legGroup.position.set(Math.cos(angle) * 0.03, 0.04, Math.sin(angle) * 0.03);
-      legGroup.rotation.y = angle;
-      legGroup.rotation.x = 0; // Folded up flat against the rocket
-
-      this.falconLegs.push(legGroup);
-      group.add(legGroup);
+      leg.position.set(Math.cos(angle) * 0.035, 0.01, Math.sin(angle) * 0.035);
+      leg.rotation.x = 0.3;
+      leg.rotation.y = angle;
+      group.add(leg);
     }
 
-    // Merlin engines (9 at base — 1 center + 8 octaweb)
-    const engMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
+    // Nine Merlin engines at base (octaweb pattern) — small glowing circles
+    const engineMat = new THREE.MeshStandardMaterial({
+      color: 0x444444, roughness: 0.4, metalness: 0.8,
+      emissive: 0x331100, emissiveIntensity: 0.3
+    });
     for (let i = 0; i < 9; i++) {
-      const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.015, 8), engMat);
+      const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 0.015, 8), engineMat);
       if (i === 0) {
         eng.position.set(0, -0.005, 0); // Center engine
       } else {
@@ -3165,6 +6137,53 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     return new THREE.Vector3().lerpVectors(this.getFalconApproachPosition(), this.falconTargetPos, landingEase);
   }
 
+  private getFalconGuidanceStrength(t: number): number {
+    // Ramp up guidance slowly at launch so the initial impulse isn't overridden
+    if (t < 0.05) return 0.005;
+    if (t < 0.24) return 0.028;
+    if (t < 0.82) return 0.014;
+    // Stronger on approach so the rocket converges on the landing pad
+    return 0.032;
+  }
+
+  private updateFalconCameraAnchor(_timeRatio: number, _falconPosition: THREE.Vector3) {
+    // Camera no longer tracks the falcon — it flies subtly in the background
+  }
+
+  private updateFalconExhaustVisuals(time: number, timeRatio: number) {
+    if (!this.falconExhaust) return;
+
+    const mat = this.falconExhaust.material as THREE.ShaderMaterial;
+    // Use relative time from launch for consistent exhaust animation
+    mat.uniforms['uTime'].value = time - this.falconLaunchTime;
+
+    let thrustScale = 1;
+    if (timeRatio < 0.05) {
+      // Ignition ramp-up
+      thrustScale = 0.3 + (timeRatio / 0.05) * 1.7;
+    } else if (timeRatio < 0.15) {
+      // Full thrust — max plume
+      thrustScale = 2;
+    } else if (timeRatio > 0.82 && timeRatio < 0.94) {
+      // Landing burn — re-ignition
+      const landT = (timeRatio - 0.82) / 0.12;
+      thrustScale = 0.4 + landT * 1.2;
+    } else if (timeRatio >= 0.94) {
+      thrustScale = 0.3;
+    } else {
+      // Cruise — moderate thrust
+      thrustScale = 0.75;
+    }
+
+    this.falconExhaust.scale.set(thrustScale, thrustScale * (1 + Math.sin(time * 20) * 0.1), thrustScale);
+    this.falconExhaust.visible = timeRatio < 0.97;
+
+    // Update exhaust point light intensity to match thrust
+    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+    if (light) {
+      light.intensity = thrustScale * 2.5;
+    }
+  }
 
   private finalizeFalconLanding() {
     this.falconExhaust.visible = false;
@@ -3172,14 +6191,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.physicsManager.setLinvel(this.falconGroup, new THREE.Vector3(), true);
     this.falconGroup.quaternion.slerp(new THREE.Quaternion(), 1);
     this.falconGroup.visible = true;
+    // Mark as no longer in flight, but keep the rocket visible on Mars
     this.falconLaunched = false;
-    // Legs fully deployed
-    this.falconLegs.forEach(leg => leg.rotation.x = 1.2);
     // Exhaust light off
     const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
     if (light) light.intensity = 0;
-    // Clear telemetry HUD
-    this.ngZone.run(() => this.telemetry.emit(null));
   }
 
   private updateFalcon9(time: number) {
@@ -3189,86 +6205,43 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const totalDuration = this.falconFlightDuration;
     const t = Math.min(elapsed / totalDuration, 1);
 
-    // 1. Scripted cinematic movement (smoother than pure physics)
     const targetPosition = this.getFalconFlightTarget(t);
-    this.physicsManager.setTranslation(this.falconGroup, targetPosition, true);
-
-    // Trigger hyperspace warp when falcon enters cruise phase
+// Trigger hyperspace warp when falcon enters cruise phase
     if (t >= 0.24 && !this.falconHyperspaceTriggered) {
       this.falconHyperspaceTriggered = true;
       this.triggerHyperspaceJump();
     }
 
-    // 2. Flight Profile — thrust, orientation, leg deployment
-    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
-    let thrust = 0;
+    
+    const falconPosition = this.physicsManager.getObjectPosition(this.falconGroup);
+    const guidance = targetPosition.clone().sub(falconPosition).multiplyScalar(this.getFalconGuidanceStrength(t));
+    this.physicsManager.applyImpulse(this.falconGroup, guidance, true);
+    this.physicsManager.applyInverseSquareGravity(this.falconGroup, this.getGravitySources(), 0.12);
 
-    if (t < 0.2) {
-      // Stage 1: Launch & Gravity Turn
-      thrust = 2.0;
-      const lookTarget = this.getFalconFlightTarget(Math.min(t + 0.05, 1));
-      this.falconGroup.lookAt(lookTarget);
-      this.falconLegs.forEach(leg => leg.rotation.x = 0);
-    } else if (t < 0.7) {
-      // Stage 2: Coasting (engine off) — slowly rotate retrograde for landing
-      thrust = 0.0;
-      this.falconGroup.rotation.x -= 0.005;
-    } else if (t < 0.8) {
-      // Stage 3: Entry Burn (short burst to slow down)
-      thrust = 1.5;
-      this.falconGroup.lookAt(targetPosition.clone().sub(new THREE.Vector3(0, 1, 0)));
-    } else {
-      // Stage 4: Hoverslam & Landing
-      thrust = (1 - t) * 3.0 + 0.5;
-      this.falconGroup.lookAt(targetPosition.clone().sub(new THREE.Vector3(0, 1, 0)));
+    // Velocity damping — prevents overshoot & oscillation, stronger near landing
+    const damping = t > 0.85 ? 0.92 : 0.97;
+    const vel = this.physicsManager.getLinearVelocity(this.falconGroup);
+    this.physicsManager.setLinvel(this.falconGroup, vel.multiplyScalar(damping), true);
 
-      // Deploy legs smoothly in the last 10%
-      const deployT = Math.max(0, (t - 0.9) * 10);
-      this.falconLegs.forEach(leg => leg.rotation.x = deployT * 1.2);
+    const updatedFalconPosition = this.physicsManager.getObjectPosition(this.falconGroup);
+    this.updateFalconCameraAnchor(t, updatedFalconPosition);
+
+    const velocity = this.physicsManager.getLinearVelocity(this.falconGroup);
+    if (t > 0.01 && velocity.lengthSq() > 0.0001) {
+      const dir = velocity.normalize();
+      const up = new THREE.Vector3(0, 1, 0);
+      const quat = new THREE.Quaternion();
+      const mat4 = new THREE.Matrix4();
+      mat4.lookAt(new THREE.Vector3(), dir, up);
+      quat.setFromRotationMatrix(mat4);
+      const adjust = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
+      quat.multiply(adjust);
+      // Faster slerp for snappy orientation; extra responsive during landing
+      const slerpFactor = t > 0.82 ? 0.15 : 0.1;
+      this.falconGroup.quaternion.slerp(quat, slerpFactor);
     }
 
-    // Update exhaust visuals
-    this.falconExhaust.visible = thrust > 0;
-    this.falconExhaust.scale.set(thrust, thrust * (1 + Math.random() * 0.2), thrust);
-    if (light) light.intensity = thrust * 3;
-
-    // Update exhaust shader time
-    const mat = this.falconExhaust.material as THREE.ShaderMaterial;
-    mat.uniforms['uTime'].value = time - this.falconLaunchTime;
-
-    // 3. Cinematic Camera Tracking
-    if (t < 0.3 && this.earthMesh) {
-      // Ground Tracking Cam — looking up from Earth
-      this.targetCameraX = this.earthMesh.position.x - 2;
-      this.targetCameraY = this.earthMesh.position.y + 1;
-      this.targetCameraZ = this.earthMesh.position.z + 5;
-      this.targetLookAt.copy(targetPosition);
-    } else if (t < 0.8) {
-      // Chase Cam — following the rocket through space
-      const offset = new THREE.Vector3(1.5, 0.5, 3).applyQuaternion(this.falconGroup.quaternion);
-      this.targetCameraX = targetPosition.x + offset.x;
-      this.targetCameraY = targetPosition.y + offset.y;
-      this.targetCameraZ = targetPosition.z + offset.z;
-      this.targetLookAt.copy(targetPosition);
-    } else if (this.marsMesh) {
-      // Landing Pad Cam — looking up from Mars
-      this.targetCameraX = this.marsMesh.position.x + 2;
-      this.targetCameraY = this.marsMesh.position.y + 0.5;
-      this.targetCameraZ = this.marsMesh.position.z + 3;
-      this.targetLookAt.copy(targetPosition);
-      // Heavy camera shake as it lands
-      this.targetCameraX += (Math.random() - 0.5) * thrust * 0.05;
-      this.targetCameraY += (Math.random() - 0.5) * thrust * 0.05;
-    }
-
-    // 4. Emit Telemetry to Angular UI
-    this.ngZone.run(() => {
-      this.telemetry.emit({
-        altitude: Math.round((1 - t) * 250000),
-        speed: Math.round(thrust * 8000),
-        phase: t < 0.2 ? 'MAX-Q' : t < 0.7 ? 'COAST' : t < 0.8 ? 'ENTRY BURN' : 'HOVERSLAM'
-      });
-    });
+    this.updateFalconExhaustVisuals(time, t);
 
     if (t >= 1) {
       this.finalizeFalconLanding();
@@ -3278,6 +6251,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createSolarSystemPlanets() {
     // Saturn — visible in far background
     // Saturn equatorial radius: 60,268 km → 60268/71492 × 10 = 8.43 scene units
+    // Using correct relative size to Jupiter
     this.saturnGroup = new THREE.Group();
     const saturnGeo = new THREE.SphereGeometry(8.4, 64, 64);
     const saturnMat = new THREE.MeshStandardMaterial({
@@ -3288,7 +6262,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Saturn texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_saturn.webp', (tex) => {
+      this.textureLoader.load('2k_saturn.jpg', (tex) => {
         tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         saturnMat.map = tex; saturnMat.color.setHex(0xffffff); saturnMat.needsUpdate = true;
@@ -3365,9 +6339,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const sp = this.saturnGroup.position;
       this.titanMesh.position.set(sp.x + 20, sp.y, sp.z);
       this.scene.add(this.titanMesh);
-      // Load moon texture for Titan (reuse 8k_moon.webp, tinted by material color)
+      // Load moon texture for Titan (reuse 8k_moon.jpg, tinted by material color)
       this.loadPromises.push(new Promise<void>((resolve) => {
-        this.textureLoader.load('8k_moon.webp', (tex) => {
+        this.textureLoader.load('8k_moon.jpg', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           titanMat.map = tex;
           titanMat.color.setHex(0xcc9944); // Keep the warm orange tint
@@ -3387,7 +6361,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoMesh.position.set(-240, -25, -220);
       this.scene.add(this.plutoMesh);
       this.loadPromises.push(new Promise<void>((resolve) => {
-        this.textureLoader.load('8k_moon.webp', (tex) => {
+        this.textureLoader.load('8k_moon.jpg', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           plutoMat.map = tex;
           plutoMat.color.setHex(0xc4a882);
@@ -3408,7 +6382,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Mars texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('8k_mars.webp', (tex) => {
+      this.textureLoader.load('8k_mars.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         marsMat.map = tex; marsMat.color.setHex(0xffffff); marsMat.needsUpdate = true;
         resolve();
@@ -3432,7 +6406,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.venusMesh);
     // Venus atmosphere texture (thick sulfuric acid clouds)
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_venus_atmosphere.webp', (tex) => {
+      this.textureLoader.load('2k_venus_atmosphere.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         venusMat.map = tex; venusMat.color.setHex(0xffffff); venusMat.needsUpdate = true;
         resolve();
@@ -3469,7 +6443,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.mercuryMesh);
     // Mercury texture — cratered surface
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_mercury.webp', (tex) => {
+      this.textureLoader.load('2k_mercury.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         mercuryMat.map = tex; mercuryMat.color.setHex(0xffffff); mercuryMat.needsUpdate = true;
         resolve();
@@ -3485,7 +6459,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.uranusGroup.add(this.uranusMesh);
     // Uranus texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_uranus.webp', (tex) => {
+      this.textureLoader.load('2k_uranus.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         uranusMat.map = tex; uranusMat.color.setHex(0xffffff); uranusMat.needsUpdate = true;
         resolve();
@@ -3565,7 +6539,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.neptuneGroup.add(this.neptuneMesh);
     // Neptune texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_neptune.webp', (tex) => {
+      this.textureLoader.load('2k_neptune.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         neptuneMat.map = tex; neptuneMat.color.setHex(0xffffff); neptuneMat.needsUpdate = true;
         resolve();
@@ -4188,7 +7162,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Sun texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('8k_sun.webp', (tex) => {
+      this.textureLoader.load('8k_sun.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         sunMat.uniforms['uSunTex'].value = tex;
         sunMat.needsUpdate = true;
@@ -4446,34 +7420,43 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Update bolt lines
           group.children.forEach(child => {
             if (child instanceof THREE.Line) {
-              const mat = child.material as THREE.LineBasicMaterial;
-              mat.opacity = flicker;
+              (child.material as THREE.LineBasicMaterial).opacity = flicker * 0.9;
+            } else if (child instanceof THREE.Mesh) {
+              (child.material as THREE.MeshBasicMaterial).opacity = flicker * 0.4;
+            } else if (child instanceof THREE.PointLight) {
+              child.intensity = flicker * 8;
+            }
+          });
+        } else {
+          // All off
+          group.children.forEach(child => {
+            if (child instanceof THREE.Line) {
+              (child.material as THREE.LineBasicMaterial).opacity = 0;
+            } else if (child instanceof THREE.Mesh) {
+              (child.material as THREE.MeshBasicMaterial).opacity = 0;
+            } else if (child instanceof THREE.PointLight) {
+              child.intensity = 0;
             }
           });
           lf.timer = 0;
           lf.cooldown = 80 + Math.random() * 300;
-          // Rewrite vertices in-place (reuse geometry buffer, no allocation)
+          // Regenerate bolt geometry for next flash (different path)
           group.children.forEach(child => {
             if (child instanceof THREE.Line) {
-              const posAttr = child.geometry.attributes['position'] as THREE.BufferAttribute;
-              if (!posAttr) return;
-              const segments = Math.min(posAttr.count, 6 + Math.floor(Math.random() * 4));
+              const points: THREE.Vector3[] = [];
+              const segments = 6 + Math.floor(Math.random() * 4);
               let px = (Math.random() - 0.5) * 0.3;
               let py = (Math.random() - 0.5) * 0.3;
               let pz = 0;
               const boltLen = 0.3 + Math.random() * 0.5;
-              for (let s = 0; s < posAttr.count; s++) {
-                if (s <= segments) {
-                  posAttr.setXYZ(s, px, py, pz);
-                  px += (Math.random() - 0.5) * 0.15;
-                  py += (Math.random() - 0.5) * 0.15;
-                  pz += boltLen / segments;
-                } else {
-                  // Degenerate remaining verts to last point
-                  posAttr.setXYZ(s, px, py, pz);
-                }
+              for (let s = 0; s <= segments; s++) {
+                points.push(new THREE.Vector3(px, py, pz));
+                px += (Math.random() - 0.5) * 0.15;
+                py += (Math.random() - 0.5) * 0.15;
+                pz += boltLen / segments;
               }
-              posAttr.needsUpdate = true;
+              child.geometry.dispose();
+              child.geometry = new THREE.BufferGeometry().setFromPoints(points);
             }
           });
           // Reposition on night side
@@ -4628,8 +7611,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       fragmentShader: `
         varying float vAlpha;
         void main() {
-          olarWind.frustumCulled = false;
-    this.sfloat d = length(gl_PointCoord - vec2(0.5));
+          float d = length(gl_PointCoord - vec2(0.5));
           if (d > 0.5) discard;
           float a = smoothstep(0.5, 0.0, d) * 0.08;
           gl_FragColor = vec4(1.0, 0.95, 0.7, a);
@@ -4882,9 +7864,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const dist3D = ep.distanceTo(jp);
     const minDist3D = 30, maxDist3D = 54;
     const frac = Math.max(0, Math.min(1, (dist3D - minDist3D) / (maxDist3D - minDist3D)));
-    // Skip rendering while tab is hidden to prevent time jumps
-    if (this.tabHidden) return;
-
     const km = Math.round(588 + frac * (968 - 588));
     if (km !== this.lastEmittedKm) {
       this.lastEmittedKm = km;
@@ -4956,7 +7935,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
     this.updateDistanceBeam(time);
 
-    this.updateMoons(time);
+    this.updateMoons();
     this.updateSpaceships(time);
     this.updateStarsAndDust(time);
 
@@ -5083,3 +8062,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
   }
 }
+</file>
+
+</files>

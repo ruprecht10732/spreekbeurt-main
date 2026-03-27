@@ -29,6 +29,8 @@ interface PhysicsBridge {
   body: RigidBody;
   collider: Collider;
   kind: PhysicsBodyKind;
+  prevPosition: THREE.Vector3;
+  prevQuaternion: THREE.Quaternion;
 }
 
 export class PhysicsManager {
@@ -41,6 +43,11 @@ export class PhysicsManager {
   private initialized = false;
   private readonly bridges = new Map<THREE.Object3D, PhysicsBridge>();
   private playerObject: THREE.Object3D | null = null;
+
+  // Pre-allocated vectors for per-frame gravity calculations
+  private readonly _gravBodyPos = new THREE.Vector3();
+  private readonly _gravTotalForce = new THREE.Vector3();
+  private readonly _gravDirection = new THREE.Vector3();
 
   async initialize(): Promise<void> {
     if (this.initialized) return;
@@ -78,7 +85,11 @@ export class PhysicsManager {
     const colliderDesc = this.createColliderDesc(options);
     const collider = this.world.createCollider(colliderDesc, body);
 
-    this.bridges.set(object, { object, body, collider, kind: options.kind });
+    this.bridges.set(object, {
+      object, body, collider, kind: options.kind,
+      prevPosition: object.position.clone(),
+      prevQuaternion: object.quaternion.clone(),
+    });
     this.syncObjectFromBody(object, body);
     return body;
   }
@@ -96,25 +107,27 @@ export class PhysicsManager {
     return this.getObjectPosition(this.playerObject);
   }
 
-  getObjectPosition(object: THREE.Object3D): THREE.Vector3 {
+  getObjectPosition(object: THREE.Object3D, target?: THREE.Vector3): THREE.Vector3 {
+    const out = target ?? new THREE.Vector3();
     const bridge = this.bridges.get(object);
     if (!bridge) {
-      return object.position.clone();
+      return out.copy(object.position);
     }
 
     const translation = bridge.body.translation();
-    return new THREE.Vector3(
+    return out.set(
       translation.x * this.scale,
       translation.y * this.scale,
       translation.z * this.scale,
     );
   }
 
-  getLinearVelocity(object: THREE.Object3D): THREE.Vector3 {
+  getLinearVelocity(object: THREE.Object3D, target?: THREE.Vector3): THREE.Vector3 {
+    const out = target ?? new THREE.Vector3();
     const bridge = this.bridges.get(object);
-    if (!bridge) return new THREE.Vector3();
+    if (!bridge) return out.set(0, 0, 0);
     const velocity = bridge.body.linvel();
-    return new THREE.Vector3(
+    return out.set(
       velocity.x * this.scale,
       velocity.y * this.scale,
       velocity.z * this.scale,
@@ -209,19 +222,19 @@ export class PhysicsManager {
     const bridge = this.bridges.get(object);
     if (bridge?.kind !== 'dynamic') return;
 
-    const bodyPosition = this.getObjectPosition(object);
+    const bodyPosition = this.getObjectPosition(object, this._gravBodyPos);
     const bodyMass = Math.max(bridge.body.mass(), 0.0001);
-    const totalForce = new THREE.Vector3();
+    this._gravTotalForce.set(0, 0, 0);
 
     for (const source of sources) {
-      const direction = source.position.clone().sub(bodyPosition);
-      const distanceSq = Math.max(direction.lengthSq(), 16);
-      direction.normalize();
+      this._gravDirection.subVectors(source.position, bodyPosition);
+      const distanceSq = Math.max(this._gravDirection.lengthSq(), 16);
+      this._gravDirection.normalize();
       const forceMagnitude = gravitationalConstant * source.mass * bodyMass / distanceSq;
-      totalForce.addScaledVector(direction, forceMagnitude);
+      this._gravTotalForce.addScaledVector(this._gravDirection, forceMagnitude);
     }
 
-    this.applyForce(object, totalForce, true);
+    this.applyForce(object, this._gravTotalForce, true);
   }
 
   step(elapsedSeconds: number): void {
@@ -236,11 +249,20 @@ export class PhysicsManager {
     this.accumulator += Math.max(frameDelta, 0);
 
     while (this.accumulator >= this.fixedTimestep) {
+      // Store pre-step positions for interpolation
+      for (const bridge of this.bridges.values()) {
+        const t = bridge.body.translation();
+        const r = bridge.body.rotation();
+        bridge.prevPosition.set(t.x * this.scale, t.y * this.scale, t.z * this.scale);
+        bridge.prevQuaternion.set(r.x, r.y, r.z, r.w);
+      }
       this.world.step();
       this.accumulator -= this.fixedTimestep;
     }
 
-    this.syncAllObjectsFromBodies();
+    // Interpolate visual positions: alpha = leftover fraction toward next physics frame
+    const alpha = this.accumulator / this.fixedTimestep;
+    this.interpolateAllObjects(alpha);
   }
 
   shiftWorld(shiftInThreeUnits: THREE.Vector3): void {
@@ -265,6 +287,22 @@ export class PhysicsManager {
   private syncAllObjectsFromBodies(): void {
     for (const bridge of this.bridges.values()) {
       this.syncObjectFromBody(bridge.object, bridge.body);
+    }
+  }
+
+  private interpolateAllObjects(alpha: number): void {
+    for (const bridge of this.bridges.values()) {
+      const t = bridge.body.translation();
+      const r = bridge.body.rotation();
+      // Lerp position between previous and current physics state
+      bridge.object.position.set(
+        bridge.prevPosition.x + (t.x * this.scale - bridge.prevPosition.x) * alpha,
+        bridge.prevPosition.y + (t.y * this.scale - bridge.prevPosition.y) * alpha,
+        bridge.prevPosition.z + (t.z * this.scale - bridge.prevPosition.z) * alpha,
+      );
+      // Slerp quaternion
+      bridge.object.quaternion.set(bridge.prevQuaternion.x, bridge.prevQuaternion.y, bridge.prevQuaternion.z, bridge.prevQuaternion.w);
+      bridge.object.quaternion.slerp(new THREE.Quaternion(r.x, r.y, r.z, r.w), alpha);
     }
   }
 

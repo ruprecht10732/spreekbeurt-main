@@ -1,5 +1,5 @@
-import { ChangeDetectionStrategy, Component, HostListener, signal, computed, effect, ViewChild, ElementRef, AfterViewInit, PLATFORM_ID, inject } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import { ChangeDetectionStrategy, Component, HostListener, signal, computed, effect, ViewChild, ElementRef, AfterViewInit, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
+import { isPlatformBrowser, DecimalPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { Background3DComponent } from './background-3d.component';
 import { SLIDES } from './slides.data';
@@ -8,7 +8,7 @@ import { animate, stagger, cubicBezier } from 'motion';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-root',
-  imports: [Background3DComponent, MatIconModule],
+  imports: [Background3DComponent, MatIconModule, DecimalPipe],
   template: `
     <!-- Background audio for entire presentation -->
     <audio #bgAudio [src]="bgAudioSrc" loop preload="auto" class="hidden"></audio>
@@ -38,9 +38,38 @@ import { animate, stagger, cubicBezier } from 'motion';
       (loaded)="onSceneLoaded()"
       (distanceKm)="onDistanceUpdate($event)"
       (tourPlanet)="onTourPlanet($event)"
+      (telemetry)="telemetry.set($event)"
+      (loadProgress)="loadingProgress.set($event)"
       class="transition-opacity duration-[2000ms] ease-in-out"
       [class.opacity-0]="videoRevealed()">
     </app-background-3d>
+
+    <!-- SpaceX Telemetry HUD (Only visible during launch) -->
+    @if (telemetry()) {
+      <div class="fixed top-8 left-8 z-[25] pointer-events-none animate-fade-in flex flex-col gap-4">
+        <!-- Status Badge -->
+        <div class="bg-black/60 border border-white/20 backdrop-blur-md px-4 py-2 rounded-sm flex items-center gap-3">
+          <div class="w-3 h-3 rounded-full animate-pulse"
+               [class.bg-red-500]="telemetry()!.phase === 'MAX-Q'"
+               [class.bg-yellow-500]="telemetry()!.phase === 'COAST'"
+               [class.bg-green-500]="telemetry()!.phase === 'HOVERSLAM' || telemetry()!.phase === 'ENTRY BURN'">
+          </div>
+          <span class="font-mono text-sm tracking-widest text-white/90">FALCON 9 • {{ telemetry()!.phase }}</span>
+        </div>
+
+        <!-- Data Readouts -->
+        <div class="flex gap-4">
+          <div class="bg-black/40 border border-white/10 backdrop-blur-md p-4 rounded-sm min-w-[140px]">
+            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">ALTITUDE</div>
+            <div class="font-mono text-3xl text-white">{{ telemetry()!.altitude | number }} <span class="text-sm text-white/50">KM</span></div>
+          </div>
+          <div class="bg-black/40 border border-white/10 backdrop-blur-md p-4 rounded-sm min-w-[140px]">
+            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">VELOCITY</div>
+            <div class="font-mono text-3xl text-white">{{ telemetry()!.speed | number }} <span class="text-sm text-white/50">KM/H</span></div>
+          </div>
+        </div>
+      </div>
+    }
 
     <div class="relative z-10 w-full h-screen overflow-hidden flex flex-col items-center justify-center pointer-events-none">
       
@@ -73,11 +102,13 @@ import { animate, stagger, cubicBezier } from 'motion';
                   <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">Klik om te beginnen</span>
                 </button>
               } @else {
-                <div class="mt-12 flex flex-col items-center gap-4">
-                  <div class="w-28 h-28 rounded-full bg-white/5 border-2 border-white/20 flex items-center justify-center">
-                    <div class="w-10 h-10 border-3 border-[var(--color-starwars-yellow)]/40 border-t-[var(--color-starwars-yellow)] rounded-full animate-spin"></div>
+                <div class="mt-12 flex flex-col items-center gap-4 w-64 mx-auto">
+                  <div class="text-xs font-mono tracking-[0.3em] text-[var(--color-starwars-yellow)]/70">INITIALIZING SYSTEMS</div>
+                  <div class="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div class="h-full bg-[var(--color-starwars-yellow)] transition-all duration-300 ease-out shadow-[0_0_10px_rgba(255,232,31,0.5)]"
+                         [style.width.%]="loadingProgress()"></div>
                   </div>
-                  <span class="text-xl opacity-50">Laden...</span>
+                  <span class="text-xs font-mono text-white/50">{{ loadingProgress() | number:'1.0-0' }}%</span>
                 </div>
               }
             } @else if (currentSlide().id === 'title' && hasStarted()) {
@@ -93,24 +124,24 @@ import { animate, stagger, cubicBezier } from 'motion';
             <div class="absolute inset-0 bg-gradient-to-r from-black/65 via-black/10 to-transparent"></div>
             <div class="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-black/15"></div>
             <!-- Tour stats panel — bottom left -->
-            <div class="absolute bottom-16 left-8 md:left-12 tour-facts-card">
+            <div class="absolute bottom-20 left-8 md:left-12 tour-facts-card">
               <!-- Accent bar + planet name -->
               <div class="tour-accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_10px_rgba(255,232,31,0.35)]"></div>
               <div class="flex items-center gap-2.5 mb-5">
                 <span class="text-3xl leading-none">{{ pf.icon }}</span>
-                <h2 class="text-2xl md:text-4xl font-starwars uppercase tracking-wider drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]"
+                <h2 class="text-3xl md:text-5xl font-starwars uppercase tracking-wider drop-shadow-[0_0_18px_rgba(0,0,0,0.8)]"
                     [style.color]="pf.color">{{ pf.title }}</h2>
               </div>
               <!-- 2x2 stat card grid -->
-              <div class="grid grid-cols-2 gap-x-8 gap-y-5">
+              <div class="grid grid-cols-2 gap-x-10 gap-y-6">
                 @for (stat of pf.stats; track $index) {
                   <div class="tour-stat-card" [style.animation-delay]="($index * 130 + 150) + 'ms'">
-                    <div class="text-[10px] font-mono tracking-[0.25em] mb-0.5 text-white/50">{{ stat.label }}</div>
-                    <div class="text-2xl md:text-3xl font-starwars tabular-nums leading-tight"
+                    <div class="text-xs font-mono tracking-[0.25em] mb-1 text-white/55">{{ stat.label }}</div>
+                    <div class="text-3xl md:text-4xl font-starwars tabular-nums leading-tight"
                          [style.color]="pf.color"
-                         [style.text-shadow]="'0 0 16px ' + pf.color">{{ stat.value }}</div>
+                         [style.text-shadow]="'0 0 20px ' + pf.color">{{ stat.value }}</div>
                     @if (stat.sub) {
-                      <div class="text-[11px] text-white/45 mt-0.5 max-w-[130px]">{{ stat.sub }}</div>
+                      <div class="text-sm text-white/50 mt-1 max-w-[170px]">{{ stat.sub }}</div>
                     }
                   </div>
                 }
@@ -130,7 +161,7 @@ import { animate, stagger, cubicBezier } from 'motion';
           <!-- Floating title — top-left -->
           <div class="absolute top-10 left-10 md:left-14 z-10">
             <div class="accent-line w-16 h-[2px] bg-gradient-to-r from-[var(--color-starwars-yellow)] to-transparent mb-3 rounded-full shadow-[0_0_12px_rgba(255,232,31,0.4)] origin-left"></div>
-            <h2 class="slide-title text-2xl md:text-4xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_20px_rgba(255,232,31,0.3)]">
+            <h2 class="slide-title text-3xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] uppercase tracking-wider drop-shadow-[0_0_20px_rgba(255,232,31,0.3)]">
               {{ currentSlide().title }}
             </h2>
           </div>
@@ -139,39 +170,39 @@ import { animate, stagger, cubicBezier } from 'motion';
           @if (currentSlide().id === 'h1') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[14%] right-[16%] text-right">
-                <div class="text-[11px] font-mono text-cyan-400/60 tracking-[0.3em] mb-1">CLASSIFICATIE</div>
-                <div class="text-3xl md:text-5xl font-starwars text-cyan-300/90 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GASREUS</div>
-                <div class="text-xs text-white/50 mt-1">Geen steen of zand zoals de aarde</div>
+                <div class="text-xs font-mono text-cyan-400/70 tracking-[0.3em] mb-1">CLASSIFICATIE</div>
+                <div class="text-4xl md:text-6xl font-starwars text-cyan-300/90 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GASREUS</div>
+                <div class="text-sm text-white/60 mt-1">Geen steen of zand zoals de aarde</div>
               </div>
               <div class="slide-item absolute top-[38%] right-[6%] md:right-[10%]">
                 <div class="flex items-baseline gap-1">
-                  <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_30px_rgba(255,232,31,0.4)] tabular-nums">90</span>
-                  <span class="text-xl text-[var(--color-starwars-yellow)]/60 font-starwars">%</span>
+                  <span class="text-6xl md:text-8xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_30px_rgba(255,232,31,0.4)] tabular-nums">90</span>
+                  <span class="text-2xl text-[var(--color-starwars-yellow)]/70 font-starwars">%</span>
                 </div>
-                <div class="text-xs text-white/55 tracking-wider">WATERSTOF (H₂)</div>
+                <div class="text-sm text-white/60 tracking-wider">WATERSTOF (H₂)</div>
               </div>
               <div class="slide-item absolute top-[55%] right-[18%] md:right-[22%]">
                 <div class="flex items-baseline gap-1">
-                  <span class="text-3xl md:text-5xl font-starwars text-orange-300/80 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">10</span>
-                  <span class="text-lg text-orange-300/50 font-starwars">%</span>
+                  <span class="text-4xl md:text-6xl font-starwars text-orange-300/85 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">10</span>
+                  <span class="text-xl text-orange-300/60 font-starwars">%</span>
                 </div>
-                <div class="text-xs text-white/50 tracking-wider">HELIUM (He)</div>
+                <div class="text-sm text-white/55 tracking-wider">HELIUM (He)</div>
               </div>
               <div class="slide-item absolute bottom-[28%] right-[10%] md:right-[14%]">
                 <div class="flex items-center gap-3">
                   <div class="w-10 h-px bg-gradient-to-r from-transparent to-cyan-400/40"></div>
                   <div>
                     <div class="flex items-baseline gap-1">
-                      <span class="text-2xl md:text-3xl font-starwars text-cyan-200/75 tabular-nums">1000</span>
-                      <span class="text-[11px] text-cyan-200/45 tracking-wider">KM</span>
+                      <span class="text-3xl md:text-4xl font-starwars text-cyan-200/80 tabular-nums">1000</span>
+                      <span class="text-sm text-cyan-200/55 tracking-wider">KM</span>
                     </div>
-                    <div class="text-[11px] text-white/40 tracking-wider">DAMPKRING DIKTE</div>
+                    <div class="text-xs text-white/50 tracking-wider">DAMPKRING DIKTE</div>
                   </div>
                 </div>
               </div>
-              <div class="slide-item absolute bottom-[16%] right-[22%]">
-                <div class="text-xs text-red-300/60 italic flex items-center gap-2">
-                  <div class="w-1 h-1 rounded-full bg-red-400/50"></div>
+              <div class="slide-item absolute bottom-[18%] right-[22%]">
+                <div class="text-sm text-red-300/70 italic flex items-center gap-2">
+                  <div class="w-1.5 h-1.5 rounded-full bg-red-400/60"></div>
                   Geen vaste grond om op te landen
                 </div>
               </div>
@@ -181,45 +212,45 @@ import { animate, stagger, cubicBezier } from 'motion';
           } @else if (currentSlide().id === 'h5') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[12%] right-[14%] text-right">
-                <div class="text-[11px] font-mono text-purple-400/60 tracking-[0.3em] mb-1">MASSA</div>
+                <div class="text-xs font-mono text-purple-400/70 tracking-[0.3em] mb-1">MASSA</div>
                 <div class="flex items-baseline gap-1 justify-end">
-                  <span class="text-4xl md:text-6xl font-starwars text-purple-300/90 drop-shadow-[0_0_25px_rgba(180,130,255,0.4)] tabular-nums">300</span>
-                  <span class="text-lg text-purple-300/60 font-starwars">×</span>
+                  <span class="text-5xl md:text-7xl font-starwars text-purple-300/90 drop-shadow-[0_0_25px_rgba(180,130,255,0.4)] tabular-nums">300</span>
+                  <span class="text-xl text-purple-300/70 font-starwars">×</span>
                 </div>
-                <div class="text-xs text-white/50">zwaarder dan de aarde</div>
+                <div class="text-sm text-white/60">zwaarder dan de aarde</div>
               </div>
               <div class="slide-item absolute top-[35%] right-[6%] md:right-[8%]">
                 <div class="flex items-baseline gap-1">
-                  <span class="text-3xl md:text-4xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_20px_rgba(255,232,31,0.3)] tabular-nums">9u 55m</span>
+                  <span class="text-4xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_20px_rgba(255,232,31,0.3)] tabular-nums">9u 55m</span>
                 </div>
-                <div class="text-xs text-white/50 tracking-wider">ÉÉN DAG OP JUPITER</div>
+                <div class="text-sm text-white/55 tracking-wider">ÉÉN DAG OP JUPITER</div>
               </div>
               <div class="slide-item absolute top-[52%] right-[16%] md:right-[20%]">
                 <div class="flex items-baseline gap-1">
-                  <span class="text-4xl md:text-5xl font-starwars text-orange-300/85 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">2.5</span>
-                  <span class="text-lg text-orange-300/55 font-starwars">×</span>
+                  <span class="text-5xl md:text-6xl font-starwars text-orange-300/90 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">2.5</span>
+                  <span class="text-xl text-orange-300/65 font-starwars">×</span>
                 </div>
-                <div class="text-xs text-white/50 tracking-wider">ZWAARTEKRACHT</div>
-                <div class="text-[11px] text-white/40 mt-0.5">Je weegt er flink meer!</div>
+                <div class="text-sm text-white/55 tracking-wider">ZWAARTEKRACHT</div>
+                <div class="text-xs text-white/50 mt-0.5">Je weegt er flink meer!</div>
               </div>
               <div class="slide-item absolute bottom-[25%] right-[12%]">
-                <div class="text-xs text-cyan-300/55 flex items-center gap-2">
-                  <div class="w-8 h-px bg-gradient-to-r from-transparent to-cyan-400/35"></div>
+                <div class="text-sm text-cyan-300/65 flex items-center gap-2">
+                  <div class="w-8 h-px bg-gradient-to-r from-transparent to-cyan-400/45"></div>
                   Allergrootste planeet — een gasreus
                 </div>
               </div>
             </div>
             @if (currentSlide().experiment) {
-              <div class="absolute bottom-24 left-10 md:left-14 max-w-[32%] slide-item">
+              <div class="absolute bottom-28 left-10 md:left-14 max-w-[35%] slide-item">
                 <div class="pl-4 border-l-2 border-green-500/30">
                   <h3 class="text-base font-starwars text-green-400/80 mb-2 flex items-center gap-2">
                     <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
                   </h3>
-                  <p class="text-green-200/60 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
-                  <ul class="space-y-1 text-green-100/65 text-xs">
+                  <p class="text-green-200/65 mb-2 text-sm">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1.5 text-green-100/70 text-sm">
                     @for (instruction of currentSlide().experiment?.instructions; track $index) {
                       <li class="flex items-start gap-1.5">
-                        <span class="text-green-500/55 mt-0.5 text-[10px]">▶</span>
+                        <span class="text-green-500/60 mt-0.5 text-xs">▶</span>
                         <span>{{ instruction }}</span>
                       </li>
                     }
@@ -232,23 +263,23 @@ import { animate, stagger, cubicBezier } from 'motion';
           } @else if (currentSlide().id === 'extra') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[12%] right-[18%] text-right">
-                <div class="text-[11px] font-mono text-blue-400/60 tracking-[0.3em] mb-1">MAANSYSTEEM</div>
+                <div class="text-xs font-mono text-blue-400/70 tracking-[0.3em] mb-1">MAANSYSTEEM</div>
                 <div class="flex items-baseline gap-1 justify-end">
-                  <span class="text-5xl md:text-7xl font-starwars text-blue-300/90 drop-shadow-[0_0_30px_rgba(100,150,255,0.4)] tabular-nums">95</span>
+                  <span class="text-6xl md:text-8xl font-starwars text-blue-300/90 drop-shadow-[0_0_30px_rgba(100,150,255,0.4)] tabular-nums">95</span>
                 </div>
-                <div class="text-xs text-white/50">manen in een baan om Jupiter</div>
+                <div class="text-sm text-white/60">manen in een baan om Jupiter</div>
               </div>
               <div class="slide-item absolute top-[38%] right-[6%] md:right-[8%]">
-                <div class="text-lg font-starwars text-cyan-200/80 drop-shadow-[0_0_15px_rgba(100,210,255,0.3)]">EUROPA</div>
-                <div class="text-xs text-white/50 mt-0.5 max-w-[180px]">Oceaan onder het ijs — misschien leven?</div>
+                <div class="text-xl md:text-2xl font-starwars text-cyan-200/85 drop-shadow-[0_0_15px_rgba(100,210,255,0.3)]">EUROPA</div>
+                <div class="text-sm text-white/55 mt-1 max-w-[220px]">Oceaan onder het ijs — misschien leven?</div>
               </div>
               <div class="slide-item absolute top-[56%] right-[18%] md:right-[22%]">
-                <div class="text-lg font-starwars text-yellow-300/80 drop-shadow-[0_0_15px_rgba(255,200,50,0.3)]">IO</div>
-                <div class="text-xs text-white/50 mt-0.5 max-w-[170px]">Vulkanen door Jupiters zwaartekracht</div>
+                <div class="text-xl md:text-2xl font-starwars text-yellow-300/85 drop-shadow-[0_0_15px_rgba(255,200,50,0.3)]">IO</div>
+                <div class="text-sm text-white/55 mt-1 max-w-[200px]">Vulkanen door Jupiters zwaartekracht</div>
               </div>
-              <div class="slide-item absolute bottom-[22%] right-[14%]">
-                <div class="text-xs text-red-300/55 italic flex items-center gap-2">
-                  <div class="w-1 h-1 rounded-full bg-red-400/50"></div>
+              <div class="slide-item absolute bottom-[24%] right-[14%]">
+                <div class="text-sm text-red-300/65 italic flex items-center gap-2">
+                  <div class="w-1.5 h-1.5 rounded-full bg-red-400/60"></div>
                   Extreme druk, wind en geen grond
                 </div>
               </div>
@@ -257,16 +288,16 @@ import { animate, stagger, cubicBezier } from 'motion';
           <!-- ═══ QUIZ — interactive layout ═══ -->
           } @else if (currentSlide().quiz) {
             @let quiz = currentSlide().quiz!;
-            <div class="absolute top-28 left-10 md:left-14 bottom-24 max-w-[42%] overflow-y-auto">
+            <div class="absolute top-28 left-10 md:left-14 bottom-28 max-w-[45%] overflow-y-auto">
               @if (currentQuizQuestionIndex() < quiz.length) {
                 @let q = quiz[currentQuizQuestionIndex()];
                 <div class="slide-item">
-                  <span class="text-blue-400/60 font-starwars text-sm tracking-widest mb-3 block">Vraag {{ currentQuizQuestionIndex() + 1 }} / {{ quiz.length }}</span>
-                  <p class="text-xl md:text-2xl text-white/90 font-medium mb-6 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ q.question }}</p>
-                  <div class="grid grid-cols-1 gap-2 mb-6">
+                  <span class="text-blue-400/60 font-starwars text-base tracking-widest mb-3 block">Vraag {{ currentQuizQuestionIndex() + 1 }} / {{ quiz.length }}</span>
+                  <p class="text-2xl md:text-3xl text-white/90 font-medium mb-6 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ q.question }}</p>
+                  <div class="grid grid-cols-1 gap-3 mb-6">
                     @for (option of q.options; track $index) {
                       <div (click)="!isAnswerRevealed() && selectQuizOption($index)"
-                           class="quiz-option px-4 py-3 rounded-lg transition-all duration-300 flex items-center text-base md:text-lg font-semibold backdrop-blur-sm"
+                           class="quiz-option px-5 py-4 rounded-lg transition-all duration-300 flex items-center text-lg md:text-xl font-semibold backdrop-blur-sm"
                            [class]="isAnswerRevealed() 
                                     ? ($index === q.correctOptionIndex 
                                         ? 'bg-green-500/15 border-l-3 border-green-400 text-white shadow-[0_0_15px_rgba(74,222,128,0.2)]' 
@@ -281,7 +312,7 @@ import { animate, stagger, cubicBezier } from 'motion';
                   </div>
                   @if (isAnswerRevealed()) {
                     <div class="mb-6 pl-4 border-l-2 border-green-500/25 animate-fade-in">
-                      <p class="text-green-200/70 text-sm">{{ q.explanation }}</p>
+                      <p class="text-green-200/75 text-base">{{ q.explanation }}</p>
                     </div>
                   }
                   <div class="flex justify-start gap-3">
@@ -306,20 +337,20 @@ import { animate, stagger, cubicBezier } from 'motion';
                 </div>
               }
             </div>
-            <div class="absolute bottom-24 left-10 md:left-14 max-w-[35%]">
+            <div class="absolute bottom-16 left-10 md:left-14 max-w-[35%]">
               <div class="space-y-1.5">
                 @for (line of currentSlide().content; track $index) {
-                  <p class="slide-item text-xs text-white/50 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                  <p class="slide-item text-sm text-white/55 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
                 }
               </div>
             </div>
 
           <!-- ═══ DEFAULT: subtle content bottom-left ═══ -->
           } @else {
-            <div class="absolute bottom-28 left-10 md:left-14 max-w-[35%] flex flex-col gap-6">
-              <div class="space-y-2.5">
+            <div class="absolute bottom-20 left-10 md:left-14 max-w-[38%] flex flex-col gap-6">
+              <div class="space-y-3">
                 @for (line of currentSlide().content; track $index) {
-                  <p class="slide-item text-sm md:text-base text-white/80 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
+                  <p class="slide-item text-base md:text-lg text-white/85 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ line }}</p>
                 }
               </div>
               @if (currentSlide().experiment) {
@@ -327,11 +358,11 @@ import { animate, stagger, cubicBezier } from 'motion';
                   <h3 class="text-base font-starwars text-green-400/80 mb-2 flex items-center gap-2">
                     <mat-icon class="!text-sm">science</mat-icon> {{ currentSlide().experiment?.title }}
                   </h3>
-                  <p class="text-green-200/60 mb-2 text-xs">{{ currentSlide().experiment?.description }}</p>
-                  <ul class="space-y-1 text-green-100/65 text-xs">
+                  <p class="text-green-200/65 mb-2 text-sm">{{ currentSlide().experiment?.description }}</p>
+                  <ul class="space-y-1.5 text-green-100/70 text-sm">
                     @for (instruction of currentSlide().experiment?.instructions; track $index) {
                       <li class="flex items-start gap-1.5">
-                        <span class="text-green-500/55 mt-0.5 text-[10px]">▶</span>
+                        <span class="text-green-500/60 mt-0.5 text-xs">▶</span>
                         <span>{{ instruction }}</span>
                       </li>
                     }
@@ -344,12 +375,12 @@ import { animate, stagger, cubicBezier } from 'motion';
           <!-- Distance counter (h3) — floating near the beam -->
           @if (currentSlide().id === 'h3' && currentDistance() > 0) {
             <div class="absolute right-[10%] top-1/2 -translate-y-1/2 slide-item text-right pointer-events-none">
-              <div class="text-[11px] text-[var(--color-starwars-yellow)]/55 font-starwars tracking-[0.3em] mb-1">HUIDIGE AFSTAND</div>
+              <div class="text-xs text-[var(--color-starwars-yellow)]/65 font-starwars tracking-[0.3em] mb-1">HUIDIGE AFSTAND</div>
               <div class="flex items-baseline gap-1 justify-end">
-                <span class="text-4xl md:text-6xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
-                <span class="text-xs text-[var(--color-starwars-yellow)]/50 font-starwars tracking-wider">M KM</span>
+                <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
+                <span class="text-sm text-[var(--color-starwars-yellow)]/60 font-starwars tracking-wider">M KM</span>
               </div>
-              <div class="mt-1 text-[11px] text-[var(--color-starwars-yellow)]/45 font-mono tracking-wider">
+              <div class="mt-2 text-sm text-[var(--color-starwars-yellow)]/55 font-mono tracking-wider">
                 ☀️ Licht: {{ lightTravelMinutes() }} min
               </div>
             </div>
@@ -367,7 +398,7 @@ import { animate, stagger, cubicBezier } from 'motion';
       }
 
       <!-- Navigation Controls -->
-      <div class="absolute bottom-8 left-0 right-0 flex items-center justify-between px-12 pointer-events-auto">
+      <div class="absolute bottom-4 left-0 right-0 flex items-center justify-between px-12 pointer-events-auto z-20">
         <button 
           (click)="prevSlide()" 
           [disabled]="currentIndex() === 0 || isTransitioning()"
@@ -527,6 +558,12 @@ import { animate, stagger, cubicBezier } from 'motion';
     .slide-item * {
       text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
     }
+    .slide-item {
+      background: rgba(0,0,0,0.15);
+      padding: 0.375rem 0.625rem;
+      border-radius: 0.375rem;
+      backdrop-filter: blur(2px);
+    }
     .slide-title {
       text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 30px rgba(0,0,0,0.5), 0 0 60px rgba(0,0,0,0.3);
     }
@@ -567,6 +604,15 @@ import { animate, stagger, cubicBezier } from 'motion';
       animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
       text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
     }
+    .tour-stat-card {
+      opacity: 0;
+      animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+      background: rgba(0,0,0,0.25);
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.5rem;
+      backdrop-filter: blur(4px);
+    }
     @keyframes tourFactIn {
       from { opacity: 0; transform: translateX(-20px); filter: blur(4px); }
       to { opacity: 1; transform: translateX(0); filter: blur(0px); }
@@ -583,7 +629,7 @@ import { animate, stagger, cubicBezier } from 'motion';
     }
   `]
 })
-export class App implements AfterViewInit {
+export class App implements AfterViewInit, OnDestroy {
   slides = SLIDES;
   nameChars = [...'Asbjørn Oost'];
   currentIndex = signal(0);
@@ -596,6 +642,8 @@ export class App implements AfterViewInit {
   isMuted = signal(false);
   selectedQuizOption = signal(-1);
   sceneLoaded = signal(false);
+  telemetry = signal<{altitude: number, speed: number, phase: string} | null>(null);
+  loadingProgress = signal<number>(0);
   currentDistance = signal(0);
   celebrationActive = signal(false);
   tourMode = signal(false);
@@ -607,6 +655,7 @@ export class App implements AfterViewInit {
   lightTravelAU = computed(() => (this.currentDistance() * 1_000_000 / 149_597_870.7).toFixed(2));
   private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
   private bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
+  private bgMusicVolumeRafId: number | null = null;
   private isBrowser: boolean;
   private platformId = inject(PLATFORM_ID);
 
@@ -688,6 +737,14 @@ export class App implements AfterViewInit {
     if (this.isBrowser) {
       this.animateSlideIn();
     }
+  }
+
+  ngOnDestroy() {
+    if (this.bgMusicVolumeTween) clearInterval(this.bgMusicVolumeTween);
+    if (this.bgMusicVolumeRafId) cancelAnimationFrame(this.bgMusicVolumeRafId);
+    if (this.videoRevealTimer) clearTimeout(this.videoRevealTimer);
+    if (this.tourTimer) clearTimeout(this.tourTimer);
+    if (this.celebrationAnimId) cancelAnimationFrame(this.celebrationAnimId);
   }
 
   onSceneLoaded() {
@@ -1001,17 +1058,23 @@ export class App implements AfterViewInit {
   private fadeBgMusicTo(target: number) {
     const audio = this.bgAudio?.nativeElement;
     if (!audio || this.isMuted()) return;
-    if (this.bgMusicVolumeTween) clearInterval(this.bgMusicVolumeTween);
-    this.bgMusicVolumeTween = setInterval(() => {
+    if (this.bgMusicVolumeRafId) cancelAnimationFrame(this.bgMusicVolumeRafId);
+    const step = () => {
+      if (!audio || document.hidden) {
+        // Pause fading when tab is hidden to avoid glitches
+        this.bgMusicVolumeRafId = requestAnimationFrame(step);
+        return;
+      }
       const diff = target - audio.volume;
       if (Math.abs(diff) < 0.01) {
         audio.volume = target;
-        clearInterval(this.bgMusicVolumeTween!);
-        this.bgMusicVolumeTween = null;
-      } else {
-        audio.volume += diff * 0.15;
+        this.bgMusicVolumeRafId = null;
+        return;
       }
-    }, 50);
+      audio.volume += diff * 0.08;
+      this.bgMusicVolumeRafId = requestAnimationFrame(step);
+    };
+    this.bgMusicVolumeRafId = requestAnimationFrame(step);
   }
 
   private meteorEdgeX(W: number) { return Math.random() > 0.5 ? -20 : W + 20; }

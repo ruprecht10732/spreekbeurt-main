@@ -64,11 +64,11 @@ export class PostProcessManager {
     });
     this.chromaticAberrationEffect = chromaticAberration;
 
-    // Cinematic Depth of Field — gentle bokeh on extreme foreground/background
+    // Cinematic Depth of Field — anamorphic macro bokeh
     this.dofEffect = new DepthOfFieldEffect(camera, {
       focusDistance: 0,
-      focalLength: 0.025,
-      bokehScale: 1.2,
+      focalLength: 0.045, // Tighter cinematic lens
+      bokehScale: 3.0,    // Large, beautiful out-of-focus blur
     });
 
     // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)
@@ -100,8 +100,10 @@ export class PostProcessManager {
     return this.bloomEffect.intensity;
   }
 
-  setDofFocusDistance(distance: number): void {
-    this.dofEffect.cocMaterial.uniforms['focusDistance'].value = distance;
+  setDofFocusDistance(worldDistance: number, camera: THREE.PerspectiveCamera): void {
+    // Correctly map 3D world distance to the shader's normalized depth buffer [0.0, 1.0]
+    const normalizedFocus = (worldDistance - camera.near) / (camera.far - camera.near);
+    this.dofEffect.cocMaterial.uniforms['focusDistance'].value = normalizedFocus;
   }
 
   setChromaticAberrationOffset(x: number, y: number): void {

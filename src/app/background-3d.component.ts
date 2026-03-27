@@ -918,7 +918,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       color: 0x111122,
       side: THREE.BackSide,
       fog: false,
-      depthWrite: false
+      depthWrite: false,
+      toneMapped: false // CRITICAL: Forces the background to stay pure OLED-black, untouched by ACESFilmic
     });
     this.scene.add(new THREE.Mesh(skyGeo, skyMat));
     // Shared loading manager for progress tracking
@@ -1295,6 +1296,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
     
     this.earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
+    this.earthMesh.castShadow = true;
+    this.earthMesh.receiveShadow = true; // Allows clouds to cast shadows onto the surface
+    
     // Position Earth to the left and slightly in front of Jupiter so it's clearly visible on slide 5
     // Jupiter is at (12, 0, -15). We want Earth to be near the camera focus on slide 5.
     // Slide 5 camera looks at (0, 6, 0) and is at (0, -18, 22).
@@ -1353,6 +1357,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       color: 0xffffff, roughness: 1, metalness: 0
     });
     this.earthCloudsMesh = new THREE.Mesh(earthCloudGeo, earthCloudMat);
+    this.earthCloudsMesh.castShadow = true; // Clouds physically cast shadows onto the Earth
     this.earthMesh.add(this.earthCloudsMesh);
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load('2k_earth_clouds.webp', (tex) => {
@@ -2096,11 +2101,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunLight.position.set(-25, 5, 5);
     this.sunLight.target = this.jupiterGroup;
     this.sunLight.castShadow = true;
-    this.sunLight.shadow.camera.top = 30;
-    this.sunLight.shadow.camera.bottom = -30;
-    this.sunLight.shadow.camera.left = -30;
-    this.sunLight.shadow.camera.right = 30;
-    this.sunLight.shadow.bias = -0.0005;
+    // Tightened shadow frustum for razor-sharp moon eclipses on Jupiter
+    this.sunLight.shadow.camera.top = 18;
+    this.sunLight.shadow.camera.bottom = -18;
+    this.sunLight.shadow.camera.left = -18;
+    this.sunLight.shadow.camera.right = 18;
+    this.sunLight.shadow.bias = -0.0001; // Tighter bias for crisp edges
     this.sunLight.shadow.normalBias = 0.02;
     this.sunLight.shadow.mapSize.width = 4096;
     this.sunLight.shadow.mapSize.height = 4096;
@@ -2446,6 +2452,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.currentLookAt.lerp(this.targetLookAt, effectiveLerp);
     this.controls.target.copy(this.currentLookAt);
     this.controls.update();
+
+    // Dynamically pull focus on the current target for cinematic Bokeh
+    const distanceToTarget = this.camera.position.distanceTo(this.controls.target);
+    this.postProcessManager?.setDofFocusDistance(distanceToTarget, this.camera);
   }
 
   private updateCameraDrift(): CameraBreathing {

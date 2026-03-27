@@ -11,8 +11,8 @@ import {
   RenderPass,
   SMAAEffect,
   SMAAPreset,
-  VignetteEffect,
 } from 'postprocessing';
+import { CinematicGradingEffect } from './cinematic-grading-effect';
 
 export class PostProcessManager {
   private readonly composer: EffectComposer;
@@ -57,12 +57,6 @@ export class PostProcessManager {
       blur: true,
     }) : null;
 
-    const vignette = new VignetteEffect({
-      eskil: false,
-      darkness: 0.38,
-      offset: 0.22,
-    });
-
     const chromaticAberration = new ChromaticAberrationEffect({
       offset: new THREE.Vector2(0.0006, 0.0006),
       radialModulation: true,
@@ -80,19 +74,18 @@ export class PostProcessManager {
     // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)
     const smaaEffect = new SMAAEffect({ preset: SMAAPreset.ULTRA });
 
-    const effects = this.godRaysEffect
-      ? [this.bloomEffect, this.godRaysEffect, this.dofEffect, smaaEffect, vignette]
-      : [this.bloomEffect, this.dofEffect, smaaEffect, vignette];
+    // Cinematic grading (vignette + film grain + color grading) merged into single effect
+    const gradingEffect = new CinematicGradingEffect();
+
+    // All effects in a single EffectPass — postprocessing merges compatible shaders
+    const effects: Array<InstanceType<typeof BloomEffect> | InstanceType<typeof GodRaysEffect> | InstanceType<typeof DepthOfFieldEffect> | InstanceType<typeof SMAAEffect> | InstanceType<typeof ChromaticAberrationEffect> | CinematicGradingEffect> = [];
+    if (this.godRaysEffect) effects.push(this.godRaysEffect);
+    effects.push(this.bloomEffect, this.dofEffect, smaaEffect, chromaticAberration, gradingEffect);
 
     this.effectPass = new EffectPass(camera, ...effects);
 
-    // ChromaticAberration is a convolution effect — it must live in its own pass
-    const chromaPass = new EffectPass(camera, chromaticAberration);
-    chromaPass.renderToScreen = true;
-
     this.composer.addPass(this.renderPass);
     this.composer.addPass(this.effectPass);
-    this.composer.addPass(chromaPass);
   }
 
   setBloomIntensity(intensity: number): void {

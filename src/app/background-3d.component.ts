@@ -115,10 +115,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private earthMesh!: THREE.Mesh;
 
-  // Post-processing
-  private postScene!: THREE.Scene;
-  private postCamera!: THREE.OrthographicCamera;
-  private postMaterial!: THREE.ShaderMaterial;
   private readonly nebulae: THREE.Mesh[] = [];
 
   // Spaceships orbiting Jupiter
@@ -213,7 +209,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Solar wind particles streaming from sun
   private solarWind!: THREE.Points;
-  private solarWindPositions!: Float32Array;
 
   // Jupiter radiation belts
   private radiationBelt!: THREE.Mesh;
@@ -548,7 +543,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   /** Generates a procedural Jupiter placeholder texture (low-res — real 8K texture replaces it) */
   private generateJupiterTexture(): THREE.CanvasTexture {
-    const W = 2048, H = 1024;
+    const W = 512, H = 256;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d')!;
@@ -825,6 +820,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         skyMat.map = tex;
         skyMat.color.setHex(0x18182a); // deep space with visible Milky Way band
         skyMat.needsUpdate = true;
+
+        // Generate PMREM environment map from skybox for PBR reflections on ships/metals
+        const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
+        pmremGenerator.compileEquirectangularShader();
+        this.scene.environment = pmremGenerator.fromEquirectangular(tex).texture;
+        pmremGenerator.dispose();
+
         resolve();
       }, undefined, () => resolve());
     }));
@@ -899,8 +901,57 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     starsGeometry.setAttribute('color', new THREE.Float32BufferAttribute(starsColors, 3));
     starsGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(starsSizes, 1));
 
+    // Pre-bake star PSF with diffraction spikes into a 64x64 texture (avoids per-pixel trig in shader)
+    const starPsfCanvas = document.createElement('canvas');
+    const PSF_SIZE = 64;
+    starPsfCanvas.width = PSF_SIZE; starPsfCanvas.height = PSF_SIZE;
+    const psfCtx = starPsfCanvas.getContext('2d')!;
+    const psfData = psfCtx.createImageData(PSF_SIZE, PSF_SIZE);
+    for (let py = 0; py < PSF_SIZE; py++) {
+      for (let px = 0; px < PSF_SIZE; px++) {
+        const ux = (px / PSF_SIZE) - 0.5;
+        const uy = (py / PSF_SIZE) - 0.5;
+        const dist = Math.sqrt(ux * ux + uy * uy);
+        // Core (Airy)
+        const core = Math.exp(-dist * dist * 450);
+        // Airy ring
+        const ringDist = Math.abs(dist - 0.12);
+        const airyRing = Math.exp(-ringDist * ringDist * 2000) * 0.15;
+        // Halo
+        const halo = Math.exp(-dist * 10) * 0.3;
+        // Outer glow
+        const outerGlow = Math.exp(-dist * 4.5) * 0.1;
+        // 6-point spikes at 60° intervals
+        let spike = 0;
+        const radial = Math.exp(-dist * 4);
+        for (let si = 0; si < 3; si++) {
+          const angle = si * 1.0471975;
+          const cs = Math.cos(angle);
+          const sn = Math.sin(angle);
+          const perp = Math.abs(-ux * sn + uy * cs);
+          const along = Math.abs(ux * cs + uy * sn);
+          spike += Math.exp(-perp * 55) * Math.exp(-along * 3.5);
+        }
+        spike *= radial * 0.45;
+        // R = core+halo+glow (PSF), G = airyRing, B = spike, A = total luminance
+        const luminance = Math.min(core + airyRing + halo + outerGlow + spike, 1);
+        const idx = (py * PSF_SIZE + px) * 4;
+        psfData.data[idx    ] = Math.min(255, (core + halo + outerGlow) * 255);
+        psfData.data[idx + 1] = Math.min(255, airyRing * 255);
+        psfData.data[idx + 2] = Math.min(255, spike * 255);
+        psfData.data[idx + 3] = Math.min(255, luminance * 255);
+      }
+    }
+    psfCtx.putImageData(psfData, 0, 0);
+    const starPsfTexture = new THREE.CanvasTexture(starPsfCanvas);
+    starPsfTexture.minFilter = THREE.LinearFilter;
+    starPsfTexture.magFilter = THREE.LinearFilter;
+
     const starsMaterial = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
+      uniforms: {
+        uTime: { value: 0 },
+        uPsfMap: { value: starPsfTexture },
+      },
       vertexShader: `
         attribute float aSize;
         attribute vec3 color;
@@ -925,63 +976,42 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         }
       `,
       fragmentShader: `
+        uniform sampler2D uPsfMap;
         varying vec3 vColor;
         varying float vSize;
         varying float vTwinkle;
         void main() {
-          vec2 uv = gl_PointCoord - vec2(0.5);
-          float dist = length(uv);
+          vec2 uv = gl_PointCoord;
+          float dist = length(uv - vec2(0.5));
           if (dist > 0.5) discard;
 
-          // ──── Realistic multi-layer PSF ────
-          // 1. Tight Gaussian core (Airy disk center)
-          float core = exp(-dist * dist * 450.0);
-          // 2. First Airy ring — subtle ring around core for medium+ stars
-          float ringDist = abs(dist - 0.12);
-          float airyRing = exp(-ringDist * ringDist * 2000.0) * 0.15 * smoothstep(2.0, 6.0, vSize);
-          // 3. Soft exponential halo
+          // Sample pre-baked PSF texture: R=core+halo, G=airyRing, B=spikes, A=total
+          vec4 psf = texture2D(uPsfMap, uv);
+          float core = psf.r;
+          float airyRing = psf.g;
+          float spike = psf.b;
+          float luminance = psf.a;
+
+          // Scale features by star size
           float haloStrength = smoothstep(1.5, 6.0, vSize);
-          float halo = exp(-dist * 10.0) * 0.3 * haloStrength;
-          // 4. Wide outer glow for brightest stars
-          float outerGlow = exp(-dist * 4.5) * 0.1 * smoothstep(5.0, 12.0, vSize);
+          float spikeStrength = smoothstep(2.0, 12.0, vSize);
+          float ringStrength = smoothstep(2.0, 6.0, vSize);
 
-          float luminance = core + airyRing + halo + outerGlow;
-
-          // ──── 6-point JWST-style diffraction spikes ────
-          float spike = 0.0;
-          if (vSize > 2.0) {
-            float spikeStr = smoothstep(2.0, 12.0, vSize) * 0.45;
-            float radial = exp(-dist * 4.0);
-            // 6 spike arms at 60° intervals
-            for (int i = 0; i < 3; i++) {
-              float angle = float(i) * 1.0471975; // π/3 = 60°
-              float cs = cos(angle);
-              float sn = sin(angle);
-              // Project uv onto spike axis and perpendicular
-              float along = uv.x * cs + uv.y * sn;
-              float perp  = abs(-uv.x * sn + uv.y * cs);
-              float arm = exp(-perp * 55.0) * exp(-abs(along) * 3.5);
-              spike += arm;
-            }
-            spike *= spikeStr * radial;
-          }
+          float scaledLum = core + airyRing * ringStrength + (luminance - core - airyRing) * haloStrength + spike * spikeStrength;
 
           // Chromatic fringing on spike tips (bright stars only)
-          float chromatic = 0.0;
           vec3 fringeColor = vColor;
           if (vSize > 5.0) {
             float fringeStr = smoothstep(5.0, 14.0, vSize) * 0.25;
-            // Slight red shift at outer edges of spikes
-            float redShift = spike * (1.0 - core) * fringeStr;
+            float redShift = spike * spikeStrength * (1.0 - core) * fringeStr;
             fringeColor = vColor + vec3(redShift * 0.4, -redShift * 0.1, redShift * 0.3);
           }
 
           // White-hot core → spectral color gradient
           vec3 finalColor = mix(fringeColor, vec3(1.0, 1.0, 0.98), core * 0.8 + airyRing * 0.3);
-          // Boost spike color slightly brighter
-          finalColor += spike * vec3(0.9, 0.85, 1.0) * 0.3;
+          finalColor += spike * spikeStrength * vec3(0.9, 0.85, 1.0) * 0.3;
 
-          float alpha = clamp(luminance + spike, 0.0, 1.0);
+          float alpha = clamp(scaledLum, 0.0, 1.0);
           gl_FragColor = vec4(finalColor * (0.85 + vTwinkle * 0.2), alpha);
         }
       `,
@@ -1085,7 +1115,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const fallbackTexture = this.generateJupiterTexture();
     fallbackTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     
-    const jupiterGeometry = new THREE.SphereGeometry(10, 128, 128);
+    const jupiterGeometry = new THREE.SphereGeometry(10, 64, 64);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
       roughness: 0.6,
@@ -1439,16 +1469,20 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
       void main() {
         vec3 viewDirection = normalize(-vPosition);
-        float fresnel = clamp(1.0 - dot(viewDirection, vNormal), 0.0, 1.0);
         vec3 sunDir = normalize(uSunDirection);
         float sunDot = dot(vNormalWorld, sunDir);
 
-        // Day/night transition with Rayleigh scattering at the terminator
-        float daySide = smoothstep(-0.05, 0.35, sunDot);
-        float terminator = 1.0 - smoothstep(0.0, 0.16, abs(sunDot));
-        float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 6.0);
-        float baseHaze = pow(fresnel, 4.8);
+        // Improved Rayleigh-like fresnel — higher exponent avoids plastic rim
+        float fresnel = pow(clamp(1.0 - dot(viewDirection, vNormal), 0.0, 1.0), 3.0);
         float pulse = mix(1.0, 1.04, uPulse * 0.15);
+
+        // Terminator wrap-around: atmosphere should glow slightly past the shadow line
+        float terminator = smoothstep(-0.2, 0.2, sunDot);
+        float daySide = smoothstep(-0.05, 0.35, sunDot);
+        float terminatorBand = 1.0 - smoothstep(0.0, 0.16, abs(sunDot));
+
+        // Forward scattering through the limb (light shining through the atmosphere edge)
+        float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 8.0);
 
         // Deep orange/red "sunset" band at the terminator edge (Rayleigh scattering through dense gas)
         vec3 sunsetColor = vec3(1.0, 0.3, 0.05);
@@ -1459,7 +1493,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         vec3 finalAtmoColor = mix(vec3(0.0), sunsetColor, sunsetIntensity);
         finalAtmoColor = mix(finalAtmoColor, dayColor, daySide);
 
-        float alpha = baseHaze * (daySide * 0.2 + terminator * 0.35 + sunsetIntensity * 0.4 + forwardScatter * 0.08) * pulse;
+        // Atmosphere only glows where the sun illuminates, with slight wrap-around at terminator
+        float alpha = fresnel * terminator * 0.8;
+        alpha += fresnel * terminatorBand * 0.35;
+        alpha += fresnel * sunsetIntensity * 0.4;
+        alpha += forwardScatter * 0.08;
+        alpha *= pulse;
 
         gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.25));
       }
@@ -1479,7 +1518,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false
     });
 
-    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(10.3, 128, 128), atmosphereMaterial);
+    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(10.3, 64, 64), atmosphereMaterial);
     this.jupiterGroup.add(this.atmosphere);
 
     // The 4 Galilean Moons — Kepler's 3rd law: T² ∝ a³, so ω ∝ a^(-3/2)
@@ -1636,56 +1675,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunFlare.position.copy(this.sunLight.position);
     this.scene.add(this.sunFlare);
 
-    // Post-processing setup (Film Grain, Vignette, Bloom & Color Grading)
-    this.postScene = new THREE.Scene();
-    this.postCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-    this.postMaterial = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform float uTime;
-        varying vec2 vUv;
-        float random(vec2 p) { return fract(sin(dot(p.xy, vec2(12.9898,78.233))) * 43758.5453123); }
-        void main() {
-          vec2 center = vUv - 0.5;
-          float dist = length(center);
-          
-          // Soft cinematic vignette — wide falloff for natural look
-          float vignette = smoothstep(1.1, 0.25, dist * 1.1);
-          
-          // Fine organic film grain (subtle, not distracting)
-          float grain = (random(vUv * 800.0 + mod(uTime, 10.0)) - 0.5) * 0.025;
-          
-          // Subtle anamorphic horizontal streak
-          float streak = smoothstep(0.5, 0.0, abs(center.y)) * smoothstep(0.6, 0.3, abs(center.x)) * 0.012;
-          
-          vec4 overlayColor = vec4(0.0, 0.0, 0.0, 1.0 - vignette);
-          
-          // Cinematic color grading: warm highlights, cool shadows
-          // Subtle teal in shadows (outer edges)
-          overlayColor.r += dist * 0.025;
-          overlayColor.g += dist * 0.008;
-          overlayColor.b += dist * 0.035;
-          
-          overlayColor.rgb += grain;
-          overlayColor.a += abs(grain) * 0.25;
-          overlayColor.a = max(overlayColor.a - streak, 0.0);
-          
-          gl_FragColor = overlayColor;
-        }
-      `,
-      transparent: true,
-      blending: THREE.NormalBlending,
-      depthWrite: false,
-      depthTest: false
-    });
-    this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), this.postMaterial));
+    // Post-processing (vignette, grain, color grading) handled by CinematicGradingEffect in PostProcessManager
 
     // Add spaceships
     this.createSpaceships();
@@ -2025,10 +2015,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (this.galaxyBand) {
       const bandMat = this.galaxyBand.material as THREE.ShaderMaterial;
       if (bandMat.uniforms) bandMat.uniforms['uTime'].value = time;
-    }
-
-    if (this.postMaterial) {
-      this.postMaterial.uniforms['uTime'].value = time;
     }
   }
 
@@ -3765,7 +3751,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Venus — inner solar system, near the Sun direction
     // Venus radius: 6,052 km → 6052/71492 × 10 = 0.846 scene units
-    const venusGeo = new THREE.SphereGeometry(0.846, 48, 48);
+    const venusGeo = new THREE.SphereGeometry(0.846, 32, 32);
     const venusMat = new THREE.MeshStandardMaterial({ color: 0xe8cda0, roughness: 0.7, metalness: 0.05 });
     this.venusMesh = new THREE.Mesh(venusGeo, venusMat);
     this.venusMesh.position.set(-42, 8, 25);
@@ -3819,7 +3805,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Uranus — distant ice giant, opposite direction from Sun
     // Uranus radius: 25,559 km → 25559/71492 × 10 = 3.575 scene units
     this.uranusGroup = new THREE.Group();
-    const uranusGeo = new THREE.SphereGeometry(3.575, 48, 48);
+    const uranusGeo = new THREE.SphereGeometry(3.575, 32, 32);
     const uranusMat = new THREE.MeshStandardMaterial({ color: 0x9dd8d8, roughness: 0.4, metalness: 0.05 });
     this.uranusMesh = new THREE.Mesh(uranusGeo, uranusMat);
     this.uranusGroup.add(this.uranusMesh);
@@ -4933,43 +4919,56 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createSolarWind() {
     // Solar wind: charged particles streaming from the Sun toward Jupiter
-    // Sun at (-50, 10, 30), Jupiter at (12, 0, -15)
+    // GPU-driven animation — positions computed in vertex shader using uTime
     const count = 400;
     const geo = new THREE.BufferGeometry();
-    this.solarWindPositions = new Float32Array(count * 3);
+    const offsets = new Float32Array(count);
+    const spreads = new Float32Array(count * 3);
     const sizes = new Float32Array(count);
 
-    const sunPos = new THREE.Vector3(-50, 10, 30);
-    const jupPos = new THREE.Vector3(12, 0, -15);
-    const dir = jupPos.clone().sub(sunPos);
-
     for (let i = 0; i < count; i++) {
-      const t = Math.random();
-      const spread = 8 + t * 15; // widens as it travels
-      this.solarWindPositions[i * 3] = sunPos.x + dir.x * t + (Math.random() - 0.5) * spread;
-      this.solarWindPositions[i * 3 + 1] = sunPos.y + dir.y * t + (Math.random() - 0.5) * spread;
-      this.solarWindPositions[i * 3 + 2] = sunPos.z + dir.z * t + (Math.random() - 0.5) * spread;
+      offsets[i] = Math.random(); // random phase offset per particle
+      // Random lateral spread (perpendicular to travel direction)
+      spreads[i * 3] = (Math.random() - 0.5);
+      spreads[i * 3 + 1] = (Math.random() - 0.5);
+      spreads[i * 3 + 2] = (Math.random() - 0.5);
       sizes[i] = 0.3 + Math.random() * 0.5;
     }
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(this.solarWindPositions, 3));
+    // Dummy positions — actual positions computed in vertex shader
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(new Float32Array(count * 3), 3));
+    geo.setAttribute('aOffset', new THREE.Float32BufferAttribute(offsets, 1));
+    geo.setAttribute('aSpread', new THREE.Float32BufferAttribute(spreads, 3));
     geo.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1));
 
     this.solarWind = new THREE.Points(geo, new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uSunPos: { value: new THREE.Vector3(-50, 10, 30) },
+        uJupPos: { value: new THREE.Vector3(12, 0, -15) },
+      },
       vertexShader: `
+        attribute float aOffset;
+        attribute vec3 aSpread;
         attribute float aSize;
-        varying float vAlpha;
+        uniform float uTime;
+        uniform vec3 uSunPos;
+        uniform vec3 uJupPos;
         void main() {
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          vec3 dir = uJupPos - uSunPos;
+          float totalDist = length(dir);
+          // t cycles from 0→1.2 based on time + per-particle offset
+          float speed = 0.005;
+          float t = fract(uTime * speed + aOffset);
+          float spread = 8.0 + t * 15.0;
+          vec3 animatedPos = uSunPos + dir * t + aSpread * spread;
+          vec4 mvPosition = modelViewMatrix * vec4(animatedPos, 1.0);
           gl_PointSize = aSize * (80.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
-          vAlpha = 1.0;
         }
       `,
       fragmentShader: `
-        varying float vAlpha;
         void main() {
-          olarWind.frustumCulled = false;
-    this.sfloat d = length(gl_PointCoord - vec2(0.5));
+          float d = length(gl_PointCoord - vec2(0.5));
           if (d > 0.5) discard;
           float a = smoothstep(0.5, 0.0, d) * 0.08;
           gl_FragColor = vec4(1.0, 0.95, 0.7, a);
@@ -4977,33 +4976,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       `,
       transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
     }));
+    this.solarWind.frustumCulled = false;
     this.scene.add(this.solarWind);
   }
 
   private updateSolarWind() {
     if (!this.solarWind) return;
-    const sunPos = new THREE.Vector3(-50, 10, 30);
-    const jupPos = new THREE.Vector3(12, 0, -15);
-    const dir = jupPos.clone().sub(sunPos).normalize();
-    const speed = 0.3;
-    const pos = this.solarWind.geometry.attributes['position'] as THREE.BufferAttribute;
-
-    for (let i = 0; i < pos.count; i++) {
-      let x = pos.getX(i) + dir.x * speed;
-      let y = pos.getY(i) + dir.y * speed;
-      let z = pos.getZ(i) + dir.z * speed;
-
-      // Reset if past Jupiter
-      const t = new THREE.Vector3(x, y, z).sub(sunPos).dot(dir) / sunPos.distanceTo(jupPos);
-      if (t > 1.2) {
-        const spread = 8;
-        x = sunPos.x + (Math.random() - 0.5) * spread;
-        y = sunPos.y + (Math.random() - 0.5) * spread;
-        z = sunPos.z + (Math.random() - 0.5) * spread;
-      }
-      pos.setXYZ(i, x, y, z);
-    }
-    pos.needsUpdate = true;
+    const mat = this.solarWind.material as THREE.ShaderMaterial;
+    mat.uniforms['uTime'].value += 1;
   }
 
   private createRadiationBelts() {
@@ -5436,10 +5416,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.sunMesh.rotation.y = time * 0.01;
     }
 
-    this.renderer.autoClear = false;
-    this.renderer.clear();
     this.postProcessManager?.render(deltaTime);
-    this.renderer.render(this.postScene, this.postCamera);
   }
 
   private onWindowResize() {

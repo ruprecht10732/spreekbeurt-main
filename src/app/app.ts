@@ -566,7 +566,7 @@ export class App implements AfterViewInit, OnDestroy {
   @ViewChild('celebrationCanvas') celebrationCanvas?: ElementRef<HTMLCanvasElement>;
   private celebrationAnimId: number | null = null;
 
-  bgAudioSrc = 'Interstellar Main Theme - Extra Extended - Soundtrack by Hans Zimmer - Cinémavore.mp3';
+  bgAudioSrc = 'interstellar-theme.mp3';
 
   constructor() {
     this.isBrowser = isPlatformBrowser(this.platformId);

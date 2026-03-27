@@ -1270,8 +1270,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           if ('SRGBColorSpace' in THREE) {
             texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
           }
-          texture.generateMipmaps = true;
-          texture.minFilter = THREE.LinearMipmapLinearFilter;
+          texture.generateMipmaps = false;
+          texture.minFilter = THREE.LinearFilter;
           texture.magFilter = THREE.LinearFilter;
           texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           jupiterMaterial.map = texture;
@@ -1285,7 +1285,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
             if ('SRGBColorSpace' in THREE) {
               tex.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
             }
-            tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+            tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
             tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
             jupiterMaterial.map = tex; jupiterMaterial.needsUpdate = true;
             resolve();
@@ -1324,8 +1324,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
             if ('SRGBColorSpace' in THREE) {
               texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
             }
-            texture.generateMipmaps = true;
-            texture.minFilter = THREE.LinearMipmapLinearFilter;
+            texture.generateMipmaps = false;
+            texture.minFilter = THREE.LinearFilter;
             texture.magFilter = THREE.LinearFilter;
             texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
             earthMaterial.map = texture;
@@ -1340,7 +1340,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       new Promise<void>((resolve) => {
         textureLoader.load('2k_earth_normal_map.webp', (tex) => {
           tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-          tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
           earthMaterial.normalMap = tex;
           earthMaterial.normalScale = new THREE.Vector2(0.8, 0.8);
           earthMaterial.needsUpdate = true;
@@ -1349,7 +1349,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }),
       new Promise<void>((resolve) => {
         textureLoader.load('2k_earth_specular_map.webp', (tex) => {
-          tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
           earthMaterial.metalnessMap = tex;
           earthMaterial.roughness = 0.65;
           earthMaterial.metalness = 0.15;
@@ -1369,7 +1369,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.earthMesh.add(this.earthCloudsMesh);
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load('2k_earth_clouds.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         earthCloudMat.alphaMap = tex;
         earthCloudMat.map = tex;
         earthCloudMat.needsUpdate = true;
@@ -1420,7 +1420,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.loadPromises.push(new Promise<void>((resolve) => {
         textureLoader.load('8k_moon.webp', (tex) => {
           tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-          tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
           moonMat.map = tex; moonMat.color.setHex(0xffffff); moonMat.needsUpdate = true;
           resolve();
         }, undefined, () => resolve());
@@ -2045,9 +2045,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       // Load real texture
       this.loadPromises.push(new Promise<void>((resolve) => {
         textureLoader.load(config.texture, (tex) => {
-          tex.generateMipmaps = true;
+          tex.generateMipmaps = false;
           tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-          tex.minFilter = THREE.LinearMipmapLinearFilter;
+          tex.minFilter = THREE.LinearFilter;
           mat.map = tex; mat.color.setHex(0xffffff); mat.needsUpdate = true;
           resolve();
         }, undefined, () => resolve());
@@ -2848,7 +2848,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private fireSuperlaserAtPluto() {
     const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
-    mat.uniforms['uOpacity'].value = 0.7 + Math.random() * 0.3;
+    const time = (Date.now() - this.startTime) * 0.001;
+    mat.uniforms['uOpacity'].value = 0.7 + Math.sin(time * 40) * 0.15;
   }
 
   private destroyPluto(time: number) {
@@ -2951,7 +2952,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     if (elapsed < 1.8) {
-      mat.uniforms['uOpacity'].value = 0.7 + Math.random() * 0.3;
+      const flicker = 0.7 + Math.sin(elapsed * 40) * 0.15;
+      mat.uniforms['uOpacity'].value = flicker;
       this.superlaserBeam.scale.set(1, 1, 1);
       return;
     }
@@ -5319,8 +5321,29 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.falconFirstStage.quaternion.copy(worldQuat);
       this.falconFirstStage.scale.copy(worldScale);
       this.scene.add(this.falconFirstStage);
+
+      // Cold gas thruster flash at the interstage — brief bright puff
+      const flashLight = new THREE.PointLight(0xffffff, 8, 2, 2);
+      flashLight.position.copy(worldPos);
+      this.scene.add(flashLight);
+      // Fade out the flash over 400ms
+      const startTime = Date.now();
+      const fadeFlash = () => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed > 400) {
+          this.scene.remove(flashLight);
+          flashLight.dispose();
+          return;
+        }
+        flashLight.intensity = 8 * (1 - elapsed / 400);
+        requestAnimationFrame(fadeFlash);
+      };
+      requestAnimationFrame(fadeFlash);
     }
-    this.falconFirstStage.position.y -= 0.004;
+    // Strong push-off: first stage falls away rapidly to create visible gap
+    this.falconFirstStage.position.y -= 0.015;
+    // Begin the signature Falcon 9 flip — rotate towards boostback orientation
+    this.falconFirstStage.rotateX(0.12);
   }
 
   private handleFalconFairingSeparation(s1Light: THREE.PointLight | null, s2Light: THREE.PointLight | null, t: number) {
@@ -5399,14 +5422,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private updateFalconExhaustScale(t: number, thrust: number) {
+    const time = (Date.now() - this.startTime) * 0.001;
     if (this.falconExhaust.visible) {
       const s1Thrust = t < 0.14 ? thrust : 1;
-      this.falconExhaust.scale.set(s1Thrust, s1Thrust * (1 + Math.random() * 0.2), s1Thrust);
+      // Smooth sine-based flicker instead of Math.random() which causes per-frame jitter
+      const s1Flicker = 1 + Math.sin(time * 25) * 0.08 + Math.sin(time * 37) * 0.05;
+      this.falconExhaust.scale.set(s1Thrust, s1Thrust * s1Flicker, s1Thrust);
     }
 
     if (this.falconSecondExhaust.visible) {
       const s2Thrust = Math.max(0.3, thrust);
-      this.falconSecondExhaust.scale.set(s2Thrust * 0.6, s2Thrust * 0.6 * (1 + Math.random() * 0.15), s2Thrust * 0.6);
+      const s2Flicker = 1 + Math.sin(time * 30) * 0.06 + Math.sin(time * 43) * 0.04;
+      this.falconSecondExhaust.scale.set(s2Thrust * 0.6, s2Thrust * 0.6 * s2Flicker, s2Thrust * 0.6);
     }
   }
 
@@ -5553,7 +5580,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_saturn.webp', (tex) => {
         tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         saturnMat.map = tex; saturnMat.color.setHex(0xffffff); saturnMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -5699,7 +5726,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.titanMesh);
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_moon.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         titanMat.map = tex;
         titanMat.color.setHex(0xcc9944);
         titanMat.needsUpdate = true;
@@ -5742,7 +5769,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.createBlackHole();
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_moon.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         plutoMat.map = tex;
         plutoMat.color.setHex(0xd8c0a0);
         plutoMat.needsUpdate = true;
@@ -5787,7 +5814,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Load Mars texture
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_mars.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         marsMat.map = tex; marsMat.color.setHex(0xffffff); marsMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -5829,7 +5856,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Venus atmosphere texture (thick sulfuric acid clouds)
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_venus_surface.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         venusMat.map = tex; venusMat.color.setHex(0xffffff); venusMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -5867,7 +5894,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Mercury texture — cratered surface
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_mercury.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         mercuryMat.map = tex; mercuryMat.color.setHex(0xffffff); mercuryMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -5883,7 +5910,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.uranusGroup.add(this.uranusMesh);
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('2k_uranus.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         uranusMat.map = tex; uranusMat.color.setHex(0xffffff); uranusMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -5991,7 +6018,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Neptune texture
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('2k_neptune.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         neptuneMat.map = tex; neptuneMat.color.setHex(0xffffff); neptuneMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -6790,7 +6817,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Load Sun texture
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_sun.webp', (tex) => {
-        tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+        tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
         sunMat.uniforms['uSunTex'].value = tex;
         sunMat.needsUpdate = true;
         resolve();

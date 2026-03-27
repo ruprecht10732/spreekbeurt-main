@@ -214,6 +214,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private sunMesh!: THREE.Mesh;
   private sunFlare!: THREE.Mesh;
   private sunLight!: THREE.DirectionalLight;
+  private readonly sunPosition = new THREE.Vector3(-100, 20, 65);
 
   // Jupiter night-side lightning
   private readonly lightningFlashes: { mesh: THREE.Mesh, timer: number, cooldown: number }[] = [];
@@ -432,6 +433,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     this.tourStops.push({ name: 'jupiter-einde' });
 
+    // Keep Earth fixed in tour mode so Columbia + Earth framing stays stable.
+    this.earthOrbitActive = false;
+
     this.tourActive = true;
     this.tourStopIndex = 0;
     this.tourStopTime = (Date.now() - this.startTime) * 0.001;
@@ -496,9 +500,23 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.columbiaSequenceActive = true;
       this.columbiaSequenceTime = 0;
       this.columbiaBreakupDone = false;
-      if (this.columbiaShuttleMesh) this.columbiaShuttleMesh.visible = true;
-      if (this.columbiaDebris) this.columbiaDebris.visible = false;
+      if (this.columbiaShuttleMesh) {
+        this.columbiaShuttleMesh.visible = true;
+        this.columbiaShuttleMesh.position.set(0, 0, 0);
+        this.columbiaShuttleMesh.rotation.set(0, 0, 0);
+      }
+      if (this.columbiaDebris) {
+        this.columbiaDebris.visible = false;
+        this.columbiaDebris.position.set(0, 0, 0);
+      }
+      if (this.columbiaTrails) {
+        this.columbiaTrails.position.set(-2, 0, 0);
+      }
       if (this.columbiaFlashLight) this.columbiaFlashLight.intensity = 0;
+      if (this.earthMesh) {
+        this.earthMesh.visible = true;
+        this.earthMesh.position.set(-8, 2, -5);
+      }
       if (this.fallenAstronautGroup) this.fallenAstronautGroup.visible = true;
     }
   }
@@ -1998,7 +2016,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       uniforms: {
         uTime: { value: 0 },
         uPulse: { value: 0 },
-        uSunDirection: { value: new THREE.Vector3(-50, 10, 30).normalize() }
+        uSunDirection: { value: this.sunPosition.clone().normalize() }
       },
       vertexShader,
       fragmentShader,
@@ -2094,31 +2112,37 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — physically motivated but cinematic
-    // Deep space has virtually no ambient light; minimal fill preserves realism
-    const ambientLight = new THREE.AmbientLight(0x050510, 0.25);
+    // Slightly warmer ambient picks up surface detail in shadow regions
+    const ambientLight = new THREE.AmbientLight(0x070714, 0.26);
     this.scene.add(ambientLight);
 
-    // Main sun light — warm white (5778K blackbody close to 0xfff5e0)
-    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 3.2);
-    this.sunLight.position.set(-50, 10, 30);
+    // Main sun light — warm white (5778 K blackbody ≈ 0xfff5e0)
+    // Positioned further away for more realistic parallel-ray feel
+    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 3.6);
+    this.sunLight.position.copy(this.sunPosition);
     this.scene.add(this.sunLight);
 
-    // Point light at the Sun — natural inverse-square falloff for nearby objects
-    const sunPointLight = new THREE.PointLight(0xffeedd, 8, 200, 1.5);
-    sunPointLight.position.set(-50, 10, 30);
+    // Point light at the Sun — natural inverse-square falloff; range increased for greater distance
+    const sunPointLight = new THREE.PointLight(0xffeedd, 16, 430, 1.5);
+    sunPointLight.position.copy(this.sunPosition);
     this.scene.add(sunPointLight);
 
     // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    const fillLight = new THREE.DirectionalLight(0x0d1a33, 0.35);
-    fillLight.position.set(50, -10, -30);
+    const fillLight = new THREE.DirectionalLight(0x102244, 0.45);
+    fillLight.position.set(100, -20, -65);
     this.scene.add(fillLight);
 
     // Subtle overhead hemisphere fill for readability
-    const hemiLight = new THREE.HemisphereLight(0x0a0a18, 0x000000, 0.15);
+    const hemiLight = new THREE.HemisphereLight(0x0a0f1e, 0x000000, 0.2);
     this.scene.add(hemiLight);
 
+    // Warm rim/back light — adds depth by outlining dark-side edges
+    const rimLight = new THREE.DirectionalLight(0xffd6a8, 0.2);
+    rimLight.position.set(40, -20, -60);
+    this.scene.add(rimLight);
+
     // Earthshine — faint blue fill from Earth's reflected light onto the Moon
-    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.05);
+    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.06);
     this.earthshineLight.position.set(10, 5, -5);
     this.scene.add(this.earthshineLight);
     this.scene.add(this.earthshineLight.target);
@@ -3373,107 +3397,47 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createColumbiaMemorial() {
     this.columbiaGroup = new THREE.Group();
 
-    // ─── Space Shuttle Orbiter (simplified but recognizable) ───────────
+    // ─── Space Shuttle Orbiter — NASA GLB model ────────────────────────
     this.columbiaShuttleMesh = new THREE.Group();
-    const fuselageMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4, metalness: 0.2 });
+    const loader = new GLTFLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      loader.load('/space_shuttle_columbia.glb', (gltf) => {
+        const model = gltf.scene;
+        // Normalize to ~4 scene units long (similar to the old procedural shuttle)
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 4 / maxDim;
+        model.scale.setScalar(scale);
+        const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+        model.position.sub(center);
 
-    // Fuselage
-    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 4.5, 16), fuselageMat);
-    fuselage.rotation.z = Math.PI / 2;
-    this.columbiaShuttleMesh.add(fuselage);
+        // Boost visibility so the shuttle reads against dark space
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+            if (mat.isMeshStandardMaterial) {
+              mat.emissive = mat.emissive ?? new THREE.Color(0x000000);
+              mat.emissiveIntensity = 0.06;
+              mat.emissive.copy(mat.color).multiplyScalar(0.12);
+              mat.needsUpdate = true;
+            }
+          }
+        });
 
-    // Nose cone
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.5, 16), fuselageMat);
-    nose.rotation.z = -Math.PI / 2;
-    nose.position.x = 2.9;
-    this.columbiaShuttleMesh.add(nose);
-
-    // Cockpit windows
-    const windowMesh = new THREE.Mesh(
-      new THREE.BoxGeometry(0.5, 0.15, 0.5),
-      new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.1, metalness: 0.8 }),
-    );
-    windowMesh.position.set(2.3, 0.45, 0);
-    this.columbiaShuttleMesh.add(windowMesh);
-
-    // Cargo bay
-    const bay = new THREE.Mesh(
-      new THREE.BoxGeometry(2.5, 0.05, 1.1),
-      new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.5, metalness: 0.15 }),
-    );
-    bay.position.set(-0.2, 0.58, 0);
-    this.columbiaShuttleMesh.add(bay);
-
-    // Delta wings (left + right)
-    const wingShape = new THREE.Shape();
-    wingShape.moveTo(0, 0);
-    wingShape.lineTo(-2, 0);
-    wingShape.lineTo(-2.5, -2.2);
-    wingShape.lineTo(0.5, -0.3);
-    wingShape.closePath();
-    const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.08, bevelEnabled: false });
-    const wingMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.45, metalness: 0.2 });
-    const leftWing = new THREE.Mesh(wingGeo, wingMat);
-    leftWing.rotation.x = Math.PI / 2;
-    leftWing.position.set(-0.3, -0.15, 0.6);
-    this.columbiaShuttleMesh.add(leftWing);
-    const rightWing = new THREE.Mesh(wingGeo, wingMat);
-    rightWing.rotation.x = -Math.PI / 2;
-    rightWing.position.set(-0.3, -0.15, -0.68);
-    this.columbiaShuttleMesh.add(rightWing);
-
-    // Thermal protection tiles (black underside)
-    const tps = new THREE.Mesh(
-      new THREE.BoxGeometry(4.2, 0.05, 1.15),
-      new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.05 }),
-    );
-    tps.position.set(-0.1, -0.58, 0);
-    this.columbiaShuttleMesh.add(tps);
-
-    // Vertical tail
-    const tailShape = new THREE.Shape();
-    tailShape.moveTo(0, 0);
-    tailShape.lineTo(-1.2, 0);
-    tailShape.lineTo(-0.5, 1.8);
-    tailShape.lineTo(0.2, 0.8);
-    tailShape.closePath();
-    const tailGeo = new THREE.ExtrudeGeometry(tailShape, { depth: 0.06, bevelEnabled: false });
-    const tail = new THREE.Mesh(tailGeo, fuselageMat);
-    tail.position.set(-1.8, 0.55, -0.03);
-    this.columbiaShuttleMesh.add(tail);
-
-    // OMS engine pods
-    const omsGeo = new THREE.CylinderGeometry(0.2, 0.22, 0.8, 8);
-    const omsMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5 });
-    const leftOms = new THREE.Mesh(omsGeo, omsMat);
-    leftOms.rotation.z = Math.PI / 2;
-    leftOms.position.set(-2.4, 0.1, 0.4);
-    this.columbiaShuttleMesh.add(leftOms);
-    const rightOms = new THREE.Mesh(omsGeo, omsMat);
-    rightOms.rotation.z = Math.PI / 2;
-    rightOms.position.set(-2.4, 0.1, -0.4);
-    this.columbiaShuttleMesh.add(rightOms);
-
-    // "Columbia" text
-    const nameC = document.createElement('canvas');
-    nameC.width = 256; nameC.height = 64;
-    const nc = nameC.getContext('2d')!;
-    nc.clearRect(0, 0, 256, 64);
-    nc.fillStyle = '#111111';
-    nc.font = 'bold 36px sans-serif';
-    nc.textAlign = 'center';
-    nc.textBaseline = 'middle';
-    nc.fillText('Columbia', 128, 32);
-    const colNameTex = new THREE.CanvasTexture(nameC);
-    colNameTex.generateMipmaps = false;
-    colNameTex.minFilter = THREE.LinearFilter;
-    const nameLabel = new THREE.Mesh(
-      new THREE.PlaneGeometry(1.5, 0.3),
-      new THREE.MeshBasicMaterial({ map: colNameTex, transparent: true, depthWrite: false }),
-    );
-    nameLabel.position.set(0.5, 0.55, 0.56);
-    nameLabel.rotation.y = Math.PI / 2;
-    this.columbiaShuttleMesh.add(nameLabel);
+        this.columbiaShuttleMesh.add(model);
+        resolve();
+      }, undefined, () => {
+        // Fallback: simple recognizable shuttle shape if GLB fails
+        const fb = new THREE.Mesh(
+          new THREE.ConeGeometry(0.5, 4, 8),
+          new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }),
+        );
+        fb.rotation.z = -Math.PI / 2;
+        this.columbiaShuttleMesh.add(fb);
+        resolve();
+      });
+    }));
 
     this.columbiaShuttleMesh.scale.setScalar(0.8);
     this.columbiaGroup.add(this.columbiaShuttleMesh);
@@ -3611,14 +3575,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
     this.columbiaGroup.add(this.columbiaMemorialStars);
 
-    // Position near the blackhole→jupiter-einde leg of the tour
-    this.columbiaGroup.position.set(100, 30, -80);
+    // Position near Earth — Columbia broke up during re-entry over Earth
+    // Earth is at (-8, 2, -5); keep Columbia close so both fit in frame.
+    this.columbiaGroup.position.set(-6.2, 3.1, -3.8);
     this.columbiaGroup.visible = false;
 
-    // Dedicated lighting so the shuttle is visible
-    const columbiaKeyLight = new THREE.PointLight(0xfff8e8, 3, 40, 1);
+    // Dedicated lighting so the shuttle is visible against Earth's glow
+    const columbiaKeyLight = new THREE.PointLight(0xfff8e8, 4, 50, 1);
     columbiaKeyLight.position.set(5, 3, 4);
     this.columbiaGroup.add(columbiaKeyLight);
+    const columbiaFillLight = new THREE.PointLight(0x88aaff, 1, 30, 1.5);
+    columbiaFillLight.position.set(-3, -1, -2);
+    this.columbiaGroup.add(columbiaFillLight);
 
     this.scene.add(this.columbiaGroup);
   }
@@ -6589,8 +6557,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       b * Math.sin(this.cometAngle) * 0.3 + 15,
       -80 + Math.sin(this.cometAngle) * 30
     );
-    // Point tail away from sun (sun at -50, 10, 30)
-    const toSun = new THREE.Vector3(-50, 10, 30).sub(this.cometGroup.position).normalize();
+    // Point tail away from sun.
+    const toSun = this.sunPosition.clone().sub(this.cometGroup.position).normalize();
     this.cometGroup.lookAt(this.cometGroup.position.clone().sub(toSun));
   }
 
@@ -6741,7 +6709,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private createSun() {
-    // The Sun — realistic multi-layer star at (-50, 10, 30)
+    // The Sun — realistic multi-layer star
     // Real: Sun radius 696,000 km = 97.4 Rj — would fill entire scene
     // Using artistic size (6 units) large enough to be prominent but not overwhelming
     const sunRadius = 6;
@@ -6828,7 +6796,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       fog: false
     });
     this.sunMesh = new THREE.Mesh(sunGeo, sunMat);
-    this.sunMesh.position.set(-50, 10, 30);
+    this.sunMesh.position.copy(this.sunPosition);
 
     // Load Sun texture
     this.loadPromises.push(new Promise<void>((resolve) => {
@@ -6997,7 +6965,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Jupiter has real lightning, discovered by Voyager 1 (1979), confirmed by Juno (2018)
     // Juno found lightning is more frequent near poles and occurs in ammonia-water clouds
     // Color: blue-white (similar to Earth but in hydrogen atmosphere)
-    // Sun at (-50, 10, 30) → night side faces roughly (+x, -y, -z)
+    // Sun at (-80, 15, 50) → night side faces roughly (+x, -y, -z)
 
     for (let index = 0; index < 8; index++) {
       const boltGroup = this.buildLightningBoltGroup(this.getLightningStrikePosition());
@@ -7264,7 +7232,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.solarWind = new THREE.Points(geo, new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uSunPos: { value: new THREE.Vector3(-50, 10, 30) },
+        uSunPos: { value: this.sunPosition.clone() },
         uJupPos: { value: new THREE.Vector3(12, 0, -15) },
       },
       vertexShader: `
@@ -7350,10 +7318,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createTrojanAsteroids() {
     // Jupiter's Trojan asteroids orbit the Sun at L4 (60° ahead) and L5 (60° behind)
-    // Jupiter is at (12, 0, -15) scene coords, Sun at (-50, 10, 30)
+    // Jupiter is at (12, 0, -15) scene coords.
     // We place clusters at ~60° ahead and behind in Jupiter's orbit
     const jupPos = new THREE.Vector3(12, 0, -15);
-    const sunPos = new THREE.Vector3(-50, 10, 30);
+    const sunPos = this.sunPosition;
     const orbitRadius = jupPos.distanceTo(sunPos);
 
     // L4: 60° ahead in orbit (counterclockwise)
@@ -7438,7 +7406,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
     this.zodiacalLight = new THREE.Mesh(zlGeo, zlMat);
     // Emanates from the sun position along the ecliptic
-    this.zodiacalLight.position.set(-50, 10, 30);
+    this.zodiacalLight.position.copy(this.sunPosition);
     // Point toward Jupiter
     this.zodiacalLight.lookAt(12, 0, -15);
     this.zodiacalLight.rotateX(Math.PI / 2);
@@ -7762,7 +7730,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.columbiaShuttleMesh) {
         this.columbiaShuttleMesh.visible = true;
         // Shuttle moves forward
-        this.columbiaShuttleMesh.position.x = t * 1.5;
+        this.columbiaShuttleMesh.position.x = t * 1.1;
         // Slight nose-up re-entry attitude
         this.columbiaShuttleMesh.rotation.z = -0.15;
         this.columbiaShuttleMesh.rotation.x = Math.sin(t * 0.5) * 0.02;

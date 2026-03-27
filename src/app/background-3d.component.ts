@@ -17,6 +17,12 @@ interface TheatreCameraRig {
   flareVisible: boolean;
 }
 
+interface CameraBreathing {
+  x: number;
+  y: number;
+  z: number;
+}
+
 @Component({
   selector: 'app-background-3d',
   standalone: true,
@@ -64,6 +70,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private readonly projectionMatrix = new THREE.Matrix4();
   private readonly frustum = new THREE.Frustum();
   private readonly tempSphere = new THREE.Sphere();
+  private readonly cameraBreathing = new THREE.Vector3();
+  private readonly moonLocalCameraOffset = new THREE.Vector3();
+  private readonly moonLocalLookOffset = new THREE.Vector3();
+  private readonly moonWorldCameraPosition = new THREE.Vector3();
+  private readonly moonWorldLookPosition = new THREE.Vector3();
   private readonly frustumCullTargets: Array<{ object: THREE.Object3D; radius: number }> = [];
   private readonly resizeHandler = () => this.onWindowResize();
   private readonly mouseMoveHandler = (event: MouseEvent) => this.onMouseMove(event);
@@ -832,7 +843,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMappingExposure = 1;
+    this.renderer.toneMappingExposure = 0.82;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -891,6 +902,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
         pmremGenerator.compileEquirectangularShader();
         this.scene.environment = pmremGenerator.fromEquirectangular(tex).texture;
+        this.scene.environmentIntensity = 0.14;
         pmremGenerator.dispose();
 
         resolve();
@@ -1653,8 +1665,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         moonR * Math.sin(phi),
         moonR * Math.cos(phi) * Math.cos(theta)
       );
-      this.tranquilityGroup.lookAt(0, 0, 0);
-      this.tranquilityGroup.rotateY(Math.PI);
+
+      // Align local Y+ with the lunar surface normal so the landing site stands upright.
+      const surfaceNormal = this.tranquilityGroup.position.clone().normalize();
+      this.tranquilityGroup.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), surfaceNormal);
       this.moonMesh.add(this.tranquilityGroup);
 
     // Jupiter's Faint Ring System — discovered by Voyager 1 (1979)
@@ -1854,7 +1868,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(ambientLight);
 
     // Main sun light — the only significant light source, like real space
-    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 2.8);
+    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 1.55);
     this.sunLight.position.set(-25, 5, 5);
     this.sunLight.target = this.jupiterGroup;
     this.sunLight.castShadow = true;
@@ -2165,64 +2179,111 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private updateCamera() {
-    if (this.camera) {
-      if (this.userInteracting) {
-        this.controls.enabled = true;
-        this.controls.update();
-        return;
-      }
-
-      // Disable OrbitControls when slide-driven camera is active to prevent fighting
-      this.controls.enabled = false;
-
-      // "Apollo" handheld camera feel — compound sine waves at prime frequencies
-      const driftTime = (Date.now() - this.startTime) * 0.001 - this.slideStartTime;
-      const t = driftTime * 0.5;
-      if (this.prefersReducedMotion) {
-        this.cameraDriftX = 0;
-        this.cameraDriftY = 0;
-        this.cameraDriftZ = 0;
-        this.camera.rotation.z = 0;
-      } else {
-        // Gentle slow drift — smooth sine waves, no high-frequency jitter
-        const breatheX = Math.sin(t * 0.23) + Math.sin(t * 0.61) * 0.4;
-        const breatheY = Math.cos(t * 0.29) + Math.sin(t * 0.73) * 0.35;
-        const breatheZ = Math.sin(t * 0.19) + Math.cos(t * 0.53) * 0.45;
-
-        this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 8;
-        this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 8;
-        this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 8;
-
-        // Very subtle Z-axis roll — barely perceptible, smoothly interpolated
-        const targetRoll = breatheX * 0.002;
-        this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.02;
-      }
-
-      // When Falcon is in flight, let its camera tracking take priority
-      if (!this.falconLaunched) {
-        const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
-        this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
-        this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
-        this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
-
-        this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
-        this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
-        this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
-        this.targetLookAt.set(
-          anchor.x + this.theatreCameraValues.lookOffset.x,
-          anchor.y + this.theatreCameraValues.lookOffset.y,
-          anchor.z + this.theatreCameraValues.lookOffset.z,
-        );
-      }
-
-      this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
-      this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
-      this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.cameraLerpSpeed;
-
-      this.currentLookAt.lerp(this.targetLookAt, this.cameraLerpSpeed);
-      this.controls.target.copy(this.currentLookAt);
-      this.controls.update();
+    if (!this.camera) {
+      return;
     }
+
+    if (this.userInteracting) {
+      this.controls.enabled = true;
+      this.controls.update();
+      return;
+    }
+
+    this.controls.enabled = false;
+
+    const breathing = this.updateCameraDrift();
+    if (!this.falconLaunched) {
+      this.updateAutomaticCameraTargets(breathing);
+    }
+
+    this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
+    this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
+    this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.cameraLerpSpeed;
+
+    this.currentLookAt.lerp(this.targetLookAt, this.cameraLerpSpeed);
+    this.controls.target.copy(this.currentLookAt);
+    this.controls.update();
+  }
+
+  private updateCameraDrift(): CameraBreathing {
+    if (this.prefersReducedMotion) {
+      this.cameraDriftX = 0;
+      this.cameraDriftY = 0;
+      this.cameraDriftZ = 0;
+      this.camera.rotation.z = 0;
+      this.cameraBreathing.set(0, 0, 0);
+      return this.cameraBreathing;
+    }
+
+    const driftTime = (Date.now() - this.startTime) * 0.001 - this.slideStartTime;
+    const t = driftTime * 0.5;
+    const breatheX = Math.sin(t * 0.23) + Math.sin(t * 0.61) * 0.4;
+    const breatheY = Math.cos(t * 0.29) + Math.sin(t * 0.73) * 0.35;
+    const breatheZ = Math.sin(t * 0.19) + Math.cos(t * 0.53) * 0.45;
+
+    this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 8;
+    this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 8;
+    this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 8;
+
+    const targetRoll = breatheX * 0.002;
+    this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.02;
+    this.cameraBreathing.set(breatheX, breatheY, breatheZ);
+    return this.cameraBreathing;
+  }
+
+  private updateAutomaticCameraTargets(breathing: CameraBreathing) {
+    if (this.activeCameraAnchorKey === 'maan' && this.tranquilityGroup) {
+      this.updateMoonCameraTargets(breathing);
+      return;
+    }
+
+    this.updateWorldCameraTargets();
+  }
+
+  private updateMoonCameraTargets(breathing: CameraBreathing) {
+    this.moonLocalCameraOffset.set(
+      this.theatreCameraValues.offset.x + breathing.x * this.theatreCameraValues.drift.x,
+      this.theatreCameraValues.offset.y + breathing.y * this.theatreCameraValues.drift.y,
+      this.theatreCameraValues.offset.z + breathing.z * this.theatreCameraValues.drift.z,
+    );
+
+    this.moonLocalLookOffset.set(
+      this.theatreCameraValues.lookOffset.x,
+      this.theatreCameraValues.lookOffset.y,
+      this.theatreCameraValues.lookOffset.z,
+    );
+
+    this.moonWorldCameraPosition.copy(this.moonLocalCameraOffset);
+    this.moonWorldLookPosition.copy(this.moonLocalLookOffset);
+    this.tranquilityGroup.localToWorld(this.moonWorldCameraPosition);
+    this.tranquilityGroup.localToWorld(this.moonWorldLookPosition);
+
+    this.baseCameraX = this.moonWorldCameraPosition.x;
+    this.baseCameraY = this.moonWorldCameraPosition.y;
+    this.baseCameraZ = this.moonWorldCameraPosition.z;
+
+    this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x;
+    this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y;
+    this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z;
+
+    this.targetLookAt.copy(this.moonWorldLookPosition);
+  }
+
+  private updateWorldCameraTargets() {
+    const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
+    this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
+    this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
+    this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
+
+    this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
+    this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
+    this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
+
+    this.targetLookAt.set(
+      anchor.x + this.theatreCameraValues.lookOffset.x,
+      anchor.y + this.theatreCameraValues.lookOffset.y,
+      anchor.z + this.theatreCameraValues.lookOffset.z,
+    );
   }
 
   private updateJupiterRotation() {

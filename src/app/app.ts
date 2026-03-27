@@ -547,6 +547,7 @@ export class App implements AfterViewInit, OnDestroy {
   private audioCtx: AudioContext | null = null;
   private falconAudioPlaying = false;
   private moonAudioPlayed = false;
+  private readonly moonAudioTimers: ReturnType<typeof setTimeout>[] = [];
 
   currentSlide = computed(() => this.slides[this.currentIndex()]);
   totalSlides = computed(() => this.slides.length);
@@ -633,6 +634,7 @@ export class App implements AfterViewInit, OnDestroy {
     if (this.bgMusicVolumeRafId) cancelAnimationFrame(this.bgMusicVolumeRafId);
     if (this.videoRevealTimer) clearTimeout(this.videoRevealTimer);
     if (this.tourTimer) clearTimeout(this.tourTimer);
+    this.clearMoonAudioTimers();
     if (this.celebrationAnimId) cancelAnimationFrame(this.celebrationAnimId);
   }
 
@@ -649,16 +651,12 @@ export class App implements AfterViewInit, OnDestroy {
     // Audio Easter eggs
     if (planetName === 'maan' && !this.moonAudioPlayed && !this.isMuted()) {
       this.moonAudioPlayed = true;
-      this.fadeBgMusicTo(0.08);
-      // Real NASA recording: "Contact light"
-      setTimeout(() => this.playNasaClip('contact_light.mp3', 0.35), 1000);
-      // Real NASA recording: "That's one small step for a man..."
-      setTimeout(() => this.playNasaClip('one_small_step.mp3', 0.7), 4000);
-      // Restore music after the quotes
-      setTimeout(() => this.fadeBgMusicTo(0.3), 14000);
+      this.playMoonLandingAudioSequence();
     }
     if (planetName !== 'maan') {
       this.moonAudioPlayed = false;
+      this.clearMoonAudioTimers();
+      this.fadeBgMusicTo(0.3);
     }
     // Falcon launch rumble when arriving at Earth (Falcon launches 1.5s after)
     if (planetName === 'aarde' && !this.falconAudioPlaying && !this.isMuted()) {
@@ -1024,6 +1022,29 @@ export class App implements AfterViewInit, OnDestroy {
     this.bgMusicVolumeRafId = requestAnimationFrame(step);
   }
 
+  private playMoonLandingAudioSequence() {
+    this.clearMoonAudioTimers();
+    this.fadeBgMusicTo(0.08);
+    this.queueMoonAudio(1000, () => void this.playNasaClip('contact_light.mp3', 0.35));
+    this.queueMoonAudio(4000, () => void this.playNasaClip(['one_small_step.oga', 'one_small_step.mp3', 'a11_step.wav'], 0.7));
+    this.queueMoonAudio(14000, () => this.fadeBgMusicTo(0.3));
+  }
+
+  private queueMoonAudio(delayMs: number, playback: () => void) {
+    const timer = setTimeout(() => {
+      const timerIndex = this.moonAudioTimers.indexOf(timer);
+      if (timerIndex >= 0) {
+        this.moonAudioTimers.splice(timerIndex, 1);
+      }
+      playback();
+    }, delayMs);
+    this.moonAudioTimers.push(timer);
+  }
+
+  private clearMoonAudioTimers() {
+    this.moonAudioTimers.splice(0).forEach((timer) => clearTimeout(timer));
+  }
+
   /** Play a voice line through radio static (Web Audio + Speech Synthesis) */
   private playRadioVoice(text: string, volume: number) {
     if (!this.isBrowser) return;
@@ -1074,14 +1095,31 @@ export class App implements AfterViewInit, OnDestroy {
   }
 
   /** Play a real NASA audio clip with radio-static overlay */
-  private async playNasaClip(url: string, volume: number) {
+  private async playNasaClip(url: string | string[], volume: number) {
     if (!this.isBrowser) return;
     const ctx = this.getOrCreateAudioContext();
+    const urls = Array.isArray(url) ? url : [url];
 
     try {
-      const response = await fetch(url);
-      const arrayBuffer = await response.arrayBuffer();
-      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+      let audioBuffer: AudioBuffer | null = null;
+      let lastError: unknown;
+      for (const candidateUrl of urls) {
+        try {
+          const response = await fetch(candidateUrl);
+          if (!response.ok) {
+            throw new Error(`HTTP ${response.status} for ${candidateUrl}`);
+          }
+          const arrayBuffer = await response.arrayBuffer();
+          audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+          break;
+        } catch (error) {
+          lastError = error;
+        }
+      }
+
+      if (!audioBuffer) {
+        throw lastError ?? new Error('No NASA audio sources could be decoded');
+      }
 
       // Play NASA audio — no extra filter, the original already has the radio quality
       const source = ctx.createBufferSource();

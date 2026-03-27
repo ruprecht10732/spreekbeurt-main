@@ -866,7 +866,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     
     // Scene
     this.scene = new THREE.Scene();
-    this.scene.fog = new THREE.FogExp2(0x000000, 0.0005);
+    this.scene.fog = new THREE.FogExp2(0x000000, 0.00015);
 
     // Camera
     this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50000);
@@ -881,20 +881,20 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       logarithmicDepthBuffer: true,
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMappingExposure = 1.3;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
     this.controls = new OrbitControls(this.camera, this.renderer.domElement);
     this.controls.enableDamping = true;
-    this.controls.dampingFactor = 0.08;
-    this.controls.rotateSpeed = 0.5;
-    this.controls.zoomSpeed = 0.8;
-    this.controls.panSpeed = 0.5;
+    this.controls.dampingFactor = 0.15;
+    this.controls.rotateSpeed = 0.8;
+    this.controls.zoomSpeed = 1.0;
+    this.controls.panSpeed = 0.8;
     this.controls.minDistance = 5;
     this.controls.maxDistance = 200;
     this.controls.enablePan = true;
@@ -939,14 +939,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         tex.generateMipmaps = false;
         tex.minFilter = THREE.LinearFilter;
         skyMat.map = tex;
-        skyMat.color.setHex(0x18182a); // deep space with visible Milky Way band
+        skyMat.color.setHex(0x333333); // neutral grey — let the texture do the talking
         skyMat.needsUpdate = true;
 
         // Generate PMREM environment map from skybox for PBR reflections on ships/metals
         const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
         pmremGenerator.compileEquirectangularShader();
         this.scene.environment = pmremGenerator.fromEquirectangular(tex).texture;
-        this.scene.environmentIntensity = 0.14;
+        this.scene.environmentIntensity = 0.05;
         pmremGenerator.dispose();
 
         resolve();
@@ -1241,35 +1241,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const jupiterGeometry = new THREE.SphereGeometry(10, 64, 64);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
-      roughness: 0.6,
+      roughness: 0.65,
       metalness: 0,
-      envMapIntensity: 0.08
+      envMapIntensity: 0.05
     });
-
-    // Keep the NASA texture readable without pushing it into stylized color grading.
-    jupiterMaterial.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        `#include <map_fragment>`,
-        `
-        #ifdef USE_MAP
-          vec4 sampledDiffuseColor = texture2D( map, vMapUv );
-          
-          float redDominance = max(0.0, sampledDiffuseColor.r - max(sampledDiffuseColor.g, sampledDiffuseColor.b) * 0.92);
-          sampledDiffuseColor.r += redDominance * 0.12;
-          sampledDiffuseColor.g += redDominance * 0.02;
-          
-          vec3 neutralLuma = vec3(dot(sampledDiffuseColor.rgb, vec3(0.2126, 0.7152, 0.0722)));
-          sampledDiffuseColor.rgb = mix(neutralLuma, sampledDiffuseColor.rgb, 1.08);
-          sampledDiffuseColor.rgb = mix(sampledDiffuseColor.rgb, sampledDiffuseColor.rgb * sampledDiffuseColor.rgb * 1.15, 0.06);
-
-          #ifdef DECODE_VIDEO_TEXTURE
-            sampledDiffuseColor = vec4( mix( pow( sampledDiffuseColor.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), sampledDiffuseColor.rgb * 0.0773993808, vec3( lessThanEqual( sampledDiffuseColor.rgb, vec3( 0.04045 ) ) ) ), sampledDiffuseColor.w );
-          #endif
-          diffuseColor *= sampledDiffuseColor;
-        #endif
-        `
-      );
-    };
     
     this.jupiter = new THREE.Mesh(jupiterGeometry, jupiterMaterial);
     this.jupiter.receiveShadow = true;
@@ -1313,8 +1288,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const earthGeometry = new THREE.SphereGeometry(0.89, 64, 64);
     const earthMaterial = new THREE.MeshStandardMaterial({
       color: 0x2266cc, // Base blue if texture fails
-      roughness: 0.6,
-      metalness: 0.1
+      roughness: 0.8,
+      metalness: 0.05
     });
     
     this.earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
@@ -1372,7 +1347,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Earth cloud layer — semi-transparent rotating sphere
     const earthCloudGeo = new THREE.SphereGeometry(0.905, 48, 48);
     const earthCloudMat = new THREE.MeshStandardMaterial({
-      transparent: true, opacity: 0.45, depthWrite: false,
+      transparent: true, opacity: 0.65, depthWrite: false,
       color: 0xffffff, roughness: 1, metalness: 0
     });
     this.earthCloudsMesh = new THREE.Mesh(earthCloudGeo, earthCloudMat);
@@ -1404,7 +1379,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPosition);
           float fresnel = 1.0 - dot(viewDir, vNormal);
-          fresnel = pow(fresnel, 4.0);
+          fresnel = pow(clamp(fresnel, 0.0, 1.0), 6.0);
           vec3 color = mix(vec3(0.3, 0.6, 1.0), vec3(0.6, 0.85, 1.0), fresnel);
           gl_FragColor = vec4(color, fresnel * 0.3);
         }
@@ -1936,7 +1911,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false
     });
     const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = Math.PI / 2 + 0.054; // Align with equator (3.13° tilt)
+    ring.rotation.x = Math.PI / 2; // Flat in equatorial plane — group rotation handles tilt
     this.jupiterGroup.add(ring);
 
     // Gossamer rings (extremely faint, extends to 3.16 Rj)
@@ -1946,7 +1921,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       side: THREE.DoubleSide, blending: THREE.AdditiveBlending, depthWrite: false
     });
     const gossamerRing = new THREE.Mesh(gossamerGeo, gossamerMat);
-    gossamerRing.rotation.x = Math.PI / 2 + 0.054;
+    gossamerRing.rotation.x = Math.PI / 2;
     this.jupiterGroup.add(gossamerRing);
 
     // Atmosphere Glow (Custom Shader)
@@ -1977,7 +1952,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         float sunDot = dot(vNormalWorld, sunDir);
 
         // Improved Rayleigh-like fresnel — higher exponent avoids plastic rim
-        float fresnel = pow(clamp(1.0 - dot(viewDirection, vNormal), 0.0, 1.0), 3.0);
+        float fresnel = pow(clamp(1.0 - dot(viewDirection, vNormal), 0.0, 1.0), 6.0);
         float pulse = mix(1.0, 1.04, uPulse * 0.15);
 
         // Terminator wrap-around: atmosphere should glow slightly past the shadow line
@@ -2108,11 +2083,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — dark deep-space: single harsh sun, minimal fill
-    const ambientLight = new THREE.AmbientLight(0x040608, 0.06);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.015);
     this.scene.add(ambientLight);
 
     // Main sun light — the only significant light source, like real space
-    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 1.55);
+    this.sunLight = new THREE.DirectionalLight(0xfffdfa, 4.0);
     this.sunLight.position.set(-25, 5, 5);
     this.sunLight.target = this.jupiterGroup;
     this.sunLight.castShadow = true;
@@ -2120,34 +2095,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunLight.shadow.camera.bottom = -30;
     this.sunLight.shadow.camera.left = -30;
     this.sunLight.shadow.camera.right = 30;
-    this.sunLight.shadow.bias = -0.0001;
+    this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.normalBias = 0.02;
     this.sunLight.shadow.mapSize.width = 4096;
     this.sunLight.shadow.mapSize.height = 4096;
     this.scene.add(this.sunLight);
 
     // Earthshine — faint blue fill from Earth's reflected light onto the Moon
-    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.15);
+    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.05);
     this.earthshineLight.position.set(10, 5, -5); // will be updated to track Earth
     this.scene.add(this.earthshineLight);
     this.scene.add(this.earthshineLight.target);
-
-    // Faint cool fill — just enough to hint at nightside silhouettes
-    const fillLight = new THREE.DirectionalLight(0x060e1c, 0.08);
-    fillLight.position.set(50, -10, -30);
-    this.scene.add(fillLight);
-
-    // Minimal rim light — very faint edge separation
-    const rimLight = new THREE.DirectionalLight(0x223366, 0.05);
-    rimLight.position.set(0, 30, -40);
-    this.scene.add(rimLight);
-
-    // Near-zero backlight
-    const backLight = new THREE.DirectionalLight(0xffd4a0, 0.02);
-    backLight.position.set(30, -20, -50);
-    this.scene.add(backLight);
-
-    const hemiLight = new THREE.HemisphereLight(0x040608, 0x020104, 0.03);
-    this.scene.add(hemiLight);
 
     // Cinematic Anamorphic Lens Flare
     const flareGeo = new THREE.PlaneGeometry(42, 42);
@@ -2173,7 +2131,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           float core = 0.02 / (dist + 0.01) - 0.02;
           float streak = smoothstep(0.5, 0.0, abs(center.y * 30.0)) * smoothstep(0.5, 0.0, abs(center.x));
           float streak2 = smoothstep(0.5, 0.0, abs(center.y * 80.0)) * smoothstep(0.5, 0.0, abs(center.x * 0.8));
-          float intensity = clamp(core + streak + streak2 * 1.5, 0.0, 1.0);
+          float intensity = clamp(core + streak + streak2 * 1.5, 0.0, 1.0) * 0.6;
           gl_FragColor = vec4(color * intensity, intensity * 0.9);
         }
       `,
@@ -2353,7 +2311,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Moon stop uses local-space offsets; interpolating from world-space
     // values would fling the camera wildly, so snap instantly.
-    if (key === 'maan') {
+    // Columbia is far from every other object — snap to avoid slow pan.
+    if (key === 'maan' || key === 'columbia') {
       sequence.pause();
       sequence.position = targetPosition;
       this.theatreCurrentSequencePosition = targetPosition;
@@ -2474,11 +2433,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.updateAutomaticCameraTargets(breathing);
     }
 
-    this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
-    this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
-    this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.cameraLerpSpeed;
+    const effectiveLerp = this.cameraLerpSpeed * 3.0;
+    this.camera.position.x += (this.targetCameraX - this.camera.position.x) * effectiveLerp;
+    this.camera.position.y += (this.targetCameraY - this.camera.position.y) * effectiveLerp;
+    this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * effectiveLerp;
 
-    this.currentLookAt.lerp(this.targetLookAt, this.cameraLerpSpeed);
+    this.currentLookAt.lerp(this.targetLookAt, effectiveLerp);
     this.controls.target.copy(this.currentLookAt);
     this.controls.update();
   }
@@ -2499,11 +2459,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const breatheY = Math.cos(t * 0.29) + Math.sin(t * 0.73) * 0.35;
     const breatheZ = Math.sin(t * 0.19) + Math.cos(t * 0.53) * 0.45;
 
-    this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 8;
-    this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 8;
-    this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 8;
+    this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 2;
+    this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 2;
+    this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 2;
 
-    const targetRoll = breatheX * 0.002;
+    const targetRoll = breatheX * 0.0005;
     this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.02;
     this.cameraBreathing.set(breatheX, breatheY, breatheZ);
     return this.cameraBreathing;
@@ -5094,7 +5054,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.falconLaunchTime = (Date.now() - this.startTime) * 0.001;
     this.falconGroup.scale.setScalar(2.5);
     this.falconStartPos.copy(this.falconGroup.position);
-    this.falconTargetPos.copy(this.marsMesh.position).add(new THREE.Vector3(0.42, 0.58, 0.38));
+    // Land ON Mars surface — normalize offset direction and place at surface radius + tiny clearance
+    const marsRadius = 0.475;
+    const landDir = new THREE.Vector3(0.42, 0.58, 0.38).normalize();
+    this.falconTargetPos.copy(this.marsMesh.position).addScaledVector(landDir, marsRadius + 0.02);
     this.physicsManager.setTranslation(this.falconGroup, this.falconStartPos, true);
     this.physicsManager.setLinvel(this.falconGroup, new THREE.Vector3(), true);
     this.physicsManager.applyImpulse(this.falconGroup, new THREE.Vector3(0, 1.8, 0.4), true);
@@ -5692,7 +5655,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     satRingGeo.computeVertexNormals();
     const satRing = new THREE.Mesh(satRingGeo, satRingMat);
-    satRing.rotation.x = Math.PI / 2 - 0.47; // Saturn tilt ~26.7°
+    satRing.rotation.x = Math.PI / 2; // Flat in equatorial plane — group rotation handles tilt
     this.saturnGroup.add(satRing);
 
     // Saturn position: far behind and to the right

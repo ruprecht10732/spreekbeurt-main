@@ -159,7 +159,7 @@ interface CelebrationFrameState {
     <div class="relative z-10 w-full h-screen overflow-hidden flex flex-col items-center justify-center pointer-events-none">
       
       <!-- Star Wars Crawl for Title Slide -->
-      @if (currentSlide().isTitleSlide) {
+      @if (currentSlide().isTitleSlide && !(currentSlide().id === 'afsluiting' && tourMode())) {
         <div class="absolute inset-0 flex items-center justify-center perspective-[800px]">
           <div #crawlContainer class="w-[80%] max-w-3xl text-center text-[var(--color-starwars-yellow)] font-starwars transform-gpu rotate-x-[20deg] origin-bottom transition-opacity duration-[3000ms]" [class.opacity-0]="tourMode()">
             <h1 class="text-7xl md:text-9xl mb-8 uppercase tracking-widest title-shimmer">{{ currentSlide().title }}</h1>
@@ -243,7 +243,9 @@ interface CelebrationFrameState {
 
            <div #slideContainer
              class="relative w-full h-full pointer-events-auto transition-opacity duration-[1800ms]"
-             [class.opacity-0]="currentSlide().id === 'afsluiting' && tourMode()">
+             [class.opacity-0]="currentSlide().id === 'afsluiting' && tourMode()"
+             [class.pointer-events-none]="currentSlide().id === 'afsluiting' && tourMode()"
+             [class.hidden]="currentSlide().id === 'afsluiting' && tourMode()">
 
           <!-- Floating title — top-left -->
           <div class="absolute top-10 left-10 md:left-14 z-10">

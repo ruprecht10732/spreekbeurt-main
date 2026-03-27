@@ -38,22 +38,22 @@ export class PostProcessManager {
     // Bloom tuned for cinematic space — catches atmospheric glows, star PSFs, and hero lights
     this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
-      intensity: 1.35,
-      luminanceThreshold: 0.82,
-      luminanceSmoothing: 0.15,
+      intensity: 1.0,
+      luminanceThreshold: 0.85,
+      luminanceSmoothing: 0.08,
       mipmapBlur: true,
-      radius: 0.7,
+      radius: 0.5,
     });
 
     this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
       blendFunction: BlendFunction.SCREEN,
-      samples: 48,
+      samples: 60,
       density: 0.86,
       decay: 0.94,
       weight: 0.28,
-      exposure: 0.26,
+      exposure: 0.15,
       clampMax: 1,
-      kernelSize: KernelSize.LARGE,
+      kernelSize: KernelSize.VERY_LARGE,
       blur: true,
     }) : null;
 

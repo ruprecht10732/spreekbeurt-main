@@ -23,23 +23,19 @@ const fragmentShader = /* glsl */ `
 
     vec3 color = inputColor.rgb;
 
-    // ── Lift / Gamma / Gain — subtle cool shadows, neutral mids, warm highlights ──
-    vec3 lift  = vec3(0.008, 0.012, 0.02);    // gentle blue-ish shadow lift
-    vec3 gamma = vec3(0.99, 0.99, 1.0);       // near-neutral midtones
-    vec3 gain  = vec3(1.02, 1.005, 0.985);    // subtle warm highlight push
+    // ── Lift / Gamma / Gain — true-black shadows, neutral mids, warm highlights ──
+    vec3 lift  = vec3(0.0, 0.0, 0.0);         // no shadow lift — space is black
+    vec3 gamma = vec3(1.0, 1.0, 1.0);         // neutral midtones
+    vec3 gain  = vec3(1.05, 1.02, 1.0);       // subtle warm highlight push
     color = liftGammaGain(color, lift, gamma, gain);
 
-    // ── Subtle contrast S-curve — opens shadows, rolls highlights ──
-    // Clamp to [0,1] before Hermite S-curve: it produces negatives for x > 1.5
-    // which inverts bright HDR pixels after bloom / god-rays
-    vec3 sc = clamp(color, 0.0, 1.0);
-    sc = sc * sc * (3.0 - 2.0 * sc);                  // Hermite S (safe in [0,1])
-    color = mix(color, sc, 0.12);                      // dial back to 12 %
+    // ── Gentle contrast boost — preserves blacks, adds punch to midtones ──
+    color = mix(vec3(0.5), color, 1.15);
 
     // ── Very fine film grain — only visible on mid-darks, invisible on stars ──
     float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
     float grainMask = smoothstep(0.45, 0.05, lum);     // vanishes on bright pixels
-    float grain = (random(uv * 800.0 + fract(uTime * 3.7)) - 0.5) * 0.008;
+    float grain = (random(uv * 800.0 + fract(uTime * 3.7)) - 0.5) * 0.0025;
     color += grain * grainMask;
 
     // Apply vignette

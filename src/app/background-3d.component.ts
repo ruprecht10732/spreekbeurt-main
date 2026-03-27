@@ -3286,6 +3286,45 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.astronautGroup.add(stripe);
 
     this.astronautGroup.scale.setScalar(0.6);
+
+    // Replace procedural astronaut with downloaded model when available.
+    const astronautLoader = new GLTFLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      const applyModel = (gltf: { scene: THREE.Group }) => {
+        const model = gltf.scene;
+        const bbox = new THREE.Box3().setFromObject(model);
+        const size = bbox.getSize(new THREE.Vector3());
+        const center = bbox.getCenter(new THREE.Vector3());
+        const safeHeight = Math.max(size.y, 1e-3);
+        const scale = 0.35 / safeHeight;
+
+        model.scale.setScalar(scale);
+        model.position.sub(center.multiplyScalar(scale));
+        model.rotation.set(0.2, Math.PI * 0.7, 0.1);
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            if (mat && mat.isMeshStandardMaterial) {
+              mat.roughness = Math.min(mat.roughness ?? 0.7, 0.75);
+              mat.metalness = Math.max(mat.metalness ?? 0.05, 0.05);
+              mat.needsUpdate = true;
+            }
+          }
+        });
+
+        this.astronautGroup.clear();
+        this.astronautGroup.add(model);
+        resolve();
+      };
+
+      const loadRelativeFallback = () => {
+        astronautLoader.load('astronaut_eva_model.glb', applyModel, undefined, () => resolve());
+      };
+
+      astronautLoader.load('/astronaut_eva_model.glb', applyModel, undefined, loadRelativeFallback);
+    }));
+
     this.astronautGroup.visible = false;
     this.scene.add(this.astronautGroup);
   }
@@ -3370,14 +3409,57 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.fallenAstronautGroup.add(plaque);
 
     // Reclining figure (inspired by the real "Fallen Astronaut" on the Moon)
+    const fallenFigureGroup = new THREE.Group();
+    this.fallenAstronautGroup.add(fallenFigureGroup);
+
     const figMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5, metalness: 0.3 });
     const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.08, 4, 8), figMat);
     body.rotation.z = Math.PI / 2;
     body.position.set(0, -0.36, 0.05);
-    this.fallenAstronautGroup.add(body);
+    fallenFigureGroup.add(body);
     const head = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), figMat);
     head.position.set(-0.055, -0.36, 0.05);
-    this.fallenAstronautGroup.add(head);
+    fallenFigureGroup.add(head);
+
+    // Replace procedural figure with downloaded model when available.
+    const fallenLoader = new GLTFLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      const applyModel = (gltf: { scene: THREE.Group }) => {
+        const model = gltf.scene;
+        const bbox = new THREE.Box3().setFromObject(model);
+        const size = bbox.getSize(new THREE.Vector3());
+        const center = bbox.getCenter(new THREE.Vector3());
+        const safeHeight = Math.max(size.y, 1e-3);
+        const scale = 0.15 / safeHeight;
+
+        model.scale.setScalar(scale);
+        model.position.sub(center.multiplyScalar(scale));
+        model.position.set(0.0, -0.36, 0.05);
+        model.rotation.set(0, 0, Math.PI / 2);
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mesh = child as THREE.Mesh;
+            const mat = mesh.material as THREE.MeshStandardMaterial;
+            if (mat && mat.isMeshStandardMaterial) {
+              mat.color.multiplyScalar(0.88);
+              mat.roughness = Math.min(mat.roughness ?? 0.7, 0.8);
+              mat.metalness = Math.max(mat.metalness ?? 0.15, 0.15);
+              mat.needsUpdate = true;
+            }
+          }
+        });
+
+        fallenFigureGroup.clear();
+        fallenFigureGroup.add(model);
+        resolve();
+      };
+
+      const loadRelativeFallback = () => {
+        fallenLoader.load('fallen_astronaut_model.glb', applyModel, undefined, () => resolve());
+      };
+
+      fallenLoader.load('/fallen_astronaut_model.glb', applyModel, undefined, loadRelativeFallback);
+    }));
 
     // Warm reverence light
     const memLight = new THREE.PointLight(0xffeedd, 0.5, 8);
@@ -5004,6 +5086,68 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.falconSecondStage.add(trunk);
 
     group.add(this.falconSecondStage);
+
+    // Replace procedural rocket body with downloaded model visuals when available.
+    const falconLoader = new GLTFLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      const applyModel = (gltf: { scene: THREE.Group }) => {
+        const baseModel = gltf.scene;
+        const bbox = new THREE.Box3().setFromObject(baseModel);
+        const size = bbox.getSize(new THREE.Vector3());
+        const center = bbox.getCenter(new THREE.Vector3());
+        const safeHeight = Math.max(size.y, 1e-3);
+        const normalizedScale = 0.62 / safeHeight;
+
+        const makeSegment = (yScale: number, yPos: number, radialScale = 1) => {
+          const segment = baseModel.clone(true);
+          segment.scale.setScalar(normalizedScale);
+          segment.scale.multiply(new THREE.Vector3(radialScale, yScale, radialScale));
+          const centered = center.clone().multiplyScalar(normalizedScale);
+          segment.position.sub(centered);
+          segment.position.y += yPos;
+          segment.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              const mat = mesh.material as THREE.MeshStandardMaterial;
+              if (mat && mat.isMeshStandardMaterial) {
+                mat.roughness = Math.min(mat.roughness ?? 0.45, 0.6);
+                mat.metalness = Math.max(mat.metalness ?? 0.2, 0.2);
+                mat.needsUpdate = true;
+              }
+            }
+          });
+          return segment;
+        };
+
+        const firstStageModel = makeSegment(0.62, 0.14, 1.0);
+        const secondStageModel = makeSegment(0.34, 0.42, 0.86);
+        this.falconFirstStage.add(firstStageModel);
+        this.falconSecondStage.add(secondStageModel);
+
+        // Hide procedural body meshes but keep exhaust/fairings/physics rig active.
+        const keepVisible = new Set<THREE.Object3D>([
+          this.falconExhaust,
+          this.falconSecondExhaust,
+          this.falconFairingL,
+          this.falconFairingR,
+        ]);
+        [this.falconFirstStage, this.falconSecondStage].forEach((stage) => {
+          stage.traverse((child) => {
+            if (child instanceof THREE.Mesh && !keepVisible.has(child)) {
+              child.visible = false;
+            }
+          });
+        });
+
+        resolve();
+      };
+
+      const loadRelativeFallback = () => {
+        falconLoader.load('falcon9_model.glb', applyModel, undefined, () => resolve());
+      };
+
+      falconLoader.load('/falcon9_model.glb', applyModel, undefined, loadRelativeFallback);
+    }));
 
     group.visible = false;
     return group;

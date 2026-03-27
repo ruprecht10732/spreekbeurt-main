@@ -41,38 +41,69 @@ The content is organized as follows:
 
 <directory_structure>
 public/
+  2008_tesla_roadster.glb
   20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg
+  20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.webp
   2k_callisto.jpg
+  2k_callisto.webp
   2k_earth_clouds.jpg
+  2k_earth_clouds.webp
   2k_earth_normal_map.jpg
+  2k_earth_normal_map.webp
   2k_earth_specular_map.jpg
+  2k_earth_specular_map.webp
   2k_europa.jpg
+  2k_europa.webp
   2k_ganymede.jpg
+  2k_ganymede.webp
   2k_io.jpg
+  2k_io.webp
   2k_mars.jpg
+  2k_mars.webp
   2k_mercury.jpg
+  2k_mercury.webp
   2k_moon.jpg
+  2k_moon.webp
   2k_neptune.jpg
+  2k_neptune.webp
   2k_saturn_ring.png
   2k_saturn.jpg
+  2k_saturn.webp
   2k_stars_milky_way.jpg
+  2k_stars_milky_way.webp
   2k_sun.jpg
+  2k_sun.webp
   2k_uranus.jpg
+  2k_uranus.webp
   2k_venus_atmosphere.jpg
+  2k_venus_atmosphere.webp
   2k_venus_surface.jpg
+  2k_venus_surface.webp
   8k_earth_daymap.jpg
+  8k_earth_daymap.webp
   8k_jupiter.jpg
+  8k_jupiter.webp
   8k_mars.jpg
+  8k_mars.webp
   8k_moon.jpg
+  8k_moon.webp
   8k_saturn.jpg
+  8k_saturn.webp
   8k_stars_milky_way.jpg
+  8k_stars_milky_way.webp
   8k_sun.jpg
+  8k_sun.webp
+  a11_step.wav
+  contact_light.mp3
   death_star_-_star_wars.glb
+  Falcon9_Main.webp
   favicon.ico
   Interstellar Main Theme - Extra Extended - Soundtrack by Hans Zimmer - Cinémavore.mp3
   Jupiter_red_dot_storm.mp4
   jupiter_ring_texture__8k__by_digitalhourglass_dkk9nr9-pre.png
   Jupiter_Size_Comparison_Video.mp4
+  one_small_step.mp3
+  one_small_step.oga
 scripts/
   fix-rapier-init-warning.mjs
 src/
@@ -198,844 +229,8 @@ describe('App', () => {
 });
 </file>
 
-<file path="src/app/physics-manager.ts">
-import * as THREE from 'three';
-import RAPIER, {
-  type Collider,
-  ColliderDesc,
-  type RigidBody,
-  RigidBodyDesc,
-  type World,
-} from '@dimforge/rapier3d-compat';
-
-export type PhysicsBodyKind = 'dynamic' | 'kinematic' | 'fixed';
-export type PhysicsColliderKind = 'ball' | 'box' | 'capsule';
-
-export interface PhysicsBridgeOptions {
-  kind: PhysicsBodyKind;
-  collider: PhysicsColliderKind;
-  radius?: number;
-  halfExtents?: THREE.Vector3;
-  halfHeight?: number;
-  mass?: number;
-  linearDamping?: number;
-  angularDamping?: number;
-  ccd?: boolean;
-  canSleep?: boolean;
-  gravityScale?: number;
-}
-
-interface PhysicsBridge {
-  object: THREE.Object3D;
-  body: RigidBody;
-  collider: Collider;
-  kind: PhysicsBodyKind;
-}
-
-export class PhysicsManager {
-  readonly scale = 100;
-
-  private world!: World;
-  private readonly fixedTimestep = 1 / 60;
-  private accumulator = 0;
-  private lastStepTime = 0;
-  private initialized = false;
-  private readonly bridges = new Map<THREE.Object3D, PhysicsBridge>();
-  private playerObject: THREE.Object3D | null = null;
-
-  async initialize(): Promise<void> {
-    if (this.initialized) return;
-    await RAPIER.init();
-    this.world = new RAPIER.World({ x: 0, y: 0, z: 0 });
-    this.world.timestep = this.fixedTimestep;
-    this.initialized = true;
-  }
-
-  bridge(object: THREE.Object3D, options: PhysicsBridgeOptions): RigidBody {
-    if (!this.initialized) {
-      throw new Error('PhysicsManager must be initialized before bridging objects.');
-    }
-
-    const position = object.position;
-    const rotation = object.quaternion;
-    let desc = this.createRigidBodyDesc(options.kind);
-    desc = desc
-      .setTranslation(position.x / this.scale, position.y / this.scale, position.z / this.scale)
-      .setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w })
-      .setGravityScale(options.gravityScale ?? 0)
-      .setLinearDamping(options.linearDamping ?? 0.15)
-      .setAngularDamping(options.angularDamping ?? 0.4)
-      .setCanSleep(options.canSleep ?? options.kind !== 'dynamic');
-
-    if (options.mass && options.kind === 'dynamic') {
-      desc = desc.setAdditionalMass(options.mass);
-    }
-
-    if (options.ccd) {
-      desc = desc.setCcdEnabled(true);
-    }
-
-    const body = this.world.createRigidBody(desc);
-    const colliderDesc = this.createColliderDesc(options);
-    const collider = this.world.createCollider(colliderDesc, body);
-
-    this.bridges.set(object, { object, body, collider, kind: options.kind });
-    this.syncObjectFromBody(object, body);
-    return body;
-  }
-
-  has(object: THREE.Object3D): boolean {
-    return this.bridges.has(object);
-  }
-
-  setPlayerObject(object: THREE.Object3D): void {
-    this.playerObject = object;
-  }
-
-  getPlayerPosition(): THREE.Vector3 | null {
-    if (!this.playerObject) return null;
-    return this.getObjectPosition(this.playerObject);
-  }
-
-  getObjectPosition(object: THREE.Object3D): THREE.Vector3 {
-    const bridge = this.bridges.get(object);
-    if (!bridge) {
-      return object.position.clone();
-    }
-
-    const translation = bridge.body.translation();
-    return new THREE.Vector3(
-      translation.x * this.scale,
-      translation.y * this.scale,
-      translation.z * this.scale,
-    );
-  }
-
-  getLinearVelocity(object: THREE.Object3D): THREE.Vector3 {
-    const bridge = this.bridges.get(object);
-    if (!bridge) return new THREE.Vector3();
-    const velocity = bridge.body.linvel();
-    return new THREE.Vector3(
-      velocity.x * this.scale,
-      velocity.y * this.scale,
-      velocity.z * this.scale,
-    );
-  }
-
-  setTranslation(object: THREE.Object3D, position: THREE.Vector3, wakeUp = true): void {
-    const bridge = this.bridges.get(object);
-    if (!bridge) {
-      object.position.copy(position);
-      return;
-    }
-
-    bridge.body.setTranslation({
-      x: position.x / this.scale,
-      y: position.y / this.scale,
-      z: position.z / this.scale,
-    }, wakeUp);
-    object.position.copy(position);
-  }
-
-  setLinvel(object: THREE.Object3D, velocity: THREE.Vector3, wakeUp = true): void {
-    const bridge = this.bridges.get(object);
-    if (!bridge) return;
-    bridge.body.setLinvel({
-      x: velocity.x / this.scale,
-      y: velocity.y / this.scale,
-      z: velocity.z / this.scale,
-    }, wakeUp);
-  }
-
-  setKinematicTarget(object: THREE.Object3D, position: THREE.Vector3, quaternion?: THREE.Quaternion): void {
-    const bridge = this.bridges.get(object);
-    if (!bridge) {
-      object.position.copy(position);
-      if (quaternion) object.quaternion.copy(quaternion);
-      return;
-    }
-
-    if (bridge.kind !== 'kinematic') {
-      this.setTranslation(object, position, true);
-      if (quaternion) {
-        bridge.body.setRotation(quaternion, true);
-      }
-      return;
-    }
-
-    bridge.body.setNextKinematicTranslation({
-      x: position.x / this.scale,
-      y: position.y / this.scale,
-      z: position.z / this.scale,
-    });
-
-    if (quaternion) {
-      bridge.body.setNextKinematicRotation({
-        x: quaternion.x,
-        y: quaternion.y,
-        z: quaternion.z,
-        w: quaternion.w,
-      });
-    }
-
-    object.position.copy(position);
-    if (quaternion) object.quaternion.copy(quaternion);
-  }
-
-  applyImpulse(object: THREE.Object3D, impulse: THREE.Vector3, wakeUp = true): void {
-    const bridge = this.bridges.get(object);
-    if (!bridge) return;
-    bridge.body.applyImpulse({
-      x: impulse.x / this.scale,
-      y: impulse.y / this.scale,
-      z: impulse.z / this.scale,
-    }, wakeUp);
-  }
-
-  applyForce(object: THREE.Object3D, force: THREE.Vector3, wakeUp = true): void {
-    const bridge = this.bridges.get(object);
-    if (!bridge) return;
-    bridge.body.addForce({
-      x: force.x / this.scale,
-      y: force.y / this.scale,
-      z: force.z / this.scale,
-    }, wakeUp);
-  }
-
-  applyInverseSquareGravity(
-    object: THREE.Object3D,
-    sources: Array<{ position: THREE.Vector3; mass: number }>,
-    gravitationalConstant: number,
-  ): void {
-    const bridge = this.bridges.get(object);
-    if (bridge?.kind !== 'dynamic') return;
-
-    const bodyPosition = this.getObjectPosition(object);
-    const bodyMass = Math.max(bridge.body.mass(), 0.0001);
-    const totalForce = new THREE.Vector3();
-
-    for (const source of sources) {
-      const direction = source.position.clone().sub(bodyPosition);
-      const distanceSq = Math.max(direction.lengthSq(), 16);
-      direction.normalize();
-      const forceMagnitude = gravitationalConstant * source.mass * bodyMass / distanceSq;
-      totalForce.addScaledVector(direction, forceMagnitude);
-    }
-
-    this.applyForce(object, totalForce, true);
-  }
-
-  step(elapsedSeconds: number): void {
-    if (!this.initialized) return;
-
-    if (this.lastStepTime === 0) {
-      this.lastStepTime = elapsedSeconds;
-    }
-
-    const frameDelta = Math.min(elapsedSeconds - this.lastStepTime, 1 / 15);
-    this.lastStepTime = elapsedSeconds;
-    this.accumulator += Math.max(frameDelta, 0);
-
-    while (this.accumulator >= this.fixedTimestep) {
-      this.world.step();
-      this.accumulator -= this.fixedTimestep;
-    }
-
-    this.syncAllObjectsFromBodies();
-  }
-
-  shiftWorld(shiftInThreeUnits: THREE.Vector3): void {
-    if (!this.initialized) return;
-
-    for (const bridge of this.bridges.values()) {
-      const position = this.getObjectPosition(bridge.object).sub(shiftInThreeUnits);
-      bridge.body.setTranslation({
-        x: position.x / this.scale,
-        y: position.y / this.scale,
-        z: position.z / this.scale,
-      }, false);
-      this.syncObjectFromBody(bridge.object, bridge.body);
-    }
-  }
-
-  dispose(): void {
-    this.bridges.clear();
-    this.playerObject = null;
-  }
-
-  private syncAllObjectsFromBodies(): void {
-    for (const bridge of this.bridges.values()) {
-      this.syncObjectFromBody(bridge.object, bridge.body);
-    }
-  }
-
-  private syncObjectFromBody(object: THREE.Object3D, body: RigidBody): void {
-    const translation = body.translation();
-    const rotation = body.rotation();
-    object.position.set(
-      translation.x * this.scale,
-      translation.y * this.scale,
-      translation.z * this.scale,
-    );
-    object.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
-  }
-
-  private createRigidBodyDesc(kind: PhysicsBodyKind): RigidBodyDesc {
-    switch (kind) {
-      case 'dynamic':
-        return RigidBodyDesc.dynamic();
-      case 'kinematic':
-        return RigidBodyDesc.kinematicPositionBased();
-      default:
-        return RigidBodyDesc.fixed();
-    }
-  }
-
-  private createColliderDesc(options: PhysicsBridgeOptions): ColliderDesc {
-    switch (options.collider) {
-      case 'ball': {
-        const radius = (options.radius ?? 1) / this.scale;
-        return ColliderDesc.ball(radius);
-      }
-      case 'capsule': {
-        const radius = (options.radius ?? 0.5) / this.scale;
-        const halfHeight = (options.halfHeight ?? 0.5) / this.scale;
-        return ColliderDesc.capsule(halfHeight, radius);
-      }
-      default: {
-        const halfExtents = options.halfExtents ?? new THREE.Vector3(0.5, 0.5, 0.5);
-        return ColliderDesc.cuboid(
-          halfExtents.x / this.scale,
-          halfExtents.y / this.scale,
-          halfExtents.z / this.scale,
-        );
-      }
-    }
-  }
-}
-</file>
-
-<file path="src/app/post-process-manager.ts">
-import * as THREE from 'three';
-import {
-  BlendFunction,
-  ChromaticAberrationEffect,
-  EffectComposer,
-  EffectPass,
-  GodRaysEffect,
-  KernelSize,
-  NormalPass,
-  RenderPass,
-  SelectiveBloomEffect,
-  SMAAEffect,
-  SMAAPreset,
-  SSAOEffect,
-  VignetteEffect,
-} from 'postprocessing';
-
-export const BLOOM_LAYER = 11;
-
-export class PostProcessManager {
-  private readonly composer: EffectComposer;
-  private readonly bloomEffect: SelectiveBloomEffect;
-  private readonly renderPass: RenderPass;
-  private readonly effectPass: EffectPass;
-  private readonly godRaysEffect: GodRaysEffect | null;
-  private readonly chromaticAberrationEffect: ChromaticAberrationEffect;
-
-  constructor(
-    renderer: THREE.WebGLRenderer,
-    scene: THREE.Scene,
-    camera: THREE.PerspectiveCamera,
-    lightSource?: THREE.Mesh | THREE.Points,
-  ) {
-    this.composer = new EffectComposer(renderer, {
-      frameBufferType: THREE.HalfFloatType,
-    });
-
-    this.renderPass = new RenderPass(scene, camera);
-    this.bloomEffect = new SelectiveBloomEffect(scene, camera, {
-      blendFunction: BlendFunction.SCREEN,
-      intensity: 1.6,
-      luminanceThreshold: 0.28,
-      luminanceSmoothing: 0.12,
-      mipmapBlur: true,
-      radius: 0.74,
-    });
-    this.bloomEffect.selection.layer = BLOOM_LAYER;
-    this.bloomEffect.ignoreBackground = false;
-
-    this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
-      blendFunction: BlendFunction.SCREEN,
-      samples: 96,
-      density: 0.84,
-      decay: 0.95,
-      weight: 0.22,
-      exposure: 0.22,
-      clampMax: 1,
-      kernelSize: KernelSize.MEDIUM,
-      blur: true,
-    }) : null;
-
-    const vignette = new VignetteEffect({
-      eskil: false,
-      darkness: 0.38,
-      offset: 0.22,
-    });
-
-    const chromaticAberration = new ChromaticAberrationEffect({
-      offset: new THREE.Vector2(0.0006, 0.0006),
-      radialModulation: true,
-      modulationOffset: 0.3,
-    });
-    this.chromaticAberrationEffect = chromaticAberration;
-
-    // SMAA — anti-aliasing to clean up thin geometry (lightsaber blades, ring edges)
-    const smaaEffect = new SMAAEffect({ preset: SMAAPreset.HIGH });
-
-    // SSAO — screen-space ambient occlusion for contact shadows
-    const normalPass = new NormalPass(scene, camera);
-    const ssaoEffect = new SSAOEffect(camera, normalPass.texture, {
-      blendFunction: BlendFunction.MULTIPLY,
-      samples: 16,
-      rings: 4,
-      luminanceInfluence: 0.6,
-      radius: 0.04,
-      intensity: 1.5,
-      bias: 0.025,
-    });
-
-    const effects = this.godRaysEffect
-      ? [this.bloomEffect, this.godRaysEffect, ssaoEffect, smaaEffect, vignette]
-      : [this.bloomEffect, ssaoEffect, smaaEffect, vignette];
-
-    this.effectPass = new EffectPass(camera, ...effects);
-
-    // ChromaticAberration is a convolution effect — it must live in its own pass
-    const chromaPass = new EffectPass(camera, chromaticAberration);
-    chromaPass.renderToScreen = true;
-
-    this.composer.addPass(this.renderPass);
-    this.composer.addPass(normalPass);
-    this.composer.addPass(this.effectPass);
-    this.composer.addPass(chromaPass);
-  }
-
-  addBloomSelection(object: THREE.Object3D): void {
-    object.layers.enable(BLOOM_LAYER);
-    this.bloomEffect.selection.add(object);
-  }
-
-  addBloomSelectionRecursive(object: THREE.Object3D): void {
-    object.traverse((child) => {
-      if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-        this.addBloomSelection(child);
-      }
-    });
-  }
-
-  setBloomIntensity(intensity: number): void {
-    this.bloomEffect.intensity = intensity;
-  }
-
-  getBloomIntensity(): number {
-    return this.bloomEffect.intensity;
-  }
-
-  setChromaticAberrationOffset(x: number, y: number): void {
-    this.chromaticAberrationEffect.offset = new THREE.Vector2(x, y);
-  }
-
-  render(deltaTime: number): void {
-    this.composer.render(deltaTime);
-  }
-
-  setSize(width: number, height: number): void {
-    this.composer.setSize(width, height);
-  }
-
-  dispose(): void {
-    this.composer.dispose();
-  }
-}
-</file>
-
-<file path="src/app/theatre-camera.state.ts">
-import type { __UNSTABLE_Project_OnDiskState } from '@theatre/core';
-
-type CameraShot = {
-  offset: { x: number; y: number; z: number };
-  lookOffset: { x: number; y: number; z: number };
-  drift: { x: number; y: number; z: number };
-  mouseParallax: { x: number; y: number; z: number };
-  lerp: number;
-  flareVisible: boolean;
-};
-
-export const THEATRE_SLIDE_SEQUENCE_POSITIONS = {
-  title: 0,
-  inhoud: 1,
-  h1: 2,
-  h2: 3,
-  h3: 4,
-  h4: 5,
-  h5: 6,
-  extra: 7,
-  quiz: 8,
-  afsluiting: 9,
-} as const;
-
-export const THEATRE_TOUR_SEQUENCE_POSITIONS = {
-  jupiter: 20,
-  zon: 24,
-  mercurius: 28,
-  venus: 32,
-  aarde: 36,
-  mars: 40,
-  saturnus: 44,
-  uranus: 48,
-  neptunus: 52,
-  pluto: 56,
-  'jupiter-einde': 60,
-} as const;
-
-const DEFAULT_MOUSE_PARALLAX = { x: 3, y: 3, z: 0 };
-const SMOOTH_HANDLES = [0.5, 1, 0.5, 0] as const;
-const HOLD_HANDLES = [0.5, 1, 0.5, 0] as const;
-
-const SHOTS: Record<keyof typeof THEATRE_SLIDE_SEQUENCE_POSITIONS, CameraShot> = {
-  title: {
-    offset: { x: -7, y: 8, z: 52 },
-    lookOffset: { x: 0, y: 1, z: 0 },
-    drift: { x: 0, y: -0.002, z: -0.008 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.015,
-    flareVisible: true,
-  },
-  inhoud: {
-    offset: { x: 28, y: 14, z: 34 },
-    lookOffset: { x: 0, y: 1.4, z: 0 },
-    drift: { x: -0.009, y: 0, z: -0.004 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.025,
-    flareVisible: true,
-  },
-  h1: {
-    offset: { x: -16, y: 3.2, z: 18 },
-    lookOffset: { x: -1.1, y: 0.5, z: -0.3 },
-    drift: { x: 0.0025, y: 0, z: -0.0025 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.03,
-    flareVisible: false,
-  },
-  h2: {
-    offset: { x: -3.5, y: -3.2, z: 5.4 },
-    lookOffset: { x: 0.6, y: -2.5, z: -8.8 },
-    drift: { x: -0.001, y: 0.002, z: 0 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.02,
-    flareVisible: false,
-  },
-  h3: {
-    offset: { x: -12, y: 14, z: 32 },
-    lookOffset: { x: -10, y: 0, z: 2 },
-    drift: { x: 0.005, y: -0.002, z: 0 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.02,
-    flareVisible: true,
-  },
-  h4: {
-    offset: { x: -22, y: -8, z: 16 },
-    lookOffset: { x: 2, y: 0, z: 0 },
-    drift: { x: 0.015, y: 0.004, z: -0.003 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.018,
-    flareVisible: false,
-  },
-  h5: {
-    offset: { x: -2, y: -18, z: 13 },
-    lookOffset: { x: 0, y: 6, z: -1 },
-    drift: { x: -0.002, y: 0.006, z: 0 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.025,
-    flareVisible: false,
-  },
-  extra: {
-    offset: { x: 5, y: 38, z: 22 },
-    lookOffset: { x: 0, y: 0, z: -2 },
-    drift: { x: -0.008, y: 0, z: 0.005 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.02,
-    flareVisible: true,
-  },
-  quiz: {
-    offset: { x: -2, y: 2, z: 17 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: -0.01, y: 0, z: -0.008 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.04,
-    flareVisible: true,
-  },
-  afsluiting: {
-    offset: { x: -5, y: 5, z: 38 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: 0, y: 0.002, z: 0.005 },
-    mouseParallax: DEFAULT_MOUSE_PARALLAX,
-    lerp: 0.015,
-    flareVisible: true,
-  },
-};
-
-const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraShot> = {
-  jupiter: {
-    offset: { x: -22, y: 6, z: 19 },
-    lookOffset: { x: 0, y: 0.5, z: 0 },
-    drift: { x: 0.002, y: 0.0006, z: -0.0015 },
-    mouseParallax: { x: 0.8, y: 0.8, z: 0 },
-    lerp: 0.02,
-    flareVisible: false,
-  },
-  zon: {
-    offset: { x: 22, y: 7, z: 16 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: -0.002, y: 0.0008, z: 0.001 },
-    mouseParallax: { x: 0.6, y: 0.6, z: 0 },
-    lerp: 0.022,
-    flareVisible: true,
-  },
-  mercurius: {
-    offset: { x: 2.0, y: 0.8, z: 1.6 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: -0.0008, y: 0.0004, z: 0.0008 },
-    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
-    lerp: 0.026,
-    flareVisible: true,
-  },
-  venus: {
-    offset: { x: 3.0, y: 1.2, z: 2.8 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: 0.001, y: 0.0004, z: -0.0007 },
-    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
-    lerp: 0.026,
-    flareVisible: true,
-  },
-  aarde: {
-    offset: { x: 2.8, y: 1.4, z: 3.0 },
-    lookOffset: { x: 0.1, y: 0.3, z: 0.1 },
-    drift: { x: 0.0012, y: 0.0003, z: -0.0008 },
-    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
-    lerp: 0.028,
-    flareVisible: true,
-  },
-  mars: {
-    offset: { x: 2.4, y: 1.2, z: 2.2 },
-    lookOffset: { x: 0.1, y: 0.3, z: 0.1 },
-    drift: { x: 0.0009, y: 0.0002, z: -0.0008 },
-    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
-    lerp: 0.028,
-    flareVisible: true,
-  },
-  saturnus: {
-    offset: { x: -28, y: 13, z: 23 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: 0.0024, y: 0.0008, z: -0.0015 },
-    mouseParallax: { x: 0.75, y: 0.75, z: 0 },
-    lerp: 0.021,
-    flareVisible: true,
-  },
-  uranus: {
-    offset: { x: -12, y: 4.5, z: 11 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: 0.0014, y: 0.0003, z: -0.001 },
-    mouseParallax: { x: 0.5, y: 0.5, z: 0 },
-    lerp: 0.022,
-    flareVisible: true,
-  },
-  neptunus: {
-    offset: { x: 12, y: 4.2, z: 11 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: -0.0014, y: 0.0004, z: 0.001 },
-    mouseParallax: { x: 0.5, y: 0.5, z: 0 },
-    lerp: 0.022,
-    flareVisible: true,
-  },
-  pluto: {
-    offset: { x: 2.0, y: 0.9, z: 2.0 },
-    lookOffset: { x: 0, y: 0, z: 0 },
-    drift: { x: 0.0011, y: 0.0005, z: -0.0007 },
-    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
-    lerp: 0.026,
-    flareVisible: true,
-  },
-  'jupiter-einde': {
-    offset: { x: 8, y: 10, z: 58 },
-    lookOffset: { x: 0, y: 0.5, z: 0 },
-    drift: { x: -0.0012, y: 0.0007, z: 0.0022 },
-    mouseParallax: { x: 0.9, y: 0.9, z: 0 },
-    lerp: 0.017,
-    flareVisible: true,
-  },
-};
-
-function encodedPath(path: string[]): string {
-  return JSON.stringify(path);
-}
-
-function numericTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => number) {
-  return {
-    trackId: debugName,
-    path: encodedPath(path),
-    data: {
-      type: 'BasicKeyframedTrack',
-      __debugName: debugName,
-      keyframes: Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
-        id: `${debugName}-${slideId}`,
-        value: readValue(SHOTS[slideId]),
-        position,
-        handles: [...SMOOTH_HANDLES],
-        connectedRight: true,
-        type: 'bezier' as const,
-      })),
-    },
-  };
-}
-
-function booleanTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => boolean) {
-  return {
-    trackId: debugName,
-    path: encodedPath(path),
-    data: {
-      type: 'BasicKeyframedTrack',
-      __debugName: debugName,
-      keyframes: Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
-        id: `${debugName}-${slideId}`,
-        value: readValue(SHOTS[slideId]),
-        position,
-        handles: [...HOLD_HANDLES],
-        connectedRight: false,
-        type: 'hold' as const,
-      })),
-    },
-  };
-}
-
-function numericCombinedTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => number) {
-  return {
-    trackId: debugName,
-    path: encodedPath(path),
-    data: {
-      type: 'BasicKeyframedTrack',
-      __debugName: debugName,
-      keyframes: [
-        ...Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
-          id: `${debugName}-${slideId}`,
-          value: readValue(SHOTS[slideId]),
-          position,
-          handles: [...SMOOTH_HANDLES],
-          connectedRight: true,
-          type: 'bezier' as const,
-        })),
-        ...Object.entries(THEATRE_TOUR_SEQUENCE_POSITIONS).map(([stopId, position]) => ({
-          id: `tour-${debugName}-${stopId}`,
-          value: readValue(TOUR_SHOTS[stopId]),
-          position,
-          handles: [...SMOOTH_HANDLES],
-          connectedRight: true,
-          type: 'bezier' as const,
-        })),
-      ],
-    },
-  };
-}
-
-function booleanCombinedTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => boolean) {
-  return {
-    trackId: debugName,
-    path: encodedPath(path),
-    data: {
-      type: 'BasicKeyframedTrack',
-      __debugName: debugName,
-      keyframes: [
-        ...Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
-          id: `${debugName}-${slideId}`,
-          value: readValue(SHOTS[slideId]),
-          position,
-          handles: [...HOLD_HANDLES],
-          connectedRight: false,
-          type: 'hold' as const,
-        })),
-        ...Object.entries(THEATRE_TOUR_SEQUENCE_POSITIONS).map(([stopId, position]) => ({
-          id: `tour-${debugName}-${stopId}`,
-          value: readValue(TOUR_SHOTS[stopId]),
-          position,
-          handles: [...HOLD_HANDLES],
-          connectedRight: false,
-          type: 'hold' as const,
-        })),
-      ],
-    },
-  };
-}
-
-const allTracks = [
-  numericCombinedTrack('offset.x', ['offset', 'x'], (shot) => shot.offset.x),
-  numericCombinedTrack('offset.y', ['offset', 'y'], (shot) => shot.offset.y),
-  numericCombinedTrack('offset.z', ['offset', 'z'], (shot) => shot.offset.z),
-  numericCombinedTrack('lookOffset.x', ['lookOffset', 'x'], (shot) => shot.lookOffset.x),
-  numericCombinedTrack('lookOffset.y', ['lookOffset', 'y'], (shot) => shot.lookOffset.y),
-  numericCombinedTrack('lookOffset.z', ['lookOffset', 'z'], (shot) => shot.lookOffset.z),
-  numericCombinedTrack('drift.x', ['drift', 'x'], (shot) => shot.drift.x),
-  numericCombinedTrack('drift.y', ['drift', 'y'], (shot) => shot.drift.y),
-  numericCombinedTrack('drift.z', ['drift', 'z'], (shot) => shot.drift.z),
-  numericCombinedTrack('mouseParallax.x', ['mouseParallax', 'x'], (shot) => shot.mouseParallax.x),
-  numericCombinedTrack('mouseParallax.y', ['mouseParallax', 'y'], (shot) => shot.mouseParallax.y),
-  numericCombinedTrack('mouseParallax.z', ['mouseParallax', 'z'], (shot) => shot.mouseParallax.z),
-  numericCombinedTrack('lerp', ['lerp'], (shot) => shot.lerp),
-  booleanCombinedTrack('flareVisible', ['flareVisible'], (shot) => shot.flareVisible),
-];
-
-export const THEATRE_CAMERA_PROJECT_STATE = {
-  definitionVersion: '0.4.0',
-  revisionHistory: [],
-  sheetsById: {
-    'slide-camera': {
-      staticOverrides: {
-        byObject: {},
-      },
-      sequence: {
-        type: 'PositionalSequence',
-        length: 60,
-        subUnitsPerUnit: 30,
-        tracksByObject: {
-          'jupiter-camera': {
-            trackIdByPropPath: Object.fromEntries(allTracks.map((track) => [track.path, track.trackId])),
-            trackData: Object.fromEntries(allTracks.map((track) => [track.trackId, track.data])),
-          },
-        },
-      },
-    },
-  },
-} as unknown as __UNSTABLE_Project_OnDiskState;
-</file>
-
 <file path="src/globals.d.ts">
 declare const GEMINI_API_KEY: string;
-</file>
-
-<file path="src/index.html">
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Jupiter - Spreekbeurt v1.0</title>
-    <base href="/" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="icon" type="image/x-icon" href="favicon.ico" />
-  </head>
-  <body>
-    <app-root></app-root>
-  </body>
-</html>
 </file>
 
 <file path="src/main.server.ts">
@@ -1302,6 +497,377 @@ export const serverRoutes: ServerRoute[] = [
 ];
 </file>
 
+<file path="src/app/physics-manager.ts">
+import * as THREE from 'three';
+import RAPIER, {
+  type Collider,
+  ColliderDesc,
+  type RigidBody,
+  RigidBodyDesc,
+  type World,
+} from '@dimforge/rapier3d-compat';
+
+export type PhysicsBodyKind = 'dynamic' | 'kinematic' | 'fixed';
+export type PhysicsColliderKind = 'ball' | 'box' | 'capsule';
+
+export interface PhysicsBridgeOptions {
+  kind: PhysicsBodyKind;
+  collider: PhysicsColliderKind;
+  radius?: number;
+  halfExtents?: THREE.Vector3;
+  halfHeight?: number;
+  mass?: number;
+  linearDamping?: number;
+  angularDamping?: number;
+  ccd?: boolean;
+  canSleep?: boolean;
+  gravityScale?: number;
+}
+
+interface PhysicsBridge {
+  object: THREE.Object3D;
+  body: RigidBody;
+  collider: Collider;
+  kind: PhysicsBodyKind;
+  prevPosition: THREE.Vector3;
+  prevQuaternion: THREE.Quaternion;
+}
+
+export class PhysicsManager {
+  readonly scale = 100;
+
+  private world!: World;
+  private readonly fixedTimestep = 1 / 60;
+  private accumulator = 0;
+  private lastStepTime = 0;
+  private initialized = false;
+  private readonly bridges = new Map<THREE.Object3D, PhysicsBridge>();
+  private playerObject: THREE.Object3D | null = null;
+
+  // Pre-allocated vectors for per-frame gravity calculations
+  private readonly _gravBodyPos = new THREE.Vector3();
+  private readonly _gravTotalForce = new THREE.Vector3();
+  private readonly _gravDirection = new THREE.Vector3();
+
+  async initialize(): Promise<void> {
+    if (this.initialized) return;
+    await RAPIER.init();
+    this.world = new RAPIER.World({ x: 0, y: 0, z: 0 });
+    this.world.timestep = this.fixedTimestep;
+    this.initialized = true;
+  }
+
+  bridge(object: THREE.Object3D, options: PhysicsBridgeOptions): RigidBody {
+    if (!this.initialized) {
+      throw new Error('PhysicsManager must be initialized before bridging objects.');
+    }
+
+    const position = object.position;
+    const rotation = object.quaternion;
+    let desc = this.createRigidBodyDesc(options.kind);
+    desc = desc
+      .setTranslation(position.x / this.scale, position.y / this.scale, position.z / this.scale)
+      .setRotation({ x: rotation.x, y: rotation.y, z: rotation.z, w: rotation.w })
+      .setGravityScale(options.gravityScale ?? 0)
+      .setLinearDamping(options.linearDamping ?? 0.15)
+      .setAngularDamping(options.angularDamping ?? 0.4)
+      .setCanSleep(options.canSleep ?? options.kind !== 'dynamic');
+
+    if (options.mass && options.kind === 'dynamic') {
+      desc = desc.setAdditionalMass(options.mass);
+    }
+
+    if (options.ccd) {
+      desc = desc.setCcdEnabled(true);
+    }
+
+    const body = this.world.createRigidBody(desc);
+    const colliderDesc = this.createColliderDesc(options);
+    const collider = this.world.createCollider(colliderDesc, body);
+
+    this.bridges.set(object, {
+      object, body, collider, kind: options.kind,
+      prevPosition: object.position.clone(),
+      prevQuaternion: object.quaternion.clone(),
+    });
+    this.syncObjectFromBody(object, body);
+    return body;
+  }
+
+  has(object: THREE.Object3D): boolean {
+    return this.bridges.has(object);
+  }
+
+  setPlayerObject(object: THREE.Object3D): void {
+    this.playerObject = object;
+  }
+
+  getPlayerPosition(): THREE.Vector3 | null {
+    if (!this.playerObject) return null;
+    return this.getObjectPosition(this.playerObject);
+  }
+
+  getObjectPosition(object: THREE.Object3D, target?: THREE.Vector3): THREE.Vector3 {
+    const out = target ?? new THREE.Vector3();
+    const bridge = this.bridges.get(object);
+    if (!bridge) {
+      return out.copy(object.position);
+    }
+
+    const translation = bridge.body.translation();
+    return out.set(
+      translation.x * this.scale,
+      translation.y * this.scale,
+      translation.z * this.scale,
+    );
+  }
+
+  getLinearVelocity(object: THREE.Object3D, target?: THREE.Vector3): THREE.Vector3 {
+    const out = target ?? new THREE.Vector3();
+    const bridge = this.bridges.get(object);
+    if (!bridge) return out.set(0, 0, 0);
+    const velocity = bridge.body.linvel();
+    return out.set(
+      velocity.x * this.scale,
+      velocity.y * this.scale,
+      velocity.z * this.scale,
+    );
+  }
+
+  setTranslation(object: THREE.Object3D, position: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) {
+      object.position.copy(position);
+      return;
+    }
+
+    bridge.body.setTranslation({
+      x: position.x / this.scale,
+      y: position.y / this.scale,
+      z: position.z / this.scale,
+    }, wakeUp);
+    object.position.copy(position);
+  }
+
+  setLinvel(object: THREE.Object3D, velocity: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) return;
+    bridge.body.setLinvel({
+      x: velocity.x / this.scale,
+      y: velocity.y / this.scale,
+      z: velocity.z / this.scale,
+    }, wakeUp);
+  }
+
+  setKinematicTarget(object: THREE.Object3D, position: THREE.Vector3, quaternion?: THREE.Quaternion): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) {
+      object.position.copy(position);
+      if (quaternion) object.quaternion.copy(quaternion);
+      return;
+    }
+
+    if (bridge.kind !== 'kinematic') {
+      this.setTranslation(object, position, true);
+      if (quaternion) {
+        bridge.body.setRotation(quaternion, true);
+      }
+      return;
+    }
+
+    bridge.body.setNextKinematicTranslation({
+      x: position.x / this.scale,
+      y: position.y / this.scale,
+      z: position.z / this.scale,
+    });
+
+    if (quaternion) {
+      bridge.body.setNextKinematicRotation({
+        x: quaternion.x,
+        y: quaternion.y,
+        z: quaternion.z,
+        w: quaternion.w,
+      });
+    }
+
+    object.position.copy(position);
+    if (quaternion) object.quaternion.copy(quaternion);
+  }
+
+  applyImpulse(object: THREE.Object3D, impulse: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) return;
+    bridge.body.applyImpulse({
+      x: impulse.x / this.scale,
+      y: impulse.y / this.scale,
+      z: impulse.z / this.scale,
+    }, wakeUp);
+  }
+
+  applyForce(object: THREE.Object3D, force: THREE.Vector3, wakeUp = true): void {
+    const bridge = this.bridges.get(object);
+    if (!bridge) return;
+    bridge.body.addForce({
+      x: force.x / this.scale,
+      y: force.y / this.scale,
+      z: force.z / this.scale,
+    }, wakeUp);
+  }
+
+  applyInverseSquareGravity(
+    object: THREE.Object3D,
+    sources: Array<{ position: THREE.Vector3; mass: number }>,
+    gravitationalConstant: number,
+  ): void {
+    const bridge = this.bridges.get(object);
+    if (bridge?.kind !== 'dynamic') return;
+
+    const bodyPosition = this.getObjectPosition(object, this._gravBodyPos);
+    const bodyMass = Math.max(bridge.body.mass(), 0.0001);
+    this._gravTotalForce.set(0, 0, 0);
+
+    for (const source of sources) {
+      this._gravDirection.subVectors(source.position, bodyPosition);
+      const distanceSq = Math.max(this._gravDirection.lengthSq(), 16);
+      this._gravDirection.normalize();
+      const forceMagnitude = gravitationalConstant * source.mass * bodyMass / distanceSq;
+      this._gravTotalForce.addScaledVector(this._gravDirection, forceMagnitude);
+    }
+
+    this.applyForce(object, this._gravTotalForce, true);
+  }
+
+  step(elapsedSeconds: number): void {
+    if (!this.initialized) return;
+
+    if (this.lastStepTime === 0) {
+      this.lastStepTime = elapsedSeconds;
+    }
+
+    const frameDelta = Math.min(elapsedSeconds - this.lastStepTime, 1 / 15);
+    this.lastStepTime = elapsedSeconds;
+    this.accumulator += Math.max(frameDelta, 0);
+
+    while (this.accumulator >= this.fixedTimestep) {
+      // Store pre-step positions for interpolation
+      for (const bridge of this.bridges.values()) {
+        const t = bridge.body.translation();
+        const r = bridge.body.rotation();
+        bridge.prevPosition.set(t.x * this.scale, t.y * this.scale, t.z * this.scale);
+        bridge.prevQuaternion.set(r.x, r.y, r.z, r.w);
+      }
+      this.world.step();
+      this.accumulator -= this.fixedTimestep;
+    }
+
+    // Interpolate visual positions: alpha = leftover fraction toward next physics frame
+    const alpha = this.accumulator / this.fixedTimestep;
+    this.interpolateAllObjects(alpha);
+  }
+
+  shiftWorld(shiftInThreeUnits: THREE.Vector3): void {
+    if (!this.initialized) return;
+
+    for (const bridge of this.bridges.values()) {
+      const position = this.getObjectPosition(bridge.object).sub(shiftInThreeUnits);
+      bridge.body.setTranslation({
+        x: position.x / this.scale,
+        y: position.y / this.scale,
+        z: position.z / this.scale,
+      }, false);
+      this.syncObjectFromBody(bridge.object, bridge.body);
+    }
+  }
+
+  dispose(): void {
+    this.bridges.clear();
+    this.playerObject = null;
+  }
+
+  private syncAllObjectsFromBodies(): void {
+    for (const bridge of this.bridges.values()) {
+      this.syncObjectFromBody(bridge.object, bridge.body);
+    }
+  }
+
+  private interpolateAllObjects(alpha: number): void {
+    for (const bridge of this.bridges.values()) {
+      const t = bridge.body.translation();
+      const r = bridge.body.rotation();
+      // Lerp position between previous and current physics state
+      bridge.object.position.set(
+        bridge.prevPosition.x + (t.x * this.scale - bridge.prevPosition.x) * alpha,
+        bridge.prevPosition.y + (t.y * this.scale - bridge.prevPosition.y) * alpha,
+        bridge.prevPosition.z + (t.z * this.scale - bridge.prevPosition.z) * alpha,
+      );
+      // Slerp quaternion
+      bridge.object.quaternion.set(bridge.prevQuaternion.x, bridge.prevQuaternion.y, bridge.prevQuaternion.z, bridge.prevQuaternion.w);
+      bridge.object.quaternion.slerp(new THREE.Quaternion(r.x, r.y, r.z, r.w), alpha);
+    }
+  }
+
+  private syncObjectFromBody(object: THREE.Object3D, body: RigidBody): void {
+    const translation = body.translation();
+    const rotation = body.rotation();
+    object.position.set(
+      translation.x * this.scale,
+      translation.y * this.scale,
+      translation.z * this.scale,
+    );
+    object.quaternion.set(rotation.x, rotation.y, rotation.z, rotation.w);
+  }
+
+  private createRigidBodyDesc(kind: PhysicsBodyKind): RigidBodyDesc {
+    switch (kind) {
+      case 'dynamic':
+        return RigidBodyDesc.dynamic();
+      case 'kinematic':
+        return RigidBodyDesc.kinematicPositionBased();
+      default:
+        return RigidBodyDesc.fixed();
+    }
+  }
+
+  private createColliderDesc(options: PhysicsBridgeOptions): ColliderDesc {
+    switch (options.collider) {
+      case 'ball': {
+        const radius = (options.radius ?? 1) / this.scale;
+        return ColliderDesc.ball(radius);
+      }
+      case 'capsule': {
+        const radius = (options.radius ?? 0.5) / this.scale;
+        const halfHeight = (options.halfHeight ?? 0.5) / this.scale;
+        return ColliderDesc.capsule(halfHeight, radius);
+      }
+      default: {
+        const halfExtents = options.halfExtents ?? new THREE.Vector3(0.5, 0.5, 0.5);
+        return ColliderDesc.cuboid(
+          halfExtents.x / this.scale,
+          halfExtents.y / this.scale,
+          halfExtents.z / this.scale,
+        );
+      }
+    }
+  }
+}
+</file>
+
+<file path="src/index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Jupiter - Spreekbeurt v1.0</title>
+    <base href="/" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" type="image/x-icon" href="favicon.ico" />
+  </head>
+  <body>
+    <app-root></app-root>
+  </body>
+</html>
+</file>
+
 <file path="src/server.ts">
 import {
   AngularNodeAppEngine,
@@ -1563,6 +1129,501 @@ body {
 }
 </file>
 
+<file path="src/app/post-process-manager.ts">
+import * as THREE from 'three';
+import {
+  BlendFunction,
+  BloomEffect,
+  ChromaticAberrationEffect,
+  DepthOfFieldEffect,
+  EffectComposer,
+  EffectPass,
+  GodRaysEffect,
+  KernelSize,
+  RenderPass,
+  SMAAEffect,
+  SMAAPreset,
+  VignetteEffect,
+} from 'postprocessing';
+
+export class PostProcessManager {
+  private readonly composer: EffectComposer;
+  private readonly bloomEffect: BloomEffect;
+  private readonly renderPass: RenderPass;
+  private readonly effectPass: EffectPass;
+  private readonly godRaysEffect: GodRaysEffect | null;
+  private readonly chromaticAberrationEffect: ChromaticAberrationEffect;
+  private readonly dofEffect: DepthOfFieldEffect;
+
+  constructor(
+    renderer: THREE.WebGLRenderer,
+    scene: THREE.Scene,
+    camera: THREE.PerspectiveCamera,
+    lightSource?: THREE.Mesh | THREE.Points,
+  ) {
+    this.composer = new EffectComposer(renderer, {
+      frameBufferType: THREE.HalfFloatType,
+    });
+
+    this.renderPass = new RenderPass(scene, camera);
+
+    // Bloom tuned for cinematic space — picks up bright star spikes and hero stars
+    this.bloomEffect = new BloomEffect({
+      blendFunction: BlendFunction.SCREEN,
+      intensity: 1.6,
+      luminanceThreshold: 0.78,
+      luminanceSmoothing: 0.18,
+      mipmapBlur: true,
+      radius: 0.92,
+    });
+
+    this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
+      blendFunction: BlendFunction.SCREEN,
+      samples: 32,
+      density: 0.84,
+      decay: 0.95,
+      weight: 0.22,
+      exposure: 0.22,
+      clampMax: 1,
+      kernelSize: KernelSize.LARGE,
+      blur: true,
+    }) : null;
+
+    const vignette = new VignetteEffect({
+      eskil: false,
+      darkness: 0.38,
+      offset: 0.22,
+    });
+
+    const chromaticAberration = new ChromaticAberrationEffect({
+      offset: new THREE.Vector2(0.0006, 0.0006),
+      radialModulation: true,
+      modulationOffset: 0.3,
+    });
+    this.chromaticAberrationEffect = chromaticAberration;
+
+    // Cinematic Depth of Field — subtle background softening only
+    this.dofEffect = new DepthOfFieldEffect(camera, {
+      focusDistance: 0.0,
+      focalLength: 0.01,
+      bokehScale: 0.5,
+    });
+
+    // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)
+    const smaaEffect = new SMAAEffect({ preset: SMAAPreset.ULTRA });
+
+    const effects = this.godRaysEffect
+      ? [this.bloomEffect, this.godRaysEffect, this.dofEffect, smaaEffect, vignette]
+      : [this.bloomEffect, this.dofEffect, smaaEffect, vignette];
+
+    this.effectPass = new EffectPass(camera, ...effects);
+
+    // ChromaticAberration is a convolution effect — it must live in its own pass
+    const chromaPass = new EffectPass(camera, chromaticAberration);
+    chromaPass.renderToScreen = true;
+
+    this.composer.addPass(this.renderPass);
+    this.composer.addPass(this.effectPass);
+    this.composer.addPass(chromaPass);
+  }
+
+  setBloomIntensity(intensity: number): void {
+    this.bloomEffect.intensity = intensity;
+  }
+
+  getBloomIntensity(): number {
+    return this.bloomEffect.intensity;
+  }
+
+  setDofFocusDistance(distance: number): void {
+    this.dofEffect.cocMaterial.uniforms['focusDistance'].value = distance;
+  }
+
+  setChromaticAberrationOffset(x: number, y: number): void {
+    this.chromaticAberrationEffect.offset = new THREE.Vector2(x, y);
+  }
+
+  render(deltaTime: number): void {
+    this.composer.render(deltaTime);
+  }
+
+  setSize(width: number, height: number): void {
+    this.composer.setSize(width, height);
+  }
+
+  dispose(): void {
+    this.composer.dispose();
+  }
+}
+</file>
+
+<file path="src/app/theatre-camera.state.ts">
+import type { __UNSTABLE_Project_OnDiskState } from '@theatre/core';
+
+type CameraShot = {
+  offset: { x: number; y: number; z: number };
+  lookOffset: { x: number; y: number; z: number };
+  drift: { x: number; y: number; z: number };
+  mouseParallax: { x: number; y: number; z: number };
+  lerp: number;
+  flareVisible: boolean;
+};
+
+export const THEATRE_SLIDE_SEQUENCE_POSITIONS = {
+  title: 0,
+  inhoud: 1,
+  h1: 2,
+  h2: 3,
+  h3: 4,
+  h4: 5,
+  h5: 6,
+  extra: 7,
+  quiz: 8,
+  afsluiting: 9,
+} as const;
+
+export const THEATRE_TOUR_SEQUENCE_POSITIONS = {
+  jupiter: 20,
+  zon: 24,
+  mercurius: 28,
+  venus: 32,
+  aarde: 36,
+  maan: 38,
+  mars: 40,
+  saturnus: 44,
+  uranus: 48,
+  neptunus: 52,
+  pluto: 56,
+  'jupiter-einde': 60,
+} as const;
+
+const DEFAULT_MOUSE_PARALLAX = { x: 3, y: 3, z: 0 };
+const SMOOTH_HANDLES = [0.5, 1, 0.5, 0] as const;
+const HOLD_HANDLES = [0.5, 1, 0.5, 0] as const;
+
+const SHOTS: Record<keyof typeof THEATRE_SLIDE_SEQUENCE_POSITIONS, CameraShot> = {
+  title: {
+    offset: { x: -7, y: 8, z: 52 },
+    lookOffset: { x: 0, y: 1, z: 0 },
+    drift: { x: 0, y: -0.002, z: -0.008 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.015,
+    flareVisible: true,
+  },
+  inhoud: {
+    offset: { x: 28, y: 14, z: 34 },
+    lookOffset: { x: 0, y: 1.4, z: 0 },
+    drift: { x: -0.009, y: 0, z: -0.004 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.025,
+    flareVisible: true,
+  },
+  h1: {
+    offset: { x: -16, y: 3.2, z: 18 },
+    lookOffset: { x: -1.1, y: 0.5, z: -0.3 },
+    drift: { x: 0.0025, y: 0, z: -0.0025 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.03,
+    flareVisible: false,
+  },
+  h2: {
+    offset: { x: -3.5, y: -3.2, z: 5.4 },
+    lookOffset: { x: 0.6, y: -2.5, z: -8.8 },
+    drift: { x: -0.001, y: 0.002, z: 0 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.02,
+    flareVisible: false,
+  },
+  h3: {
+    offset: { x: -18, y: 20, z: 55 },
+    lookOffset: { x: -12, y: -2, z: 0 },
+    drift: { x: 0.005, y: -0.002, z: 0 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.02,
+    flareVisible: true,
+  },
+  h4: {
+    offset: { x: -22, y: -8, z: 16 },
+    lookOffset: { x: 2, y: 0, z: 0 },
+    drift: { x: 0.015, y: 0.004, z: -0.003 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.018,
+    flareVisible: false,
+  },
+  h5: {
+    offset: { x: -2, y: -18, z: 13 },
+    lookOffset: { x: 0, y: 6, z: -1 },
+    drift: { x: -0.002, y: 0.006, z: 0 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.025,
+    flareVisible: false,
+  },
+  extra: {
+    offset: { x: 5, y: 38, z: 22 },
+    lookOffset: { x: 0, y: 0, z: -2 },
+    drift: { x: -0.008, y: 0, z: 0.005 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.02,
+    flareVisible: true,
+  },
+  quiz: {
+    offset: { x: -2, y: 2, z: 17 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.01, y: 0, z: -0.008 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.04,
+    flareVisible: true,
+  },
+  afsluiting: {
+    offset: { x: -5, y: 5, z: 38 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0, y: 0.002, z: 0.005 },
+    mouseParallax: DEFAULT_MOUSE_PARALLAX,
+    lerp: 0.015,
+    flareVisible: true,
+  },
+};
+
+const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraShot> = {
+  jupiter: {
+    offset: { x: -22, y: 6, z: 19 },
+    lookOffset: { x: 0, y: 0.5, z: 0 },
+    drift: { x: 0.002, y: 0.0006, z: -0.0015 },
+    mouseParallax: { x: 0.8, y: 0.8, z: 0 },
+    lerp: 0.02,
+    flareVisible: false,
+  },
+  zon: {
+    offset: { x: 22, y: 7, z: 16 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.002, y: 0.0008, z: 0.001 },
+    mouseParallax: { x: 0.6, y: 0.6, z: 0 },
+    lerp: 0.022,
+    flareVisible: true,
+  },
+  mercurius: {
+    offset: { x: 2.0, y: 0.8, z: 1.6 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.0008, y: 0.0004, z: 0.0008 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.026,
+    flareVisible: true,
+  },
+  venus: {
+    offset: { x: 3.0, y: 1.2, z: 2.8 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.001, y: 0.0004, z: -0.0007 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.026,
+    flareVisible: true,
+  },
+  aarde: {
+    offset: { x: 2.8, y: 1.4, z: 3.0 },
+    lookOffset: { x: 0.1, y: 0.3, z: 0.1 },
+    drift: { x: 0.0012, y: 0.0003, z: -0.0008 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.028,
+    flareVisible: true,
+  },
+  maan: {
+    offset: { x: 0.15, y: 0.06, z: 0.35 },
+    lookOffset: { x: 0.02, y: -0.02, z: 0 },
+    drift: { x: 0.0003, y: 0.0001, z: -0.0002 },
+    mouseParallax: { x: 0.05, y: 0.05, z: 0 },
+    lerp: 0.035,
+    flareVisible: false,
+  },
+  mars: {
+    offset: { x: 2.4, y: 1.2, z: 2.2 },
+    lookOffset: { x: 0.1, y: 0.3, z: 0.1 },
+    drift: { x: 0.0009, y: 0.0002, z: -0.0008 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.028,
+    flareVisible: true,
+  },
+  saturnus: {
+    offset: { x: -28, y: 13, z: 23 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.0024, y: 0.0008, z: -0.0015 },
+    mouseParallax: { x: 0.75, y: 0.75, z: 0 },
+    lerp: 0.021,
+    flareVisible: true,
+  },
+  uranus: {
+    offset: { x: -12, y: 4.5, z: 11 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.0014, y: 0.0003, z: -0.001 },
+    mouseParallax: { x: 0.5, y: 0.5, z: 0 },
+    lerp: 0.022,
+    flareVisible: true,
+  },
+  neptunus: {
+    offset: { x: 12, y: 4.2, z: 11 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: -0.0014, y: 0.0004, z: 0.001 },
+    mouseParallax: { x: 0.5, y: 0.5, z: 0 },
+    lerp: 0.022,
+    flareVisible: true,
+  },
+  pluto: {
+    offset: { x: 2.0, y: 0.9, z: 2.0 },
+    lookOffset: { x: 0, y: 0, z: 0 },
+    drift: { x: 0.0011, y: 0.0005, z: -0.0007 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.026,
+    flareVisible: true,
+  },
+  'jupiter-einde': {
+    offset: { x: 8, y: 10, z: 58 },
+    lookOffset: { x: 0, y: 0.5, z: 0 },
+    drift: { x: -0.0012, y: 0.0007, z: 0.0022 },
+    mouseParallax: { x: 0.9, y: 0.9, z: 0 },
+    lerp: 0.017,
+    flareVisible: true,
+  },
+};
+
+function encodedPath(path: string[]): string {
+  return JSON.stringify(path);
+}
+
+function numericTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => number) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+        id: `${debugName}-${slideId}`,
+        value: readValue(SHOTS[slideId]),
+        position,
+        handles: [...SMOOTH_HANDLES],
+        connectedRight: true,
+        type: 'bezier' as const,
+      })),
+    },
+  };
+}
+
+function booleanTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => boolean) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+        id: `${debugName}-${slideId}`,
+        value: readValue(SHOTS[slideId]),
+        position,
+        handles: [...HOLD_HANDLES],
+        connectedRight: false,
+        type: 'hold' as const,
+      })),
+    },
+  };
+}
+
+function numericCombinedTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => number) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: [
+        ...Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+          id: `${debugName}-${slideId}`,
+          value: readValue(SHOTS[slideId]),
+          position,
+          handles: [...SMOOTH_HANDLES],
+          connectedRight: true,
+          type: 'bezier' as const,
+        })),
+        ...Object.entries(THEATRE_TOUR_SEQUENCE_POSITIONS).map(([stopId, position]) => ({
+          id: `tour-${debugName}-${stopId}`,
+          value: readValue(TOUR_SHOTS[stopId]),
+          position,
+          handles: [...SMOOTH_HANDLES],
+          connectedRight: true,
+          type: 'bezier' as const,
+        })),
+      ],
+    },
+  };
+}
+
+function booleanCombinedTrack(debugName: string, path: string[], readValue: (shot: CameraShot) => boolean) {
+  return {
+    trackId: debugName,
+    path: encodedPath(path),
+    data: {
+      type: 'BasicKeyframedTrack',
+      __debugName: debugName,
+      keyframes: [
+        ...Object.entries(THEATRE_SLIDE_SEQUENCE_POSITIONS).map(([slideId, position]) => ({
+          id: `${debugName}-${slideId}`,
+          value: readValue(SHOTS[slideId]),
+          position,
+          handles: [...HOLD_HANDLES],
+          connectedRight: false,
+          type: 'hold' as const,
+        })),
+        ...Object.entries(THEATRE_TOUR_SEQUENCE_POSITIONS).map(([stopId, position]) => ({
+          id: `tour-${debugName}-${stopId}`,
+          value: readValue(TOUR_SHOTS[stopId]),
+          position,
+          handles: [...HOLD_HANDLES],
+          connectedRight: false,
+          type: 'hold' as const,
+        })),
+      ],
+    },
+  };
+}
+
+const allTracks = [
+  numericCombinedTrack('offset.x', ['offset', 'x'], (shot) => shot.offset.x),
+  numericCombinedTrack('offset.y', ['offset', 'y'], (shot) => shot.offset.y),
+  numericCombinedTrack('offset.z', ['offset', 'z'], (shot) => shot.offset.z),
+  numericCombinedTrack('lookOffset.x', ['lookOffset', 'x'], (shot) => shot.lookOffset.x),
+  numericCombinedTrack('lookOffset.y', ['lookOffset', 'y'], (shot) => shot.lookOffset.y),
+  numericCombinedTrack('lookOffset.z', ['lookOffset', 'z'], (shot) => shot.lookOffset.z),
+  numericCombinedTrack('drift.x', ['drift', 'x'], (shot) => shot.drift.x),
+  numericCombinedTrack('drift.y', ['drift', 'y'], (shot) => shot.drift.y),
+  numericCombinedTrack('drift.z', ['drift', 'z'], (shot) => shot.drift.z),
+  numericCombinedTrack('mouseParallax.x', ['mouseParallax', 'x'], (shot) => shot.mouseParallax.x),
+  numericCombinedTrack('mouseParallax.y', ['mouseParallax', 'y'], (shot) => shot.mouseParallax.y),
+  numericCombinedTrack('mouseParallax.z', ['mouseParallax', 'z'], (shot) => shot.mouseParallax.z),
+  numericCombinedTrack('lerp', ['lerp'], (shot) => shot.lerp),
+  booleanCombinedTrack('flareVisible', ['flareVisible'], (shot) => shot.flareVisible),
+];
+
+export const THEATRE_CAMERA_PROJECT_STATE = {
+  definitionVersion: '0.4.0',
+  revisionHistory: [],
+  sheetsById: {
+    'slide-camera': {
+      staticOverrides: {
+        byObject: {},
+      },
+      sequence: {
+        type: 'PositionalSequence',
+        length: 60,
+        subUnitsPerUnit: 30,
+        tracksByObject: {
+          'jupiter-camera': {
+            trackIdByPropPath: Object.fromEntries(allTracks.map((track) => [track.path, track.trackId])),
+            trackData: Object.fromEntries(allTracks.map((track) => [track.trackId, track.data])),
+          },
+        },
+      },
+    },
+  },
+} as unknown as __UNSTABLE_Project_OnDiskState;
+</file>
+
 <file path="docker-compose.yml">
 services:
   app:
@@ -1605,6 +1666,7 @@ FROM node:22-alpine AS build
 WORKDIR /app
 
 COPY package.json package-lock.json* ./
+COPY scripts/ ./scripts/
 RUN npm ci
 
 COPY . .
@@ -1623,6 +1685,7 @@ COPY --from=build /app/dist/app ./dist/app
 
 # Only install production dependencies
 COPY package.json package-lock.json* ./
+COPY scripts/ ./scripts/
 RUN npm ci --omit=dev && npm cache clean --force
 
 # Don't run as root
@@ -1817,8 +1880,8 @@ export const SLIDES: Slide[] = [
 </file>
 
 <file path="src/app/app.ts">
-import { ChangeDetectionStrategy, Component, HostListener, signal, computed, effect, ViewChild, ElementRef, AfterViewInit, PLATFORM_ID, inject } from '@angular/core';
-import { isPlatformBrowser } from '@angular/common';
+import { ChangeDetectionStrategy, Component, HostListener, signal, computed, effect, ViewChild, ElementRef, AfterViewInit, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
+import { isPlatformBrowser, DecimalPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
 import { Background3DComponent } from './background-3d.component';
 import { SLIDES } from './slides.data';
@@ -1827,7 +1890,7 @@ import { animate, stagger, cubicBezier } from 'motion';
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-root',
-  imports: [Background3DComponent, MatIconModule],
+  imports: [Background3DComponent, MatIconModule, DecimalPipe],
   template: `
     <!-- Background audio for entire presentation -->
     <audio #bgAudio [src]="bgAudioSrc" loop preload="auto" class="hidden"></audio>
@@ -1857,9 +1920,67 @@ import { animate, stagger, cubicBezier } from 'motion';
       (loaded)="onSceneLoaded()"
       (distanceKm)="onDistanceUpdate($event)"
       (tourPlanet)="onTourPlanet($event)"
+      (telemetry)="telemetry.set($event)"
+      (loadProgress)="loadingProgress.set($event)"
       class="transition-opacity duration-[2000ms] ease-in-out"
       [class.opacity-0]="videoRevealed()">
     </app-background-3d>
+
+    <!-- SpaceX Telemetry HUD (Only visible during launch) -->
+    @if (telemetry()) {
+      <div class="fixed top-8 left-8 z-[25] pointer-events-none animate-fade-in flex flex-col gap-4">
+        <!-- Status Badge -->
+        <div class="bg-black/60 border border-white/20 backdrop-blur-md px-4 py-2 rounded-sm flex items-center gap-3">
+          <div class="w-3 h-3 rounded-full animate-pulse"
+               [class.bg-red-500]="telemetry()!.phase === 'MAX-Q'"
+               [class.bg-yellow-500]="telemetry()!.phase === 'COAST'"
+               [class.bg-green-500]="telemetry()!.phase === 'HOVERSLAM' || telemetry()!.phase === 'ENTRY BURN'">
+          </div>
+          <span class="font-mono text-sm tracking-widest text-white/90">FALCON 9 • {{ telemetry()!.phase }}</span>
+        </div>
+
+        <!-- Data Readouts -->
+        <div class="flex gap-4">
+          <div class="bg-black/40 border border-white/10 backdrop-blur-md p-4 rounded-sm min-w-[140px]">
+            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">ALTITUDE</div>
+            <div class="font-mono text-3xl text-white">{{ telemetry()!.altitude | number }} <span class="text-sm text-white/50">KM</span></div>
+          </div>
+          <div class="bg-black/40 border border-white/10 backdrop-blur-md p-4 rounded-sm min-w-[140px]">
+            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">VELOCITY</div>
+            <div class="font-mono text-3xl text-white">{{ telemetry()!.speed | number }} <span class="text-sm text-white/50">KM/H</span></div>
+          </div>
+        </div>
+      </div>
+    }
+
+    <!-- Apollo 11 Nav Display (Only visible during Moon tour stop) -->
+    @if (tourMode() && tourCurrentPlanet() === 'maan') {
+      <div class="fixed top-8 right-8 z-[25] pointer-events-none animate-fade-in">
+        <div class="bg-black/70 border border-amber-500/30 backdrop-blur-md p-5 rounded-sm font-mono min-w-[220px]">
+          <div class="text-[10px] text-amber-400/60 tracking-[0.3em] mb-3">NAVIGATION • APOLLO 11</div>
+          <div class="border-t border-amber-500/20 pt-3 space-y-3">
+            <div>
+              <div class="text-[9px] text-amber-400/50 tracking-widest">LANDING SITE</div>
+              <div class="text-amber-400/90 text-sm mt-0.5">TRANQUILITY BASE</div>
+            </div>
+            <div class="flex gap-6">
+              <div>
+                <div class="text-[9px] text-amber-400/50 tracking-widest">LAT</div>
+                <div class="text-amber-400 text-lg tabular-nums">0.67416°N</div>
+              </div>
+              <div>
+                <div class="text-[9px] text-amber-400/50 tracking-widest">LON</div>
+                <div class="text-amber-400 text-lg tabular-nums">23.47314°E</div>
+              </div>
+            </div>
+            <div class="border-t border-amber-500/15 pt-2">
+              <div class="text-[9px] text-amber-400/50 tracking-widest">MARE TRANQUILLITATIS</div>
+              <div class="text-amber-400/70 text-[11px] mt-1">20 JULI 1969 • 20:17 UTC</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
 
     <div class="relative z-10 w-full h-screen overflow-hidden flex flex-col items-center justify-center pointer-events-none">
       
@@ -1892,11 +2013,13 @@ import { animate, stagger, cubicBezier } from 'motion';
                   <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">Klik om te beginnen</span>
                 </button>
               } @else {
-                <div class="mt-12 flex flex-col items-center gap-4">
-                  <div class="w-28 h-28 rounded-full bg-white/5 border-2 border-white/20 flex items-center justify-center">
-                    <div class="w-10 h-10 border-3 border-[var(--color-starwars-yellow)]/40 border-t-[var(--color-starwars-yellow)] rounded-full animate-spin"></div>
+                <div class="mt-12 flex flex-col items-center gap-4 w-64 mx-auto">
+                  <div class="text-xs font-mono tracking-[0.3em] text-[var(--color-starwars-yellow)]/70">INITIALIZING SYSTEMS</div>
+                  <div class="w-full h-1 bg-white/10 rounded-full overflow-hidden">
+                    <div class="h-full bg-[var(--color-starwars-yellow)] transition-all duration-300 ease-out shadow-[0_0_10px_rgba(255,232,31,0.5)]"
+                         [style.width.%]="loadingProgress()"></div>
                   </div>
-                  <span class="text-xl opacity-50">Laden...</span>
+                  <span class="text-xs font-mono text-white/50">{{ loadingProgress() | number:'1.0-0' }}%</span>
                 </div>
               }
             } @else if (currentSlide().id === 'title' && hasStarted()) {
@@ -2417,7 +2540,7 @@ import { animate, stagger, cubicBezier } from 'motion';
     }
   `]
 })
-export class App implements AfterViewInit {
+export class App implements AfterViewInit, OnDestroy {
   slides = SLIDES;
   nameChars = [...'Asbjørn Oost'];
   currentIndex = signal(0);
@@ -2430,6 +2553,8 @@ export class App implements AfterViewInit {
   isMuted = signal(false);
   selectedQuizOption = signal(-1);
   sceneLoaded = signal(false);
+  telemetry = signal<{altitude: number, speed: number, phase: string} | null>(null);
+  loadingProgress = signal<number>(0);
   currentDistance = signal(0);
   celebrationActive = signal(false);
   tourMode = signal(false);
@@ -2441,8 +2566,12 @@ export class App implements AfterViewInit {
   lightTravelAU = computed(() => (this.currentDistance() * 1_000_000 / 149_597_870.7).toFixed(2));
   private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
   private bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
+  private bgMusicVolumeRafId: number | null = null;
   private isBrowser: boolean;
   private platformId = inject(PLATFORM_ID);
+  private audioCtx: AudioContext | null = null;
+  private falconAudioPlaying = false;
+  private moonAudioPlayed = false;
 
   currentSlide = computed(() => this.slides[this.currentIndex()]);
   totalSlides = computed(() => this.slides.length);
@@ -2524,6 +2653,14 @@ export class App implements AfterViewInit {
     }
   }
 
+  ngOnDestroy() {
+    if (this.bgMusicVolumeTween) clearInterval(this.bgMusicVolumeTween);
+    if (this.bgMusicVolumeRafId) cancelAnimationFrame(this.bgMusicVolumeRafId);
+    if (this.videoRevealTimer) clearTimeout(this.videoRevealTimer);
+    if (this.tourTimer) clearTimeout(this.tourTimer);
+    if (this.celebrationAnimId) cancelAnimationFrame(this.celebrationAnimId);
+  }
+
   onSceneLoaded() {
     this.sceneLoaded.set(true);
   }
@@ -2534,6 +2671,28 @@ export class App implements AfterViewInit {
 
   onTourPlanet(planetName: string) {
     this.tourCurrentPlanet.set(planetName);
+    // Audio Easter eggs
+    if (planetName === 'maan' && !this.moonAudioPlayed && !this.isMuted()) {
+      this.moonAudioPlayed = true;
+      this.fadeBgMusicTo(0.08);
+      // Brief radio static burst for "Contact light" moment
+      setTimeout(() => this.playRadioVoice('Contact light.', 0.35), 1000);
+      // Real NASA recording: "That's one small step for a man..."
+      setTimeout(() => this.playNasaClip('one_small_step.mp3', 0.7), 4000);
+      // Restore music after the quotes
+      setTimeout(() => this.fadeBgMusicTo(0.3), 14000);
+    }
+    if (planetName !== 'maan') {
+      this.moonAudioPlayed = false;
+    }
+    // Falcon launch rumble when arriving at Earth (Falcon launches 1.5s after)
+    if (planetName === 'aarde' && !this.falconAudioPlaying && !this.isMuted()) {
+      this.falconAudioPlaying = true;
+      setTimeout(() => {
+        this.playRocketRumble(16);
+        setTimeout(() => { this.falconAudioPlaying = false; }, 18000);
+      }, 1500);
+    }
   }
 
   // Planet facts for the tour — each planet has 4 stat cards (value + label + sub)
@@ -2576,6 +2735,13 @@ export class App implements AfterViewInit {
         { value: '1', label: 'MAAN', sub: 'Luna, onze trouwe maan' },
         { value: '24u', label: 'EEN DAG', sub: 'aardse dag' },
         { value: '🚀', label: 'FALCON 9', sub: 'nu op weg naar Mars!' },
+      ]},
+    'maan': { title: 'De Maan', icon: '🌙', color: 'rgba(200,200,190,0.90)',
+      stats: [
+        { value: '0.674°N', label: 'BREEDTEGRAAD', sub: 'Tranquility Base' },
+        { value: '23.473°E', label: 'LENGTEGRAAD', sub: 'Mare Tranquillitatis' },
+        { value: '1969', label: 'APOLLO 11', sub: '20 juli — maanlanding' },
+        { value: '∅ wind', label: 'VOETSPOREN', sub: 'voor altijd in het stof' },
       ]},
     'mars': { title: 'Mars', icon: '🔴', color: 'rgba(230,100,60,0.92)',
       stats: [
@@ -2835,17 +3001,181 @@ export class App implements AfterViewInit {
   private fadeBgMusicTo(target: number) {
     const audio = this.bgAudio?.nativeElement;
     if (!audio || this.isMuted()) return;
-    if (this.bgMusicVolumeTween) clearInterval(this.bgMusicVolumeTween);
-    this.bgMusicVolumeTween = setInterval(() => {
+    if (this.bgMusicVolumeRafId) cancelAnimationFrame(this.bgMusicVolumeRafId);
+    const step = () => {
+      if (!audio || document.hidden) {
+        // Pause fading when tab is hidden to avoid glitches
+        this.bgMusicVolumeRafId = requestAnimationFrame(step);
+        return;
+      }
       const diff = target - audio.volume;
       if (Math.abs(diff) < 0.01) {
         audio.volume = target;
-        clearInterval(this.bgMusicVolumeTween!);
-        this.bgMusicVolumeTween = null;
-      } else {
-        audio.volume += diff * 0.15;
+        this.bgMusicVolumeRafId = null;
+        return;
       }
-    }, 50);
+      audio.volume += diff * 0.08;
+      this.bgMusicVolumeRafId = requestAnimationFrame(step);
+    };
+    this.bgMusicVolumeRafId = requestAnimationFrame(step);
+  }
+
+  /** Play a voice line through radio static (Web Audio + Speech Synthesis) */
+  private playRadioVoice(text: string, volume: number) {
+    if (!this.isBrowser) return;
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    const ctx = this.audioCtx;
+
+    // Radio static noise bed
+    const noiseDuration = text.length * 0.08 + 2;
+    const sampleRate = ctx.sampleRate;
+    const noiseBuffer = ctx.createBuffer(1, sampleRate * noiseDuration, sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) {
+      noiseData[i] = (Math.random() * 2 - 1) * 0.15;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    // Bandpass filter to make it sound like radio static
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = 2000;
+    bandpass.Q.value = 0.7;
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = volume * 0.3;
+
+    noiseSource.connect(bandpass);
+    bandpass.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noiseSource.start();
+    noiseSource.stop(ctx.currentTime + noiseDuration);
+
+    // Fade the static out at the end
+    noiseGain.gain.setValueAtTime(volume * 0.3, ctx.currentTime + noiseDuration - 0.8);
+    noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + noiseDuration);
+
+    // Speech synthesis for the voice line
+    if ('speechSynthesis' in window) {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 0.85;
+      utter.pitch = 0.9;
+      utter.volume = volume;
+      // Prefer an English voice
+      const voices = speechSynthesis.getVoices();
+      const enVoice = voices.find(v => v.lang.startsWith('en'));
+      if (enVoice) utter.voice = enVoice;
+      speechSynthesis.speak(utter);
+    }
+  }
+
+  /** Play a real NASA audio clip with radio-static overlay */
+  private async playNasaClip(url: string, volume: number) {
+    if (!this.isBrowser) return;
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    const ctx = this.audioCtx;
+
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+      // Play NASA audio — no extra filter, the original already has the radio quality
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = volume;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      source.start();
+
+      // Overlay radio static noise
+      const noiseDuration = audioBuffer.duration + 1;
+      const sampleRate = ctx.sampleRate;
+      const noiseBuffer = ctx.createBuffer(1, sampleRate * noiseDuration, sampleRate);
+      const noiseData = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < noiseData.length; i++) {
+        noiseData[i] = (Math.random() * 2 - 1) * 0.12;
+      }
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = noiseBuffer;
+      const noiseBandpass = ctx.createBiquadFilter();
+      noiseBandpass.type = 'bandpass';
+      noiseBandpass.frequency.value = 2000;
+      noiseBandpass.Q.value = 0.7;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.value = volume * 0.15;
+      noiseSource.connect(noiseBandpass);
+      noiseBandpass.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noiseSource.start();
+      noiseSource.stop(ctx.currentTime + noiseDuration);
+      noiseGain.gain.setValueAtTime(volume * 0.15, ctx.currentTime + noiseDuration - 0.8);
+      noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + noiseDuration);
+    } catch (e) {
+      console.warn('NASA audio clip failed to load', e);
+    }
+  }
+
+  /** Procedural rocket launch rumble using Web Audio API */
+  private playRocketRumble(durationSec: number) {
+    if (!this.isBrowser) return;
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    const ctx = this.audioCtx;
+
+    // Low-frequency rumble from filtered noise
+    const sampleRate = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, sampleRate * durationSec, sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1);
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buf;
+
+    // Low-pass filter for deep rumble
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 120;
+    lowpass.Q.value = 1.5;
+
+    // Volume envelope: ramp up, sustain, fade out
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 2);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime + durationSec - 4);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + durationSec);
+
+    // Add a mid-frequency crackle layer
+    const midBuf = ctx.createBuffer(1, sampleRate * durationSec, sampleRate);
+    const midData = midBuf.getChannelData(0);
+    for (let i = 0; i < midData.length; i++) {
+      midData[i] = (Math.random() * 2 - 1) * (Math.random() > 0.7 ? 1 : 0.3);
+    }
+    const midSource = ctx.createBufferSource();
+    midSource.buffer = midBuf;
+    const midFilter = ctx.createBiquadFilter();
+    midFilter.type = 'bandpass';
+    midFilter.frequency.value = 400;
+    midFilter.Q.value = 2;
+    const midGain = ctx.createGain();
+    midGain.gain.setValueAtTime(0, ctx.currentTime);
+    midGain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 1.5);
+    midGain.gain.setValueAtTime(0.1, ctx.currentTime + durationSec - 4);
+    midGain.gain.linearRampToValueAtTime(0, ctx.currentTime + durationSec);
+
+    source.connect(lowpass);
+    lowpass.connect(gain);
+    gain.connect(ctx.destination);
+    source.start();
+    source.stop(ctx.currentTime + durationSec);
+
+    midSource.connect(midFilter);
+    midFilter.connect(midGain);
+    midGain.connect(ctx.destination);
+    midSource.start();
+    midSource.stop(ctx.currentTime + durationSec);
   }
 
   private meteorEdgeX(W: number) { return Math.random() > 0.5 ? -20 : W + 20; }
@@ -3077,6 +3407,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   @Input() tourMode = false;
   @Output() loaded = new EventEmitter<void>();
   @Output() tourPlanet = new EventEmitter<string>();
+  @Output() telemetry = new EventEmitter<{altitude: number, speed: number, phase: string} | null>();
+  @Output() loadProgress = new EventEmitter<number>();
   @ViewChild('canvasContainer', { static: true }) canvasContainer!: ElementRef<HTMLDivElement>;
 
   private scene!: THREE.Scene;
@@ -3091,6 +3423,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // 95 Moons: 4 Galilean + 91 small moons
   private readonly galileanMoons: { mesh: THREE.Mesh, distance: number, speed: number, angle: number }[] = [];
   private smallMoons!: THREE.InstancedMesh;
+  private smallMoonTimeUniform = { value: 0 };
   private readonly smallMoonsData: { distance: number, speed: number, angle: number, inclination: number }[] = [];
   
   private stars!: THREE.Points;
@@ -3100,12 +3433,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private lastRenderTime = 0;
   private readonly isBrowser: boolean;
   private readonly startTime = Date.now();
+  private prefersReducedMotion = false;
+  private tabHidden = false;
   private readonly floatingOriginThreshold = 10_000;
   private readonly projectionMatrix = new THREE.Matrix4();
   private readonly frustum = new THREE.Frustum();
+  private readonly tempSphere = new THREE.Sphere();
   private readonly frustumCullTargets: Array<{ object: THREE.Object3D; radius: number }> = [];
   private readonly resizeHandler = () => this.onWindowResize();
   private readonly mouseMoveHandler = (event: MouseEvent) => this.onMouseMove(event);
+  private readonly visibilityHandler = () => this.onVisibilityChange();
   
   // Camera transition targets
   private targetCameraX = 0;
@@ -3167,6 +3504,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     orbitAngle: number;
     orbitY: number;
     orbitInclination: number;
+    trail: THREE.Line | null;
+    trailLength: number;
   }[] = [];
   private targetShipSpeedMultiplier = 1;
   private currentShipSpeedMultiplier = 1;
@@ -3179,6 +3518,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Earth's Moon (Luna) orbiting Earth
   private moonMesh!: THREE.Mesh;
   private moonOrbitAngle = 0;
+  private tranquilityGroup!: THREE.Group; // Apollo 11 landing site artifacts
 
   // Titan — Saturn's largest moon
   private titanMesh!: THREE.Mesh;
@@ -3186,6 +3526,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Pluto — dwarf planet beyond Neptune
   private plutoMesh!: THREE.Mesh;
+
+  // Starman — Tesla Roadster drifting in heliocentric orbit (easter egg)
+  private starmanGroup!: THREE.Group;
+  private starmanOrbitAngle = 0.5; // Start in front of Earth relative to default camera
 
   // Distance beam between Earth and Jupiter
   private distanceBeam!: THREE.Group;
@@ -3231,6 +3575,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Sun with corona
   private sunMesh!: THREE.Mesh;
   private sunFlare!: THREE.Mesh;
+  private sunLight!: THREE.DirectionalLight;
 
   // Jupiter night-side lightning
   private readonly lightningFlashes: { mesh: THREE.Mesh, timer: number, cooldown: number }[] = [];
@@ -3302,6 +3647,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // SpaceX Falcon 9 rocket launch
   private falconGroup!: THREE.Group;
   private falconExhaust!: THREE.Mesh;
+  private falconLegs: THREE.Group[] = [];
   private falconLaunched = false;
   private falconLaunchTime = 0;
   private falconHyperspaceTriggered = false;
@@ -3369,6 +3715,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.earthMesh.position.set(-8, 2, -5);
       this.tourStops.push({ name: 'aarde' });
     }
+    if (this.moonMesh) {
+      this.tourStops.push({ name: 'maan' });
+    }
     if (this.marsMesh) {
       this.tourStops.push({ name: 'mars' });
     }
@@ -3398,6 +3747,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private updatePlanetTour(time: number) {
     if (!this.tourActive || this.tourStops.length === 0) return;
+
+    // Freeze tour progression while Falcon is in flight so the landing stays on-screen
+    if (this.falconLaunched) {
+      this.tourStopTime = time - this.TOUR_STOP_DURATION; // Hold the clock
+      return;
+    }
 
     const elapsed = time - this.tourStopTime;
     const stop = this.tourStops[this.tourStopIndex];
@@ -3523,6 +3878,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       });
       globalThis.addEventListener('resize', this.resizeHandler);
       globalThis.addEventListener('mousemove', this.mouseMoveHandler);
+      document.addEventListener('visibilitychange', this.visibilityHandler);
+      this.prefersReducedMotion = globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
     }
   }
 
@@ -3533,6 +3890,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
       globalThis.removeEventListener('resize', this.resizeHandler);
       globalThis.removeEventListener('mousemove', this.mouseMoveHandler);
+      document.removeEventListener('visibilitychange', this.visibilityHandler);
       if (this.renderer) {
         this.renderer.dispose();
       }
@@ -3553,9 +3911,19 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.mouseY = -(event.clientY / window.innerHeight) * 2 + 1;
   }
 
-  /** Generates a high-fidelity 4K procedural Jupiter texture with Perlin-noise bands */
+  private onVisibilityChange() {
+    if (document.hidden) {
+      this.tabHidden = true;
+    } else {
+      // Reset time tracking so we don't get a massive delta spike
+      this.lastRenderTime = (Date.now() - this.startTime) * 0.001;
+      this.tabHidden = false;
+    }
+  }
+
+  /** Generates a procedural Jupiter placeholder texture (low-res — real 8K texture replaces it) */
   private generateJupiterTexture(): THREE.CanvasTexture {
-    const W = 4096, H = 2048;
+    const W = 2048, H = 1024;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d')!;
@@ -3776,8 +4144,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMappingExposure = 0.85;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -3804,7 +4173,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     // Milky Way skybox — immersive backdrop sphere
-    const skyGeo = new THREE.SphereGeometry(500, 32, 32);
+    const skyGeo = new THREE.SphereGeometry(500, 64, 64);
     const skyMat = new THREE.MeshBasicMaterial({
       color: 0x111122,
       side: THREE.BackSide,
@@ -3812,12 +4181,24 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false
     });
     this.scene.add(new THREE.Mesh(skyGeo, skyMat));
+    // Shared loading manager for progress tracking
+    const loadingManager = new THREE.LoadingManager();
+    loadingManager.onProgress = (_url, itemsLoaded, itemsTotal) => {
+      const pct = (itemsLoaded / itemsTotal) * 100;
+      this.ngZone.run(() => this.loadProgress.emit(pct));
+      if ((globalThis as Record<string, unknown>)['__loadPct__'] !== undefined) {
+        (globalThis as Record<string, unknown>)['__loadPct__'] = pct;
+      }
+    };
+    loadingManager.onError = (url) => {
+      console.warn('Failed to load:', url);
+    };
     // Load milky way texture onto skybox
-    this.textureLoader = new THREE.TextureLoader();
+    this.textureLoader = new THREE.TextureLoader(loadingManager);
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('8k_stars_milky_way.jpg', (tex) => {
+      this.textureLoader.load('8k_stars_milky_way.webp', (tex) => {
         skyMat.map = tex;
-        skyMat.color.setHex(0x222233); // muted blue-grey — natural deep-space tint
+        skyMat.color.setHex(0x18182a); // deep space with visible Milky Way band
         skyMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -3840,36 +4221,35 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
     this.scene.add(fgDust);
 
-    // Stars - Multi-colored with size variation and twinkle
+    // Stars — realistic magnitude distribution with spectral-class colors
+    // Bright stars are rare but have visible halos+spikes; faint stars are crisp pinpoints
     const starsGeometry = new THREE.BufferGeometry();
-    const starsVertices = [];
-    const starsColors = [];
-    const starsSizes = [];
-    // Spectral-class star colors (Hertzsprung-Russell diagram)
-    // O/B type: blue-white, A type: white, F type: yellow-white,
-    // G type: yellow (Sun), K type: orange, M type: red-orange
+    const starsVertices: number[] = [];
+    const starsColors: number[] = [];
+    const starsSizes: number[] = [];
+    // Spectral-class colors (Hertzsprung-Russell): hot blue → cold red
     const starColorPalette = [
-      [0.65, 0.75, 1.0],   // O/B — hot blue-white (rare, bright)
-      [0.82, 0.87, 1.0],   // A — white-blue (Sirius, Vega)
-      [1.0, 0.98, 0.95],   // F — warm white
-      [1.0, 0.94, 0.8],    // G — yellow-white (Sun-like)
-      [1.0, 0.82, 0.62],   // K — orange (most common visible)
-      [1.0, 0.7, 0.5],     // M — red-orange (faint)
+      [0.62, 0.72, 1.0],   // O/B — hot blue-white (rare, very bright)
+      [0.80, 0.87, 1.0],   // A — blue-white (Sirius, Vega)
+      [1.0, 0.97, 0.94],   // F — warm white
+      [1.0, 0.93, 0.78],   // G — yellow-white (Sun-like)
+      [1.0, 0.80, 0.60],   // K — orange
+      [1.0, 0.68, 0.45],   // M — red-orange (faintest)
     ];
-    // Weighted distribution: M>K>G>F>A>O (realistic stellar population)
-    const starWeights = [0.03, 0.08, 0.15, 0.22, 0.30, 0.22];
+    const starWeights = [0.02, 0.06, 0.12, 0.20, 0.32, 0.28];
     const pickStarColor = () => {
       let r = Math.random();
       for (let i = 0; i < starWeights.length; i++) {
         r -= starWeights[i];
         if (r <= 0) return starColorPalette[i];
       }
-      return starColorPalette[4]; // fallback K-type
+      return starColorPalette[4];
     };
 
-    for (let i = 0; i < 100000; i++) {
-      // Spherical distribution — no visible cube edges from any angle
-      const r = 50 + Math.pow(Math.random(), 0.5) * 1950;
+    const STAR_COUNT = 150000;
+    for (let i = 0; i < STAR_COUNT; i++) {
+      // Spherical distribution
+      const r = 80 + Math.pow(Math.random(), 0.5) * 1920;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       starsVertices.push(
@@ -3879,7 +4259,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       );
       const color = pickStarColor();
       starsColors.push(color[0], color[1], color[2]);
-      starsSizes.push(Math.random() * 2.5 + 0.5);
+      // Realistic magnitude distribution: power-law with extended bright tail
+      const mag = Math.random();
+      let sz: number;
+      if (mag < 0.65) sz = 0.2 + Math.random() * 0.6;        // Faint pinpoints
+      else if (mag < 0.88) sz = 0.8 + Math.random() * 1.8;   // Moderate
+      else if (mag < 0.96) sz = 2.5 + Math.random() * 3.5;   // Bright — halo visible
+      else if (mag < 0.993) sz = 6.0 + Math.random() * 5.0;  // Very bright — full spikes
+      else sz = 11.0 + Math.random() * 7.0;                   // Hero stars — dramatic spikes
+      starsSizes.push(sz);
     }
 
     starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
@@ -3893,40 +4281,83 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         attribute vec3 color;
         varying vec3 vColor;
         varying float vSize;
+        varying float vTwinkle;
         uniform float uTime;
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          // Subtle atmospheric scintillation (twinkling)
-          float twinkle = sin(uTime * 1.8 + position.x * 0.12 + position.y * 0.17) * 0.25 + 0.75;
+          // Multi-frequency scintillation — 3 incommensurate sine waves
+          float phase = color.r * 127.1 + color.g * 311.7 + position.x * 0.013;
+          float t1 = sin(uTime * 1.1 + phase) * 0.12;
+          float t2 = sin(uTime * 2.7 + phase * 1.37) * 0.08;
+          float t3 = sin(uTime * 0.4 + phase * 0.71) * 0.06;
+          float twinkle = 0.74 + t1 + t2 + t3;
+          vTwinkle = twinkle;
           float sz = aSize * twinkle * (300.0 / -mvPosition.z);
           vSize = sz;
-          gl_PointSize = sz;
+          gl_PointSize = min(sz, 96.0);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
         varying float vSize;
+        varying float vTwinkle;
         void main() {
           vec2 uv = gl_PointCoord - vec2(0.5);
           float dist = length(uv);
           if (dist > 0.5) discard;
-          
-          // Soft Airy-disk-like falloff (realistic point-spread function)
-          float alpha = smoothstep(0.5, 0.0, dist);
-          float core = smoothstep(0.15, 0.0, dist);
-          
-          // Diffraction spikes for brighter stars (cross pattern)
+
+          // ──── Realistic multi-layer PSF ────
+          // 1. Tight Gaussian core (Airy disk center)
+          float core = exp(-dist * dist * 450.0);
+          // 2. First Airy ring — subtle ring around core for medium+ stars
+          float ringDist = abs(dist - 0.12);
+          float airyRing = exp(-ringDist * ringDist * 2000.0) * 0.15 * smoothstep(2.0, 6.0, vSize);
+          // 3. Soft exponential halo
+          float haloStrength = smoothstep(1.5, 6.0, vSize);
+          float halo = exp(-dist * 10.0) * 0.3 * haloStrength;
+          // 4. Wide outer glow for brightest stars
+          float outerGlow = exp(-dist * 4.5) * 0.1 * smoothstep(5.0, 12.0, vSize);
+
+          float luminance = core + airyRing + halo + outerGlow;
+
+          // ──── 6-point JWST-style diffraction spikes ────
           float spike = 0.0;
-          if (vSize > 3.0) {
-            float sx = smoothstep(0.08, 0.0, abs(uv.y)) * smoothstep(0.5, 0.1, abs(uv.x));
-            float sy = smoothstep(0.08, 0.0, abs(uv.x)) * smoothstep(0.5, 0.1, abs(uv.y));
-            spike = (sx + sy) * 0.4 * smoothstep(3.0, 6.0, vSize);
+          if (vSize > 2.0) {
+            float spikeStr = smoothstep(2.0, 12.0, vSize) * 0.45;
+            float radial = exp(-dist * 4.0);
+            // 6 spike arms at 60° intervals
+            for (int i = 0; i < 3; i++) {
+              float angle = float(i) * 1.0471975; // π/3 = 60°
+              float cs = cos(angle);
+              float sn = sin(angle);
+              // Project uv onto spike axis and perpendicular
+              float along = uv.x * cs + uv.y * sn;
+              float perp  = abs(-uv.x * sn + uv.y * cs);
+              float arm = exp(-perp * 55.0) * exp(-abs(along) * 3.5);
+              spike += arm;
+            }
+            spike *= spikeStr * radial;
           }
-          
-          vec3 finalColor = vColor + core * 0.6;
-          gl_FragColor = vec4(finalColor, clamp(alpha * 0.9 + spike, 0.0, 1.0));
+
+          // Chromatic fringing on spike tips (bright stars only)
+          float chromatic = 0.0;
+          vec3 fringeColor = vColor;
+          if (vSize > 5.0) {
+            float fringeStr = smoothstep(5.0, 14.0, vSize) * 0.25;
+            // Slight red shift at outer edges of spikes
+            float redShift = spike * (1.0 - core) * fringeStr;
+            fringeColor = vColor + vec3(redShift * 0.4, -redShift * 0.1, redShift * 0.3);
+          }
+
+          // White-hot core → spectral color gradient
+          vec3 finalColor = mix(fringeColor, vec3(1.0, 1.0, 0.98), core * 0.8 + airyRing * 0.3);
+          // Boost spike color slightly brighter
+          finalColor += spike * vec3(0.9, 0.85, 1.0) * 0.3;
+
+          float alpha = clamp(luminance + spike, 0.0, 1.0);
+          gl_FragColor = vec4(finalColor * (0.85 + vTwinkle * 0.2), alpha);
         }
       `,
       transparent: true,
@@ -3952,6 +4383,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       opacity: 0.25 
     });
     this.dustSystem = new THREE.Points(dustGeometry, dustMaterial);
+    this.dustSystem.frustumCulled = false;
     this.scene.add(this.dustSystem);
 
     // Deep-space nebula clouds
@@ -4028,7 +4460,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const fallbackTexture = this.generateJupiterTexture();
     fallbackTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     
-    const jupiterGeometry = new THREE.SphereGeometry(10, 256, 256);
+    const jupiterGeometry = new THREE.SphereGeometry(10, 128, 128);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
       roughness: 0.6,
@@ -4062,6 +4494,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     };
     
     this.jupiter = new THREE.Mesh(jupiterGeometry, jupiterMaterial);
+    this.jupiter.receiveShadow = true;
     this.jupiterGroup.add(this.jupiter);
 
     // Load high-res 8K Jupiter texture (Solar System Scope, CC BY 4.0)
@@ -4084,7 +4517,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         undefined,
         () => {
           // Fallback to NASA OPAL texture
-          textureLoader.load('20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg', (tex) => {
+          textureLoader.load('20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.webp', (tex) => {
             if ('SRGBColorSpace' in THREE) {
               tex.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
             }
@@ -4118,7 +4551,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Earth Texture from local 8K asset
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load(
-        '8k_earth_daymap.jpg',
+        '8k_earth_daymap.webp',
         (texture) => {
           if ('SRGBColorSpace' in THREE) {
             texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
@@ -4138,7 +4571,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
     // Earth normal map for surface relief
     this.loadPromises.push(new Promise<void>((resolve) => {
-      textureLoader.load('2k_earth_normal_map.jpg', (tex) => {
+      textureLoader.load('2k_earth_normal_map.webp', (tex) => {
         tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         earthMaterial.normalMap = tex;
@@ -4149,7 +4582,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
     // Earth specular map (oceans are shiny, land is rough)
     this.loadPromises.push(new Promise<void>((resolve) => {
-      textureLoader.load('2k_earth_specular_map.jpg', (tex) => {
+      textureLoader.load('2k_earth_specular_map.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         earthMaterial.metalnessMap = tex;
         earthMaterial.roughness = 0.65;
@@ -4167,7 +4600,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.earthCloudsMesh = new THREE.Mesh(earthCloudGeo, earthCloudMat);
     this.earthMesh.add(this.earthCloudsMesh);
     this.loadPromises.push(new Promise<void>((resolve) => {
-      textureLoader.load('2k_earth_clouds.jpg', (tex) => {
+      textureLoader.load('2k_earth_clouds.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         earthCloudMat.alphaMap = tex;
         earthCloudMat.map = tex;
@@ -4217,13 +4650,111 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.moonMesh.visible = false;
       this.scene.add(this.moonMesh);
       this.loadPromises.push(new Promise<void>((resolve) => {
-        textureLoader.load('8k_moon.jpg', (tex) => {
+        textureLoader.load('8k_moon.webp', (tex) => {
           tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           moonMat.map = tex; moonMat.color.setHex(0xffffff); moonMat.needsUpdate = true;
           resolve();
         }, undefined, () => resolve());
       }));
+
+      // ─── Apollo 11 "Tranquility Base" artifacts on the Moon surface ─────
+      this.tranquilityGroup = new THREE.Group();
+
+      // Lunar Module Descent Stage — gold-foil body on 4 legs
+      const lmBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.018, 0.012, 0.018),
+        new THREE.MeshStandardMaterial({ color: 0xccaa44, roughness: 0.4, metalness: 0.7 })
+      );
+      lmBody.position.y = 0.012;
+      this.tranquilityGroup.add(lmBody);
+      // LM platform / base plate (silver)
+      const lmBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.014, 0.003, 8),
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.3, metalness: 0.8 })
+      );
+      lmBase.position.y = 0.005;
+      this.tranquilityGroup.add(lmBase);
+      // 4 landing legs
+      const legMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.5, metalness: 0.6 });
+      for (let i = 0; i < 4; i++) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.001, 0.016, 4), legMat);
+        const angle = (i / 4) * Math.PI * 2;
+        leg.position.set(Math.cos(angle) * 0.013, 0.005, Math.sin(angle) * 0.013);
+        leg.rotation.z = Math.cos(angle) * 0.35;
+        leg.rotation.x = Math.sin(angle) * 0.35;
+        this.tranquilityGroup.add(leg);
+        // Foot pad
+        const pad = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.003, 0.003, 0.001, 6),
+          legMat
+        );
+        pad.position.set(Math.cos(angle) * 0.018, 0.001, Math.sin(angle) * 0.018);
+        this.tranquilityGroup.add(pad);
+      }
+
+      // Bootprint in the dust — iconic single print
+      const bootCanvas = document.createElement('canvas');
+      bootCanvas.width = 64; bootCanvas.height = 64;
+      const bCtx = bootCanvas.getContext('2d')!;
+      bCtx.fillStyle = '#000000';
+      bCtx.fillRect(0, 0, 64, 64);
+      // Tread pattern
+      bCtx.fillStyle = '#444444';
+      bCtx.beginPath();
+      bCtx.ellipse(32, 32, 12, 22, 0, 0, Math.PI * 2);
+      bCtx.fill();
+      bCtx.fillStyle = '#333333';
+      for (let i = 0; i < 8; i++) {
+        bCtx.fillRect(22, 14 + i * 5, 20, 2);
+      }
+      const bootTex = new THREE.CanvasTexture(bootCanvas);
+      const bootprint = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.006, 0.01),
+        new THREE.MeshStandardMaterial({
+          map: bootTex, transparent: true, roughness: 1.0, metalness: 0.0,
+          color: 0x888880,
+        })
+      );
+      bootprint.rotation.x = -Math.PI / 2;
+      bootprint.position.set(0.025, 0.0005, 0.01);
+      this.tranquilityGroup.add(bootprint);
+
+      // Fallen Apollo 11 flag — bleached white, lying on the surface
+      const flagPole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0005, 0.0005, 0.018, 4),
+        new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 })
+      );
+      flagPole.rotation.z = Math.PI / 2 - 0.15; // Fallen over, slight angle
+      flagPole.position.set(-0.02, 0.002, 0.015);
+      this.tranquilityGroup.add(flagPole);
+      // Flag cloth — white (bleached by UV radiation)
+      const flagCloth = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.012, 0.007),
+        new THREE.MeshStandardMaterial({
+          color: 0xeeeeee, roughness: 0.9, metalness: 0.0,
+          side: THREE.DoubleSide,
+        })
+      );
+      flagCloth.rotation.x = -Math.PI / 2 + 0.08; // Lying on ground, slight crumple
+      flagCloth.rotation.z = 0.1;
+      flagCloth.position.set(-0.028, 0.001, 0.015);
+      this.tranquilityGroup.add(flagCloth);
+
+      // Position on Moon surface — Sea of Tranquility is near the equator, center-right
+      // On a sphere of radius 0.28, place at ~(0.23°N, 23.5°E) normalized
+      const theta = 0.41; // longitude angle
+      const phi = 0.04;   // latitude angle (near equator)
+      const moonR = 0.28;
+      this.tranquilityGroup.position.set(
+        moonR * Math.cos(phi) * Math.sin(theta),
+        moonR * Math.sin(phi),
+        moonR * Math.cos(phi) * Math.cos(theta)
+      );
+      // Orient to face outward from Moon center
+      this.tranquilityGroup.lookAt(0, 0, 0);
+      this.tranquilityGroup.rotateY(Math.PI); // flip to face outward
+      this.moonMesh.add(this.tranquilityGroup);
 
     // Jupiter's Faint Ring System — discovered by Voyager 1 (1979)
     // Halo ring: 1.29-1.71 Rj, Main ring: 1.71-1.81 Rj, Gossamer rings: to 3.16 Rj
@@ -4287,18 +4818,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         vec3 sunDir = normalize(uSunDirection);
         float sunDot = dot(vNormalWorld, sunDir);
 
-        // Jupiter's visible "atmosphere" should read as a thin neutral limb haze,
-        // strongest near the sunlit edge and only slightly enhanced at the terminator.
+        // Day/night transition with Rayleigh scattering at the terminator
         float daySide = smoothstep(-0.05, 0.35, sunDot);
         float terminator = 1.0 - smoothstep(0.0, 0.16, abs(sunDot));
         float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 6.0);
         float baseHaze = pow(fresnel, 4.8);
         float pulse = mix(1.0, 1.04, uPulse * 0.15);
 
-        float alpha = baseHaze * (daySide * 0.2 + terminator * 0.35 + forwardScatter * 0.08) * pulse;
-        vec3 hazeColor = mix(vec3(0.92, 0.88, 0.8), vec3(0.98, 0.95, 0.86), daySide);
+        // Deep orange/red "sunset" band at the terminator edge (Rayleigh scattering through dense gas)
+        vec3 sunsetColor = vec3(1.0, 0.3, 0.05);
+        float sunsetIntensity = smoothstep(-0.05, 0.05, sunDot) * smoothstep(0.15, 0.0, sunDot);
+        vec3 dayColor = mix(vec3(0.92, 0.88, 0.8), vec3(0.98, 0.95, 0.86), daySide);
 
-        gl_FragColor = vec4(hazeColor, clamp(alpha, 0.0, 0.2));
+        // Blend nightside black → sunset orange → day color
+        vec3 finalAtmoColor = mix(vec3(0.0), sunsetColor, sunsetIntensity);
+        finalAtmoColor = mix(finalAtmoColor, dayColor, daySide);
+
+        float alpha = baseHaze * (daySide * 0.2 + terminator * 0.35 + sunsetIntensity * 0.4 + forwardScatter * 0.08) * pulse;
+
+        gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.25));
       }
     `;
 
@@ -4338,6 +4876,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const geo = new THREE.SphereGeometry(config.size, 32, 32);
       const mat = new THREE.MeshStandardMaterial({ color: config.color, roughness: 0.8, bumpScale: 0.05 });
       const mesh = new THREE.Mesh(geo, mat);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
       this.jupiterGroup.add(mesh);
       this.galileanMoons.push({ mesh, distance: config.distance, speed: config.speed, angle: Math.random() * Math.PI * 2 });
 
@@ -4353,63 +4893,86 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }));
     });
 
-    // The remaining 91 small moons (Total 95)
+    // The remaining 91 small moons (Total 95) — GPU-driven orbits via vertex shader
     const smallMoonGeo = new THREE.SphereGeometry(0.08, 8, 8);
     const smallMoonMat = new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.9 });
+    smallMoonMat.onBeforeCompile = (shader) => {
+      shader.uniforms['uTime'] = this.smallMoonTimeUniform;
+      shader.vertexShader = 'attribute float aOrbitRadius;\nattribute float aOrbitSpeed;\nattribute float aOrbitAngle;\nattribute float aOrbitInclination;\nuniform float uTime;\n' + shader.vertexShader;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `float currentAngle = aOrbitAngle + uTime * aOrbitSpeed;
+         float ca = cos(currentAngle);
+         float sa = sin(currentAngle);
+         float si = sin(aOrbitInclination);
+         float ci = cos(aOrbitInclination);
+         vec3 orbitOffset = vec3(aOrbitRadius * ca, aOrbitRadius * sa * si, aOrbitRadius * sa * ci);
+         vec3 transformed = position + orbitOffset;`
+      );
+    };
     this.smallMoons = new THREE.InstancedMesh(smallMoonGeo, smallMoonMat, 91);
+
+    const orbitRadii = new Float32Array(91);
+    const orbitSpeeds = new Float32Array(91);
+    const orbitAngles = new Float32Array(91);
+    const orbitInclinations = new Float32Array(91);
     
-    const dummy = new THREE.Object3D();
     for (let i = 0; i < 91; i++) {
-      // Inner moons (Metis, Adrastea, Amalthea, Thebe) orbit at 1.8-3.1 Rj = 18-31 scene units
-      // Irregular moons (Himalia group, retrograde groups) orbit much farther out
-      // We distribute: ~8 inner (12-17), rest spread from Callisto outward (40-90)
       const isInner = i < 8;
       const distance = isInner ? 12 + Math.random() * 5 : 40 + Math.random() * 50;
       const speed = (Math.random() * 0.005 + 0.001) * (Math.random() > 0.5 ? 1 : -1);
       const angle = Math.random() * Math.PI * 2;
-      // Inner moons have low inclination; irregular moons can be highly inclined or retrograde
       const inclination = isInner
-        ? (Math.random() - 0.5) * 0.1  // near-equatorial
-        : (Math.random() - 0.5) * Math.PI * 0.8; // Up to ~72° (some retrograde)
+        ? (Math.random() - 0.5) * 0.1
+        : (Math.random() - 0.5) * Math.PI * 0.8;
       
-      this.smallMoonsData.push({ distance, speed, angle, inclination });
-      
-      dummy.position.set(
-        distance * Math.cos(angle),
-        distance * Math.sin(angle) * Math.sin(inclination),
-        distance * Math.sin(angle) * Math.cos(inclination)
-      );
-      dummy.updateMatrix();
-      this.smallMoons.setMatrixAt(i, dummy.matrix);
+      orbitRadii[i] = distance;
+      orbitSpeeds[i] = speed;
+      orbitAngles[i] = angle;
+      orbitInclinations[i] = inclination;
     }
+    
+    smallMoonGeo.setAttribute('aOrbitRadius', new THREE.InstancedBufferAttribute(orbitRadii, 1));
+    smallMoonGeo.setAttribute('aOrbitSpeed', new THREE.InstancedBufferAttribute(orbitSpeeds, 1));
+    smallMoonGeo.setAttribute('aOrbitAngle', new THREE.InstancedBufferAttribute(orbitAngles, 1));
+    smallMoonGeo.setAttribute('aOrbitInclination', new THREE.InstancedBufferAttribute(orbitInclinations, 1));
+    
     this.jupiterGroup.add(this.smallMoons);
 
-    // Lighting — cinematic deep-space look with enough fill to read detail
-    const ambientLight = new THREE.AmbientLight(0x0a1018, 0.28);
+    // Lighting — dark deep-space: single harsh sun, minimal fill
+    const ambientLight = new THREE.AmbientLight(0x040608, 0.06);
     this.scene.add(ambientLight);
 
-    // Main sun light — warm white (≈5778 K blackbody)
-    const sunLight = new THREE.DirectionalLight(0xfff3dd, 3.8);
-    sunLight.position.set(-50, 10, 30);
-    sunLight.target = this.jupiterGroup;
-    this.scene.add(sunLight);
+    // Main sun light — the only significant light source, like real space
+    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 2.8);
+    this.sunLight.position.set(-25, 5, 5);
+    this.sunLight.target = this.jupiterGroup;
+    this.sunLight.castShadow = true;
+    this.sunLight.shadow.camera.top = 30;
+    this.sunLight.shadow.camera.bottom = -30;
+    this.sunLight.shadow.camera.left = -30;
+    this.sunLight.shadow.camera.right = 30;
+    this.sunLight.shadow.bias = -0.0005;
+    this.sunLight.shadow.mapSize.width = 2048;
+    this.sunLight.shadow.mapSize.height = 2048;
+    this.scene.add(this.sunLight);
 
-    // Cool fill from opposite side — keeps nightside detail without washing out contrast
-    const fillLight = new THREE.DirectionalLight(0x1e3050, 0.45);
+    // Faint cool fill — just enough to hint at nightside silhouettes
+    const fillLight = new THREE.DirectionalLight(0x060e1c, 0.08);
     fillLight.position.set(50, -10, -30);
     this.scene.add(fillLight);
 
-    // Rim / kick light — edge separation for planet silhouettes
-    const rimLight = new THREE.DirectionalLight(0x5577bb, 0.25);
+    // Minimal rim light — very faint edge separation
+    const rimLight = new THREE.DirectionalLight(0x223366, 0.05);
     rimLight.position.set(0, 30, -40);
     this.scene.add(rimLight);
 
-    // Warm backlight — subtle golden rim from below/behind for depth
-    const backLight = new THREE.DirectionalLight(0xffd4a0, 0.15);
+    // Near-zero backlight
+    const backLight = new THREE.DirectionalLight(0xffd4a0, 0.02);
     backLight.position.set(30, -20, -50);
     this.scene.add(backLight);
 
-    const hemiLight = new THREE.HemisphereLight(0x121828, 0x050308, 0.12);
+    const hemiLight = new THREE.HemisphereLight(0x040608, 0x020104, 0.03);
     this.scene.add(hemiLight);
 
     // Cinematic Anamorphic Lens Flare
@@ -4445,7 +5008,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       transparent: true
     });
     this.sunFlare = new THREE.Mesh(flareGeo, flareMat);
-    this.sunFlare.position.copy(sunLight.position);
+    this.sunFlare.position.copy(this.sunLight.position);
     this.scene.add(this.sunFlare);
 
     // Post-processing setup (Film Grain, Vignette, Bloom & Color Grading)
@@ -4471,8 +5034,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Soft cinematic vignette — wide falloff for natural look
           float vignette = smoothstep(1.1, 0.25, dist * 1.1);
           
-          // Very light film texture so bright highlights stay clean
-          float grain = (random(vUv * 420.0 + mod(uTime, 10.0)) - 0.5) * 0.008;
+          // Fine organic film grain (subtle, not distracting)
+          float grain = (random(vUv * 800.0 + mod(uTime, 10.0)) - 0.5) * 0.025;
           
           // Subtle anamorphic horizontal streak
           float streak = smoothstep(0.5, 0.0, abs(center.y)) * smoothstep(0.6, 0.3, abs(center.x)) * 0.012;
@@ -4486,7 +5049,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           overlayColor.b += dist * 0.035;
           
           overlayColor.rgb += grain;
-          overlayColor.a += abs(grain) * 0.08;
+          overlayColor.a += abs(grain) * 0.25;
           overlayColor.a = max(overlayColor.a - streak, 0.0);
           
           gl_FragColor = overlayColor;
@@ -4518,6 +5081,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // SpaceX Falcon 9 rocket (launches from Earth during tour)
     this.falconGroup = this.buildFalcon9();
     this.scene.add(this.falconGroup);
+
+    // Starman Easter Egg — Tesla Roadster drifting in solar orbit
+    this.createStarman();
 
     // Asteroid belt between Mars and Jupiter
     this.createAsteroidBelt();
@@ -4681,6 +5247,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         return this.venusMesh?.position ?? this.getSlideCameraAnchor();
       case 'aarde':
         return this.earthMesh?.position ?? this.getSlideCameraAnchor();
+      case 'maan':
+        return this.moonMesh?.position ?? this.getSlideCameraAnchor();
       case 'mars':
         return this.marsMesh?.position ?? this.getSlideCameraAnchor();
       case 'saturnus':
@@ -4724,25 +5292,45 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         // Disable OrbitControls when slide-driven camera is active to prevent fighting
         this.controls.enabled = false;
 
-        // Smooth sinusoidal drift (prevents unbounded accumulation)
+        // "Apollo" handheld camera feel — compound sine waves at prime frequencies
         const driftTime = (Date.now() - this.startTime) * 0.001 - this.slideStartTime;
-        this.cameraDriftX = Math.sin(driftTime * this.cameraDriftSpeedX * 8) * Math.abs(this.cameraDriftSpeedX) * 40;
-        this.cameraDriftY = Math.sin(driftTime * this.cameraDriftSpeedY * 8 + 1.2) * Math.abs(this.cameraDriftSpeedY) * 40;
-        this.cameraDriftZ = Math.sin(driftTime * this.cameraDriftSpeedZ * 8 + 2.4) * Math.abs(this.cameraDriftSpeedZ) * 40;
+        const t = driftTime * 0.5;
+        if (this.prefersReducedMotion) {
+          this.cameraDriftX = 0;
+          this.cameraDriftY = 0;
+          this.cameraDriftZ = 0;
+          this.camera.rotation.z = 0;
+        } else {
+          // Gentle slow drift — smooth sine waves, no high-frequency jitter
+          const breatheX = Math.sin(t * 0.23) + Math.sin(t * 0.61) * 0.4;
+          const breatheY = Math.cos(t * 0.29) + Math.sin(t * 0.73) * 0.35;
+          const breatheZ = Math.sin(t * 0.19) + Math.cos(t * 0.53) * 0.45;
 
-        const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
-        this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
-        this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
-        this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
+          this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 8;
+          this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 8;
+          this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 8;
 
-        this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
-        this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
-        this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
-        this.targetLookAt.set(
-          anchor.x + this.theatreCameraValues.lookOffset.x,
-          anchor.y + this.theatreCameraValues.lookOffset.y,
-          anchor.z + this.theatreCameraValues.lookOffset.z,
-        );
+          // Very subtle Z-axis roll — barely perceptible, smoothly interpolated
+          const targetRoll = breatheX * 0.002;
+          this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.02;
+        }
+
+        // When Falcon is in flight, let its camera tracking take priority
+        if (!this.falconLaunched) {
+          const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
+          this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
+          this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
+          this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
+
+          this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
+          this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
+          this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
+          this.targetLookAt.set(
+            anchor.x + this.theatreCameraValues.lookOffset.x,
+            anchor.y + this.theatreCameraValues.lookOffset.y,
+            anchor.z + this.theatreCameraValues.lookOffset.z,
+          );
+        }
 
         this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
         this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
@@ -4768,8 +5356,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
     }
   }
-
-  private updateMoons() {
+  private updateMoons(time: number) {
     this.galileanMoons.forEach(moon => {
       moon.angle += moon.speed * this.currentMoonSpeedMultiplier;
       moon.mesh.position.x = Math.cos(moon.angle) * moon.distance;
@@ -4777,21 +5364,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       moon.mesh.rotation.y += 0.01 * this.currentMoonSpeedMultiplier;
     });
 
-    if (this.smallMoons) {
-      const dummy = new THREE.Object3D();
-      for (let i = 0; i < 91; i++) {
-        const data = this.smallMoonsData[i];
-        data.angle += data.speed * this.currentMoonSpeedMultiplier;
-        dummy.position.set(
-          data.distance * Math.cos(data.angle),
-          data.distance * Math.sin(data.angle) * Math.sin(data.inclination),
-          data.distance * Math.sin(data.angle) * Math.cos(data.inclination)
-        );
-        dummy.updateMatrix();
-        this.smallMoons.setMatrixAt(i, dummy.matrix);
-      }
-      this.smallMoons.instanceMatrix.needsUpdate = true;
-    }
+    // Small moons orbit entirely on GPU — just update the time uniform
+    this.smallMoonTimeUniform.value = time * this.currentMoonSpeedMultiplier;
   }
 
   private updateStarsAndDust(time: number) {
@@ -4865,6 +5439,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         jupiterPos.z + cfg.radius * Math.sin(angle) * cosI
       );
       this.scene.add(group);
+
+      // Create ribbon trail — glowing line tracing the ship's flight path
+      const trailLength = 20;
+      const trailPositions = new Float32Array(trailLength * 3);
+      for (let i = 0; i < trailLength; i++) {
+        trailPositions[i * 3] = group.position.x;
+        trailPositions[i * 3 + 1] = group.position.y;
+        trailPositions[i * 3 + 2] = group.position.z;
+      }
+      const trailGeo = new THREE.BufferGeometry();
+      trailGeo.setAttribute('position', new THREE.BufferAttribute(trailPositions, 3));
+      const trailColor = cfg.type === 'tie' ? 0x4466ff : cfg.type === 'shuttle' ? 0x4488ff : 0xff5577;
+      const trailLine = new THREE.Line(trailGeo, new THREE.LineBasicMaterial({
+        color: trailColor, transparent: true, opacity: 0.25,
+        blending: THREE.AdditiveBlending
+      }));
+      trailLine.frustumCulled = false;
+      this.scene.add(trailLine);
+
       this.spaceshipData.push({
         group,
         orbitRadius: cfg.radius,
@@ -4872,6 +5465,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         orbitAngle: angle,
         orbitY: cfg.y,
         orbitInclination: cfg.incl,
+        trail: trailLine,
+        trailLength,
       });
     });
   }
@@ -4902,17 +5497,43 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       });
     }));
 
-    // Superlaser beam (cylinder, hidden by default) — overlaid on the model
-    const beamGeo = new THREE.CylinderGeometry(0.08, 0.3, 50, 8);
-    const beamMat = new THREE.MeshBasicMaterial({
-      color: 0x44ff44,
+    // Superlaser beam — originates from the concave dish (top-hemisphere)
+    // The beam geometry is a tapered cylinder; the pivot is at y=0 of the geometry
+    // so we translate the geometry so the base sits at the dish
+    const beamGeo = new THREE.CylinderGeometry(0.06, 0.25, 50, 12);
+    beamGeo.translate(0, 25, 0); // Shift so base at origin, tip at y=50
+    const beamMat = new THREE.ShaderMaterial({
+      uniforms: { uOpacity: { value: 0.0 } },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying vec2 vUv;
+        void main() {
+          // Core brightness fades along length, radial falloff for glow edge
+          float radial = 1.0 - abs(vUv.x - 0.5) * 2.0;
+          float along = 1.0 - vUv.y * 0.4;
+          float core = pow(radial, 3.0) * along;
+          float glow = pow(radial, 1.2) * along * 0.3;
+          vec3 col = mix(vec3(0.2, 1.0, 0.2), vec3(0.7, 1.0, 0.7), core);
+          float alpha = (core + glow) * uOpacity;
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
       transparent: true,
-      opacity: 0,
+      depthWrite: false,
       blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
     });
     this.superlaserBeam = new THREE.Mesh(beamGeo, beamMat);
-    this.superlaserBeam.position.set(0, 2.8, -2.8);
-    this.superlaserBeam.lookAt(0, 30, -30);
+    // Position at the concave dish — top of the sphere, slightly indented
+    this.superlaserBeam.position.set(0, 3.2, 0);
+    // Point outward from the dish (fire "up" in local space = away from planet center)
     this.superlaserBeam.visible = false;
     this.deathStarGroup.add(this.superlaserBeam);
 
@@ -4956,23 +5577,23 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     if (this.superlaserFiring) {
       const elapsed = time - this.superlaserTimer;
-      const mat = this.superlaserBeam.material as THREE.MeshBasicMaterial;
+      const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
       if (elapsed < 0.5) {
         // Charge-up: scale grows, opacity rises
         const t = elapsed / 0.5;
-        mat.opacity = t * 0.9;
+        mat.uniforms['uOpacity'].value = t * 0.9;
         this.superlaserBeam.scale.set(t, 1, t);
       } else if (elapsed < 1.8) {
         // Full fire: flicker
-        mat.opacity = 0.7 + Math.random() * 0.3;
+        mat.uniforms['uOpacity'].value = 0.7 + Math.random() * 0.3;
         this.superlaserBeam.scale.set(1, 1, 1);
       } else if (elapsed < 2.2) {
         // Fade out
         const t = 1 - (elapsed - 1.8) / 0.4;
-        mat.opacity = t * 0.9;
+        mat.uniforms['uOpacity'].value = t * 0.9;
         this.superlaserBeam.scale.set(t, 1, t);
       } else {
-        mat.opacity = 0;
+        mat.uniforms['uOpacity'].value = 0;
         this.superlaserBeam.visible = false;
         this.superlaserFiring = false;
       }
@@ -5255,7 +5876,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.originalFov = this.camera.fov;
   }
 
-  private updateHyperspace(deltaTime: number) {
+  private updateHyperspace(deltaTime: number, time: number) {
     if (!this.hyperspaceActive) return;
     this.hyperspaceTimer += deltaTime;
     const t = this.hyperspaceTimer / this.hyperspaceDuration;
@@ -5263,6 +5884,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Chromatic aberration: spike during warp, fade out
     const caBase = 0.0006;
     if (t < 0.2) {
+    if (this.prefersReducedMotion) return; // Skip warp for motion-sensitive users
       const caT = t / 0.2;
       this.postProcessManager?.setChromaticAberrationOffset(
         THREE.MathUtils.lerp(caBase, 0.012, caT),
@@ -5278,11 +5900,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       );
     }
 
-    // Camera shake — subtle during warp
+    // Camera shake — very subtle during warp, sine-based to avoid jitter
     if (t > 0.1 && t < 0.85) {
-      const shakeIntensity = t < 0.3 ? 0.15 : 0.06;
-      this.camera.position.x += (Math.random() - 0.5) * shakeIntensity;
-      this.camera.position.y += (Math.random() - 0.5) * shakeIntensity * 0.6;
+      const shakeIntensity = t < 0.3 ? 0.04 : 0.015;
+      const warpT = (time - this.falconLaunchTime) * 18;
+      this.camera.position.x += Math.sin(warpT) * shakeIntensity;
+      this.camera.position.y += Math.cos(warpT * 1.4) * shakeIntensity * 0.6;
     }
 
     if (t < 0.2) {
@@ -5627,34 +6250,41 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const sinI = Math.sin(ship.orbitInclination);
       const cosI = Math.cos(ship.orbitInclination);
 
-      const targetPosition = new THREE.Vector3(
+      // Pure math orbital position (no physics engine needed)
+      ship.group.position.set(
         jupiterPos.x + ship.orbitRadius * cosA,
         jupiterPos.y + ship.orbitY + ship.orbitRadius * sinA * sinI,
         jupiterPos.z + ship.orbitRadius * sinA * cosI
       );
 
-      const currentPosition = this.physicsManager.getObjectPosition(ship.group);
-      const steeringImpulse = targetPosition.sub(currentPosition).multiplyScalar(0.018);
-      this.physicsManager.applyImpulse(ship.group, steeringImpulse, true);
-      this.physicsManager.applyInverseSquareGravity(ship.group, this.getGravitySources(), 0.08);
-
-      const velocity = this.physicsManager.getLinearVelocity(ship.group);
-      if (velocity.lengthSq() > 0.0001) {
-        ship.group.lookAt(ship.group.position.clone().add(velocity));
-      } else {
-        const ahead = ship.orbitAngle + Math.sign(ship.orbitSpeed) * 0.1;
-        ship.group.lookAt(
+      // Look ahead along orbit path
+      const ahead = ship.orbitAngle + Math.sign(ship.orbitSpeed) * 0.1;
+      ship.group.lookAt(
         jupiterPos.x + ship.orbitRadius * Math.cos(ahead),
         jupiterPos.y + ship.orbitY + ship.orbitRadius * Math.sin(ahead) * sinI,
         jupiterPos.z + ship.orbitRadius * Math.sin(ahead) * cosI
-        );
+      );
+
+      // Update ribbon trail
+      if (ship.trail) {
+        // Shift history forward
+        const posArr = ship.trail.geometry.attributes['position'] as THREE.BufferAttribute;
+        for (let i = ship.trailLength - 1; i > 0; i--) {
+          posArr.setXYZ(i,
+            posArr.getX(i - 1),
+            posArr.getY(i - 1),
+            posArr.getZ(i - 1)
+          );
+        }
+        posArr.setXYZ(0, ship.group.position.x, ship.group.position.y, ship.group.position.z);
+        posArr.needsUpdate = true;
       }
     });
   }
 
   private createGalaxyEffects() {
-    // Milky Way band - dense concentration of stars in a tilted plane
-    const bandCount = 35000;
+    // Milky Way band — dense galactic-plane stars with varied depth and color
+    const bandCount = 55000;
     const bandGeo = new THREE.BufferGeometry();
     const bandPos = new Float32Array(bandCount * 3);
     const bandColors = new Float32Array(bandCount * 3);
@@ -5662,31 +6292,42 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     for (let i = 0; i < bandCount; i++) {
       const i3 = i * 3;
-      const r = 80 + Math.pow(Math.random(), 0.5) * 700;
+      const r = 80 + Math.pow(Math.random(), 0.4) * 800;
       const theta = Math.random() * Math.PI * 2;
-      const thickness = (Math.random() - 0.5) * 30 * Math.exp(-Math.random() * 3);
+      // Exponential thickness falloff for realistic thin-disk appearance
+      const thickness = (Math.random() - 0.5) * 25 * Math.exp(-Math.random() * 3.5);
 
       const x = r * Math.cos(theta);
       const y = thickness;
       const z = r * Math.sin(theta);
 
       // Tilt 25° and shift back
-      const cosT = 0.906; // cos(25°)
-      const sinT = 0.423; // sin(25°)
+      const cosT = 0.906;
+      const sinT = 0.423;
       bandPos[i3] = x;
       bandPos[i3 + 1] = y * cosT - z * sinT + 60;
       bandPos[i3 + 2] = y * sinT + z * cosT - 300;
 
-      const b = 0.3 + Math.random() * 0.7;
+      // Richer spectral color variation
+      const b = 0.35 + Math.random() * 0.65;
       const colorRoll = Math.random();
-      if (colorRoll < 0.4) {
-        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.95; bandColors[i3 + 2] = b * 0.85;
+      if (colorRoll < 0.3) {
+        // Warm white-yellow (G/K type)
+        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.92; bandColors[i3 + 2] = b * 0.78;
+      } else if (colorRoll < 0.55) {
+        // Cool blue-white (B/A type)
+        bandColors[i3] = b * 0.8; bandColors[i3 + 1] = b * 0.88; bandColors[i3 + 2] = b;
       } else if (colorRoll < 0.75) {
-        bandColors[i3] = b * 0.85; bandColors[i3 + 1] = b * 0.9; bandColors[i3 + 2] = b;
+        // Faint reddish (M type — most common)
+        bandColors[i3] = b * 0.95; bandColors[i3 + 1] = b * 0.7; bandColors[i3 + 2] = b * 0.6;
+      } else if (colorRoll < 0.9) {
+        // Pure white
+        bandColors[i3] = b; bandColors[i3 + 1] = b; bandColors[i3 + 2] = b * 0.97;
       } else {
-        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.75; bandColors[i3 + 2] = b * 0.8;
+        // Nebula-tinted (pinkish/bluish)
+        bandColors[i3] = b * 0.9; bandColors[i3 + 1] = b * 0.75; bandColors[i3 + 2] = b;
       }
-      bandSizes[i] = Math.random() * 1.5 + 0.3;
+      bandSizes[i] = Math.random() < 0.97 ? Math.random() * 1.2 + 0.2 : Math.random() * 3.0 + 1.5;
     }
 
     bandGeo.setAttribute('position', new THREE.Float32BufferAttribute(bandPos, 3));
@@ -5699,23 +6340,30 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         attribute float aSize;
         attribute vec3 color;
         varying vec3 vColor;
+        varying float vBrightness;
         uniform float uTime;
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          float twinkle = sin(uTime * 1.5 + position.x * 0.05 + position.z * 0.08) * 0.15 + 0.85;
-          gl_PointSize = aSize * twinkle * (200.0 / -mvPosition.z);
+          float phase = position.x * 0.037 + position.z * 0.051;
+          float twinkle = 0.82 + 0.18 * sin(uTime * 1.2 + phase);
+          vBrightness = twinkle;
+          gl_PointSize = aSize * twinkle * (220.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
+        varying float vBrightness;
         void main() {
-          float dist = length(gl_PointCoord - vec2(0.5));
+          vec2 uv = gl_PointCoord - vec2(0.5);
+          float dist = length(uv);
           if (dist > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.1, dist) * 0.5;
-          float core = smoothstep(0.2, 0.0, dist);
-          vec3 c = vColor + core * 0.4;
+          // Soft Gaussian core + gentle halo
+          float core = exp(-dist * dist * 200.0);
+          float glow = exp(-dist * 7.0) * 0.35;
+          float alpha = (core + glow) * 0.55 * vBrightness;
+          vec3 c = mix(vColor, vec3(1.0), core * 0.5);
           gl_FragColor = vec4(c, alpha);
         }
       `,
@@ -5727,38 +6375,55 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.galaxyBand = new THREE.Points(bandGeo, bandMat);
     this.scene.add(this.galaxyBand);
 
-    // Distant galaxy sprites
-    const galaxyCount = 50;
+    // Distant galaxy sprites — more count, varied color, hint of spiral structure
+    const galaxyCount = 80;
     const gGeo = new THREE.BufferGeometry();
     const gPos = new Float32Array(galaxyCount * 3);
     const gSizes = new Float32Array(galaxyCount);
+    const gColors = new Float32Array(galaxyCount * 3);
     for (let i = 0; i < galaxyCount; i++) {
-      gPos[i * 3] = (Math.random() - 0.5) * 1500;
-      gPos[i * 3 + 1] = (Math.random() - 0.5) * 800 + 50;
-      gPos[i * 3 + 2] = -200 - Math.random() * 800;
-      gSizes[i] = 2 + Math.random() * 5;
+      gPos[i * 3] = (Math.random() - 0.5) * 2000;
+      gPos[i * 3 + 1] = (Math.random() - 0.5) * 900 + 50;
+      gPos[i * 3 + 2] = -200 - Math.random() * 1000;
+      gSizes[i] = 2.5 + Math.random() * 6;
+      const gc = Math.random();
+      if (gc < 0.35) {
+        gColors[i*3] = 0.7; gColors[i*3+1] = 0.55; gColors[i*3+2] = 0.9; // lavender
+      } else if (gc < 0.65) {
+        gColors[i*3] = 1.0; gColors[i*3+1] = 0.9; gColors[i*3+2] = 0.75; // warm gold
+      } else {
+        gColors[i*3] = 0.6; gColors[i*3+1] = 0.75; gColors[i*3+2] = 1.0; // blue-white
+      }
     }
     gGeo.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
     gGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(gSizes, 1));
+    gGeo.setAttribute('color', new THREE.Float32BufferAttribute(gColors, 3));
 
     this.scene.add(new THREE.Points(gGeo, new THREE.ShaderMaterial({
       vertexShader: `
         attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vGColor;
         void main() {
+          vGColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_PointSize = aSize * (400.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
+        varying vec3 vGColor;
         void main() {
           vec2 c = gl_PointCoord - vec2(0.5);
           float d = length(c);
           if (d > 0.5) discard;
-          float glow = exp(-d * 6.0) * 0.6;
-          float core = exp(-d * 18.0);
-          vec3 color = mix(vec3(0.5, 0.4, 0.7), vec3(1.0, 0.95, 0.85), core);
-          gl_FragColor = vec4(color, (glow + core * 0.4) * 0.35);
+          // Elliptical + hint of spiral
+          float angle = atan(c.y, c.x);
+          float spiral = sin(angle * 2.0 + d * 12.0) * 0.15 * (1.0 - d * 2.0);
+          float glow = exp(-d * 6.5) * 0.6 + spiral * 0.12;
+          float core = exp(-d * 20.0);
+          vec3 col = mix(vGColor, vec3(1.0, 0.98, 0.92), core);
+          gl_FragColor = vec4(col, clamp((glow + core * 0.4) * 0.35, 0.0, 1.0));
         }
       `,
       transparent: true,
@@ -5766,39 +6431,41 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       blending: THREE.AdditiveBlending
     })));
 
-    // Volumetric cosmic dust clouds
-    const cDustCount = 3000;
+    // Volumetric cosmic dust clouds — denser, more color variety
+    const cDustCount = 5000;
     const cGeo = new THREE.BufferGeometry();
     const cPos = new Float32Array(cDustCount * 3);
     const cColors = new Float32Array(cDustCount * 3);
     for (let i = 0; i < cDustCount; i++) {
-      cPos[i * 3] = (Math.random() - 0.5) * 300;
-      cPos[i * 3 + 1] = (Math.random() - 0.5) * 300;
-      cPos[i * 3 + 2] = (Math.random() - 0.5) * 300;
+      cPos[i * 3] = (Math.random() - 0.5) * 400;
+      cPos[i * 3 + 1] = (Math.random() - 0.5) * 400;
+      cPos[i * 3 + 2] = (Math.random() - 0.5) * 400;
       const roll = Math.random();
-      if (roll < 0.33) {
-        cColors[i * 3] = 0.3; cColors[i * 3 + 1] = 0.2; cColors[i * 3 + 2] = 0.5;
-      } else if (roll < 0.66) {
+      if (roll < 0.25) {
+        cColors[i * 3] = 0.3; cColors[i * 3 + 1] = 0.2; cColors[i * 3 + 2] = 0.55;
+      } else if (roll < 0.5) {
         cColors[i * 3] = 0.2; cColors[i * 3 + 1] = 0.3; cColors[i * 3 + 2] = 0.5;
+      } else if (roll < 0.75) {
+        cColors[i * 3] = 0.45; cColors[i * 3 + 1] = 0.22; cColors[i * 3 + 2] = 0.2;
       } else {
-        cColors[i * 3] = 0.4; cColors[i * 3 + 1] = 0.25; cColors[i * 3 + 2] = 0.2;
+        cColors[i * 3] = 0.35; cColors[i * 3 + 1] = 0.15; cColors[i * 3 + 2] = 0.4;
       }
     }
     cGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
     cGeo.setAttribute('color', new THREE.Float32BufferAttribute(cColors, 3));
     this.scene.add(new THREE.Points(cGeo, new THREE.PointsMaterial({
-      size: 0.4, transparent: true, opacity: 0.12, vertexColors: true,
+      size: 0.5, transparent: true, opacity: 0.14, vertexColors: true,
       blending: THREE.AdditiveBlending, depthWrite: false
     })));
   }
 
   private createStarClusters() {
-    const clusterCount = 2500;
+    const clusterCount = 3500;
     const clusterGeo = new THREE.IcosahedronGeometry(0.18, 0);
     const clusterMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.85,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -5806,15 +6473,19 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     const dummy = new THREE.Object3D();
     for (let i = 0; i < clusterCount; i++) {
-      const radius = 200 + Math.random() * 1200;
+      const radius = 180 + Math.random() * 1400;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(THREE.MathUtils.randFloatSpread(2));
       dummy.position.setFromSphericalCoords(radius, phi, theta);
-      const scale = 0.6 + Math.random() * 2.2;
+      const scale = 0.5 + Math.random() * 2.5;
       dummy.scale.setScalar(scale);
       dummy.updateMatrix();
       this.starClusters.setMatrixAt(i, dummy.matrix);
-      this.starClusters.setColorAt(i, new THREE.Color().setHSL(0.08 + Math.random() * 0.14, 0.4, 0.75));
+      // Wider spectral range: blue-white to warm gold to faint rose
+      const hue = Math.random() < 0.7 ? 0.06 + Math.random() * 0.16 : 0.55 + Math.random() * 0.12;
+      const sat = 0.2 + Math.random() * 0.4;
+      const lum = 0.65 + Math.random() * 0.25;
+      this.starClusters.setColorAt(i, new THREE.Color().setHSL(hue, sat, lum));
     }
 
     this.starClusters.instanceMatrix.needsUpdate = true;
@@ -5833,32 +6504,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private registerBloomTargets() {
-    if (!this.postProcessManager) return;
-
-    if (this.sunMesh) {
-      this.postProcessManager.addBloomSelectionRecursive(this.sunMesh);
-    }
-    if (this.falconExhaust) {
-      this.postProcessManager.addBloomSelectionRecursive(this.falconExhaust);
-    }
-    if (this.auroraTop) this.postProcessManager.addBloomSelection(this.auroraTop);
-    if (this.auroraBottom) this.postProcessManager.addBloomSelection(this.auroraBottom);
-    this.spaceshipData.forEach((ship) => {
-      ship.group.traverse((child) => {
-        if (child instanceof THREE.Mesh && child.material instanceof THREE.MeshBasicMaterial) {
-          this.postProcessManager?.addBloomSelection(child);
-        }
-      });
-    });
-
-    // Lightsaber blades + glow layers on bloom layer (Selective Bloom)
-    if (this.saberRed) this.postProcessManager.addBloomSelection(this.saberRed);
-    if (this.saberGreen) this.postProcessManager.addBloomSelection(this.saberGreen);
-    if (this.saberGlowRed) this.postProcessManager.addBloomSelection(this.saberGlowRed);
-    if (this.saberGlowGreen) this.postProcessManager.addBloomSelection(this.saberGlowGreen);
-    if (this.saberClashSparks) this.postProcessManager.addBloomSelection(this.saberClashSparks);
-    // Death Star superlaser beam on bloom layer
-    if (this.superlaserBeam) this.postProcessManager.addBloomSelection(this.superlaserBeam);
+    // Bloom is now luminance-threshold based (objects with color > 1.0 glow automatically).
+    // No per-object selection needed — this eliminates an entire extra render pass.
   }
 
   private registerPhysicsBodies() {
@@ -5884,23 +6531,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       canSleep: false,
     });
 
-    this.spaceshipData.forEach((ship, index) => {
-      const box = new THREE.Box3().setFromObject(ship.group);
-      const size = new THREE.Vector3();
-      box.getSize(size).multiplyScalar(0.5);
-      this.physicsManager.bridge(ship.group, {
-        kind: 'dynamic',
-        collider: 'box',
-        halfExtents: size.max(new THREE.Vector3(0.03, 0.03, 0.03)),
-        mass: 0.7,
-        linearDamping: 0.18,
-        angularDamping: 0.45,
-        ccd: true,
-        canSleep: false,
+    this.spaceshipData.forEach((ship) => {
+      ship.group.traverse((child) => {
+        if (child instanceof THREE.Mesh) {
+          child.castShadow = true;
+        }
       });
-      if (index === 0) {
-        this.physicsManager.setPlayerObject(ship.group);
-      }
     });
   }
 
@@ -5926,17 +6562,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     for (const target of this.frustumCullTargets) {
       if (!target.object) continue;
-      const sphere = new THREE.Sphere(target.object.position.clone(), target.radius);
-      target.object.visible = this.frustum.intersectsSphere(sphere);
+      this.tempSphere.set(target.object.position, target.radius);
+      target.object.visible = this.frustum.intersectsSphere(this.tempSphere);
     }
   }
 
   private getGravitySources() {
     return [
-      { position: this.jupiterGroup.position.clone(), mass: 120_000 },
-      { position: this.sunMesh.position.clone(), mass: 240_000 },
-      { position: this.earthMesh.position.clone(), mass: 3_000 },
-      { position: this.marsMesh.position.clone(), mass: 1_800 },
+      { position: this.jupiterGroup.position, mass: 120_000 },
+      { position: this.sunMesh.position, mass: 240_000 },
+      { position: this.earthMesh.position, mass: 3_000 },
+      { position: this.marsMesh.position, mass: 1_800 },
     ];
   }
 
@@ -6007,24 +6643,28 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     logoStrip.position.y = 0.12;
     group.add(logoStrip);
 
-    // Landing legs (4 folded legs at base)
+    // Landing legs — grouped for pivot animation
     const legMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.5 });
+    this.falconLegs = [];
     for (let i = 0; i < 4; i++) {
+      const legGroup = new THREE.Group();
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.06, 0.015), legMat);
+      leg.position.set(0, -0.03, 0); // Offset so pivot is at the top
+      legGroup.add(leg);
+
       const angle = (i * Math.PI) / 2 + Math.PI / 4;
-      leg.position.set(Math.cos(angle) * 0.035, 0.01, Math.sin(angle) * 0.035);
-      leg.rotation.x = 0.3;
-      leg.rotation.y = angle;
-      group.add(leg);
+      legGroup.position.set(Math.cos(angle) * 0.03, 0.04, Math.sin(angle) * 0.03);
+      legGroup.rotation.y = angle;
+      legGroup.rotation.x = 0; // Folded up flat against the rocket
+
+      this.falconLegs.push(legGroup);
+      group.add(legGroup);
     }
 
-    // Nine Merlin engines at base (octaweb pattern) — small glowing circles
-    const engineMat = new THREE.MeshStandardMaterial({
-      color: 0x444444, roughness: 0.4, metalness: 0.8,
-      emissive: 0x331100, emissiveIntensity: 0.3
-    });
+    // Merlin engines (9 at base — 1 center + 8 octaweb)
+    const engMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
     for (let i = 0; i < 9; i++) {
-      const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 0.015, 8), engineMat);
+      const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.015, 8), engMat);
       if (i === 0) {
         eng.position.set(0, -0.005, 0); // Center engine
       } else {
@@ -6082,7 +6722,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.falconLaunched = true;
     this.falconHyperspaceTriggered = false;
     this.falconLaunchTime = (Date.now() - this.startTime) * 0.001;
-    this.falconGroup.scale.setScalar(1.8);
+    this.falconGroup.scale.setScalar(2.5);
     // Start and end positions — read from physics after setting translation
     this.falconStartPos.copy(this.falconGroup.position);
     this.falconTargetPos.copy(this.marsMesh.position).add(new THREE.Vector3(0.42, 0.58, 0.38));
@@ -6125,65 +6765,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (t < 0.82) {
       const cruiseT = (t - 0.24) / 0.58;
       const cruiseEase = 1 - Math.pow(1 - cruiseT, 2);
-      const scale = Math.max(0.65, 1.8 - cruiseT * 1.1);
+      const scale = Math.max(0.9, 2.5 - cruiseT * 1.5);
       this.falconGroup.scale.setScalar(scale);
       return new THREE.Vector3().lerpVectors(this.getFalconCruiseMidpoint(), this.getFalconApproachPosition(), cruiseEase);
     }
 
     const landingT = (t - 0.82) / 0.18;
     const landingEase = 1 - Math.pow(1 - landingT, 3);
-    const landingScale = Math.max(0.55, 0.7 - landingT * 0.12);
+    const landingScale = Math.max(0.8, 1.0 - landingT * 0.15);
     this.falconGroup.scale.setScalar(landingScale);
     return new THREE.Vector3().lerpVectors(this.getFalconApproachPosition(), this.falconTargetPos, landingEase);
   }
 
-  private getFalconGuidanceStrength(t: number): number {
-    // Ramp up guidance slowly at launch so the initial impulse isn't overridden
-    if (t < 0.05) return 0.005;
-    if (t < 0.24) return 0.028;
-    if (t < 0.82) return 0.014;
-    // Stronger on approach so the rocket converges on the landing pad
-    return 0.032;
-  }
-
-  private updateFalconCameraAnchor(_timeRatio: number, _falconPosition: THREE.Vector3) {
-    // Camera no longer tracks the falcon — it flies subtly in the background
-  }
-
-  private updateFalconExhaustVisuals(time: number, timeRatio: number) {
-    if (!this.falconExhaust) return;
-
-    const mat = this.falconExhaust.material as THREE.ShaderMaterial;
-    // Use relative time from launch for consistent exhaust animation
-    mat.uniforms['uTime'].value = time - this.falconLaunchTime;
-
-    let thrustScale = 1;
-    if (timeRatio < 0.05) {
-      // Ignition ramp-up
-      thrustScale = 0.3 + (timeRatio / 0.05) * 1.7;
-    } else if (timeRatio < 0.15) {
-      // Full thrust — max plume
-      thrustScale = 2;
-    } else if (timeRatio > 0.82 && timeRatio < 0.94) {
-      // Landing burn — re-ignition
-      const landT = (timeRatio - 0.82) / 0.12;
-      thrustScale = 0.4 + landT * 1.2;
-    } else if (timeRatio >= 0.94) {
-      thrustScale = 0.3;
-    } else {
-      // Cruise — moderate thrust
-      thrustScale = 0.75;
-    }
-
-    this.falconExhaust.scale.set(thrustScale, thrustScale * (1 + Math.sin(time * 20) * 0.1), thrustScale);
-    this.falconExhaust.visible = timeRatio < 0.97;
-
-    // Update exhaust point light intensity to match thrust
-    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
-    if (light) {
-      light.intensity = thrustScale * 2.5;
-    }
-  }
 
   private finalizeFalconLanding() {
     this.falconExhaust.visible = false;
@@ -6191,11 +6784,46 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.physicsManager.setLinvel(this.falconGroup, new THREE.Vector3(), true);
     this.falconGroup.quaternion.slerp(new THREE.Quaternion(), 1);
     this.falconGroup.visible = true;
-    // Mark as no longer in flight, but keep the rocket visible on Mars
     this.falconLaunched = false;
+    // Legs fully deployed
+    this.falconLegs.forEach(leg => leg.rotation.x = 1.2);
     // Exhaust light off
     const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
     if (light) light.intensity = 0;
+    // Clear telemetry HUD
+    this.ngZone.run(() => this.telemetry.emit(null));
+    // Resume planet tour — reset the stop timer so we get a full dwell before moving on
+    this.tourStopTime = (Date.now() - this.startTime) * 0.001;
+  }
+
+  private createStarman() {
+    this.starmanGroup = new THREE.Group();
+    const loader = new GLTFLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      loader.load('2008_tesla_roadster.glb', (gltf) => {
+        const model = gltf.scene;
+        // Scale to a visible car-sized object (~0.8 scene units long)
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 0.8 / maxDim;
+        model.scale.setScalar(scale);
+        const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+        model.position.sub(center);
+        this.starmanGroup.add(model);
+        resolve();
+      }, undefined, () => {
+        // Fallback: simple red box if GLB fails
+        const fallback = new THREE.Mesh(
+          new THREE.BoxGeometry(0.35, 0.12, 0.15),
+          new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.3, metalness: 0.7 })
+        );
+        this.starmanGroup.add(fallback);
+        resolve();
+      });
+    }));
+    this.starmanGroup.visible = false;
+    this.scene.add(this.starmanGroup);
   }
 
   private updateFalcon9(time: number) {
@@ -6205,43 +6833,88 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const totalDuration = this.falconFlightDuration;
     const t = Math.min(elapsed / totalDuration, 1);
 
+    // 1. Scripted cinematic movement (smoother than pure physics)
     const targetPosition = this.getFalconFlightTarget(t);
-// Trigger hyperspace warp when falcon enters cruise phase
+    this.physicsManager.setTranslation(this.falconGroup, targetPosition, true);
+
+    // Trigger hyperspace warp when falcon enters cruise phase
     if (t >= 0.24 && !this.falconHyperspaceTriggered) {
       this.falconHyperspaceTriggered = true;
       this.triggerHyperspaceJump();
     }
 
-    
-    const falconPosition = this.physicsManager.getObjectPosition(this.falconGroup);
-    const guidance = targetPosition.clone().sub(falconPosition).multiplyScalar(this.getFalconGuidanceStrength(t));
-    this.physicsManager.applyImpulse(this.falconGroup, guidance, true);
-    this.physicsManager.applyInverseSquareGravity(this.falconGroup, this.getGravitySources(), 0.12);
+    // 2. Flight Profile — thrust, orientation, leg deployment
+    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+    let thrust = 0;
 
-    // Velocity damping — prevents overshoot & oscillation, stronger near landing
-    const damping = t > 0.85 ? 0.92 : 0.97;
-    const vel = this.physicsManager.getLinearVelocity(this.falconGroup);
-    this.physicsManager.setLinvel(this.falconGroup, vel.multiplyScalar(damping), true);
+    if (t < 0.2) {
+      // Stage 1: Launch & Gravity Turn
+      thrust = 2.0;
+      const lookTarget = this.getFalconFlightTarget(Math.min(t + 0.05, 1));
+      this.falconGroup.lookAt(lookTarget);
+      this.falconLegs.forEach(leg => leg.rotation.x = 0);
+    } else if (t < 0.7) {
+      // Stage 2: Coasting (engine off) — slowly rotate retrograde for landing
+      thrust = 0.0;
+      this.falconGroup.rotation.x -= 0.005;
+    } else if (t < 0.8) {
+      // Stage 3: Entry Burn (short burst to slow down)
+      thrust = 1.5;
+      this.falconGroup.lookAt(targetPosition.clone().sub(new THREE.Vector3(0, 1, 0)));
+    } else {
+      // Stage 4: Hoverslam & Landing
+      thrust = (1 - t) * 3.0 + 0.5;
+      this.falconGroup.lookAt(targetPosition.clone().sub(new THREE.Vector3(0, 1, 0)));
 
-    const updatedFalconPosition = this.physicsManager.getObjectPosition(this.falconGroup);
-    this.updateFalconCameraAnchor(t, updatedFalconPosition);
-
-    const velocity = this.physicsManager.getLinearVelocity(this.falconGroup);
-    if (t > 0.01 && velocity.lengthSq() > 0.0001) {
-      const dir = velocity.normalize();
-      const up = new THREE.Vector3(0, 1, 0);
-      const quat = new THREE.Quaternion();
-      const mat4 = new THREE.Matrix4();
-      mat4.lookAt(new THREE.Vector3(), dir, up);
-      quat.setFromRotationMatrix(mat4);
-      const adjust = new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(1, 0, 0), Math.PI / 2);
-      quat.multiply(adjust);
-      // Faster slerp for snappy orientation; extra responsive during landing
-      const slerpFactor = t > 0.82 ? 0.15 : 0.1;
-      this.falconGroup.quaternion.slerp(quat, slerpFactor);
+      // Deploy legs smoothly in the last 10%
+      const deployT = Math.max(0, (t - 0.9) * 10);
+      this.falconLegs.forEach(leg => leg.rotation.x = deployT * 1.2);
     }
 
-    this.updateFalconExhaustVisuals(time, t);
+    // Update exhaust visuals
+    this.falconExhaust.visible = thrust > 0;
+    this.falconExhaust.scale.set(thrust, thrust * (1 + Math.random() * 0.2), thrust);
+    if (light) light.intensity = thrust * 3;
+
+    // Update exhaust shader time
+    const mat = this.falconExhaust.material as THREE.ShaderMaterial;
+    mat.uniforms['uTime'].value = time - this.falconLaunchTime;
+
+    // 3. Cinematic Camera Tracking (faster lerp for snappy follow)
+    this.cameraLerpSpeed = 0.06;
+    if (t < 0.3 && this.earthMesh) {
+      // Ground Tracking Cam — looking up from Earth
+      this.targetCameraX = this.earthMesh.position.x - 2;
+      this.targetCameraY = this.earthMesh.position.y + 1;
+      this.targetCameraZ = this.earthMesh.position.z + 5;
+      this.targetLookAt.copy(targetPosition);
+    } else if (t < 0.8) {
+      // Chase Cam — following the rocket through space
+      const offset = new THREE.Vector3(1.5, 0.5, 3).applyQuaternion(this.falconGroup.quaternion);
+      this.targetCameraX = targetPosition.x + offset.x;
+      this.targetCameraY = targetPosition.y + offset.y;
+      this.targetCameraZ = targetPosition.z + offset.z;
+      this.targetLookAt.copy(targetPosition);
+    } else if (this.marsMesh) {
+      // Landing Pad Cam — looking up from Mars
+      this.targetCameraX = this.marsMesh.position.x + 2;
+      this.targetCameraY = this.marsMesh.position.y + 0.5;
+      this.targetCameraZ = this.marsMesh.position.z + 3;
+      this.targetLookAt.copy(targetPosition);
+      // Gentle landing vibration — smooth sine-based, not random jitter
+      const landT = (time - this.falconLaunchTime) * 12;
+      this.targetCameraX += Math.sin(landT) * thrust * 0.008;
+      this.targetCameraY += Math.cos(landT * 1.3) * thrust * 0.005;
+    }
+
+    // 4. Emit Telemetry to Angular UI
+    this.ngZone.run(() => {
+      this.telemetry.emit({
+        altitude: Math.round((1 - t) * 250000),
+        speed: Math.round(thrust * 8000),
+        phase: t < 0.2 ? 'MAX-Q' : t < 0.7 ? 'COAST' : t < 0.8 ? 'ENTRY BURN' : 'HOVERSLAM'
+      });
+    });
 
     if (t >= 1) {
       this.finalizeFalconLanding();
@@ -6251,7 +6924,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createSolarSystemPlanets() {
     // Saturn — visible in far background
     // Saturn equatorial radius: 60,268 km → 60268/71492 × 10 = 8.43 scene units
-    // Using correct relative size to Jupiter
     this.saturnGroup = new THREE.Group();
     const saturnGeo = new THREE.SphereGeometry(8.4, 64, 64);
     const saturnMat = new THREE.MeshStandardMaterial({
@@ -6262,7 +6934,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Saturn texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_saturn.jpg', (tex) => {
+      this.textureLoader.load('2k_saturn.webp', (tex) => {
         tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         saturnMat.map = tex; saturnMat.color.setHex(0xffffff); saturnMat.needsUpdate = true;
@@ -6273,40 +6945,108 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Saturn's iconic rings (C ring inner to F ring outer)
     // Real: C ring at 1.24 Rs, A ring outer at 2.27 Rs → 10.4 to 19.1 scene units
     const innerR = 10.4, outerR = 19.1;
-    const satRingGeo = new THREE.RingGeometry(innerR, outerR, 128, 4);
-    // Create ring texture procedurally
+    const satRingGeo = new THREE.RingGeometry(innerR, outerR, 256, 8);
+    // High-res procedural ring texture with Cassini division and fine structure
     const ringCanvas = document.createElement('canvas');
-    ringCanvas.width = 512; ringCanvas.height = 64;
+    ringCanvas.width = 1024; ringCanvas.height = 1;
     const rCtx = ringCanvas.getContext('2d')!;
-    // Cassini division and ring bands
-    for (let x = 0; x < 512; x++) {
-      const t = x / 512;
+    for (let x = 0; x < 1024; x++) {
+      const t = x / 1024;
       let opacity = 0;
       let r = 210, g = 190, b = 150;
-      if (t < 0.25) { // C ring (faint)
-        opacity = 0.15 + Math.sin(t * 80) * 0.05;
-        r = 160; g = 140; b = 110;
-      } else if (t < 0.55) { // B ring (bright)
-        opacity = 0.6 + Math.sin(t * 120) * 0.1;
-      } else if (t < 0.62) { // Cassini division (gap)
-        opacity = 0.04;
-      } else if (t < 0.85) { // A ring
-        opacity = 0.45 + Math.sin(t * 100) * 0.08;
-        r = 200; g = 180; b = 140;
-      } else { // F ring (thin, faint)
-        opacity = t < 0.87 ? 0.2 : 0.05;
+      // Fine micro-structure using high-frequency noise
+      const micro = 0.92 + 0.08 * Math.sin(t * 400 + Math.sin(t * 150) * 2);
+      if (t < 0.22) { // C ring (inner, faint, brownish)
+        opacity = (0.12 + Math.sin(t * 120) * 0.04) * micro;
+        r = 150; g = 130; b = 100;
+      } else if (t < 0.28) { // C-B transition
+        opacity = (0.2 + (t - 0.22) / 0.06 * 0.4) * micro;
+        r = 180; g = 165; b = 130;
+      } else if (t < 0.54) { // B ring (brightest, most opaque)
+        opacity = (0.65 + Math.sin(t * 200) * 0.08 + Math.sin(t * 50) * 0.05) * micro;
+        r = 215; g = 195; b = 155;
+      } else if (t < 0.60) { // Cassini Division (prominent gap)
+        opacity = 0.03 + Math.sin(t * 300) * 0.01;
+        r = 80; g = 70; b = 55;
+      } else if (t < 0.83) { // A ring (medium opacity, warm)
+        opacity = (0.40 + Math.sin(t * 160) * 0.06 + Math.sin(t * 80) * 0.04) * micro;
+        r = 200; g = 182; b = 145;
+        // Encke Gap at ~0.74
+        if (t > 0.73 && t < 0.75) opacity *= 0.15;
+      } else if (t < 0.86) { // Roche Division
+        opacity = 0.02;
+      } else if (t < 0.90) { // F ring (thin, bright)
+        const fCenter = 0.88;
+        const fDist = Math.abs(t - fCenter);
+        opacity = Math.max(0, 0.35 - fDist * 15) * micro;
+        r = 220; g = 200; b = 165;
+      } else { // Beyond F ring
+        opacity = 0.01;
       }
-      rCtx.fillStyle = `rgba(${r},${g},${b},${opacity})`;
-      rCtx.fillRect(x, 0, 1, 64);
+      rCtx.fillStyle = `rgba(${r},${g},${b},${Math.min(opacity, 1)})`;
+      rCtx.fillRect(x, 0, 1, 1);
     }
     const ringTexture = new THREE.CanvasTexture(ringCanvas);
     ringTexture.wrapS = THREE.ClampToEdgeWrapping;
-    const satRingMat = new THREE.MeshBasicMaterial({
-      map: ringTexture,
+    ringTexture.minFilter = THREE.LinearFilter;
+    ringTexture.magFilter = THREE.LinearFilter;
+    // Custom lit ring shader — scatters sunlight with forward/back-scatter
+    const satRingMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uRingTex: { value: ringTexture },
+        uSunDir: { value: new THREE.Vector3(-0.8, 0.2, 0.56).normalize() },
+        uPlanetPos: { value: new THREE.Vector3(0, 0, 0) },
+        uPlanetRadius: { value: 8.4 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        void main() {
+          vUv = uv;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uRingTex;
+        uniform vec3 uSunDir;
+        uniform vec3 uPlanetPos;
+        uniform float uPlanetRadius;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        void main() {
+          vec4 texel = texture2D(uRingTex, vUv);
+          if (texel.a < 0.01) discard;
+
+          // Ring-plane normal for lighting
+          vec3 N = normalize(vWorldNormal);
+          float NdotL = dot(N, uSunDir);
+
+          // Forward scatter (viewing through rings toward sun) + back scatter
+          float scatter = 0.4 + 0.35 * abs(NdotL) + 0.25 * pow(max(NdotL, 0.0), 2.0);
+
+          // Planet shadow on rings
+          vec3 toSun = uSunDir;
+          vec3 ringToPlanet = uPlanetPos - vWorldPos;
+          float projDist = dot(ringToPlanet, toSun);
+          float shadow = 1.0;
+          if (projDist > 0.0) {
+            vec3 closestPoint = vWorldPos + toSun * projDist;
+            float distFromAxis = length(closestPoint - uPlanetPos);
+            shadow = smoothstep(uPlanetRadius * 0.85, uPlanetRadius * 1.05, distFromAxis);
+          }
+
+          vec3 lit = texel.rgb * scatter * shadow;
+          gl_FragColor = vec4(lit, texel.a * shadow);
+        }
+      `,
       transparent: true,
       side: THREE.DoubleSide,
       depthWrite: false,
-      blending: THREE.NormalBlending
     });
     // Fix UVs to map radially
     const ringPos = satRingGeo.attributes['position'];
@@ -6317,6 +7057,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const dist = rv3.length();
       ringUv.setXY(i, (dist - innerR) / (outerR - innerR), 0.5);
     }
+    satRingGeo.computeVertexNormals();
     const satRing = new THREE.Mesh(satRingGeo, satRingMat);
     satRing.rotation.x = Math.PI / 2 - 0.47; // Saturn tilt ~26.7°
     this.saturnGroup.add(satRing);
@@ -6339,9 +7080,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const sp = this.saturnGroup.position;
       this.titanMesh.position.set(sp.x + 20, sp.y, sp.z);
       this.scene.add(this.titanMesh);
-      // Load moon texture for Titan (reuse 8k_moon.jpg, tinted by material color)
+      // Load moon texture for Titan (reuse 8k_moon.webp, tinted by material color)
       this.loadPromises.push(new Promise<void>((resolve) => {
-        this.textureLoader.load('8k_moon.jpg', (tex) => {
+        this.textureLoader.load('8k_moon.webp', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           titanMat.map = tex;
           titanMat.color.setHex(0xcc9944); // Keep the warm orange tint
@@ -6361,7 +7102,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoMesh.position.set(-240, -25, -220);
       this.scene.add(this.plutoMesh);
       this.loadPromises.push(new Promise<void>((resolve) => {
-        this.textureLoader.load('8k_moon.jpg', (tex) => {
+        this.textureLoader.load('8k_moon.webp', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           plutoMat.map = tex;
           plutoMat.color.setHex(0xc4a882);
@@ -6382,7 +7123,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Mars texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('8k_mars.jpg', (tex) => {
+      this.textureLoader.load('8k_mars.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         marsMat.map = tex; marsMat.color.setHex(0xffffff); marsMat.needsUpdate = true;
         resolve();
@@ -6406,7 +7147,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.venusMesh);
     // Venus atmosphere texture (thick sulfuric acid clouds)
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_venus_atmosphere.jpg', (tex) => {
+      this.textureLoader.load('2k_venus_atmosphere.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         venusMat.map = tex; venusMat.color.setHex(0xffffff); venusMat.needsUpdate = true;
         resolve();
@@ -6443,7 +7184,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.mercuryMesh);
     // Mercury texture — cratered surface
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_mercury.jpg', (tex) => {
+      this.textureLoader.load('2k_mercury.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         mercuryMat.map = tex; mercuryMat.color.setHex(0xffffff); mercuryMat.needsUpdate = true;
         resolve();
@@ -6459,7 +7200,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.uranusGroup.add(this.uranusMesh);
     // Uranus texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_uranus.jpg', (tex) => {
+      this.textureLoader.load('2k_uranus.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         uranusMat.map = tex; uranusMat.color.setHex(0xffffff); uranusMat.needsUpdate = true;
         resolve();
@@ -6539,7 +7280,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.neptuneGroup.add(this.neptuneMesh);
     // Neptune texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_neptune.jpg', (tex) => {
+      this.textureLoader.load('2k_neptune.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         neptuneMat.map = tex; neptuneMat.color.setHex(0xffffff); neptuneMat.needsUpdate = true;
         resolve();
@@ -7162,7 +7903,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Sun texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('8k_sun.jpg', (tex) => {
+      this.textureLoader.load('8k_sun.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         sunMat.uniforms['uSunTex'].value = tex;
         sunMat.needsUpdate = true;
@@ -7420,43 +8161,34 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Update bolt lines
           group.children.forEach(child => {
             if (child instanceof THREE.Line) {
-              (child.material as THREE.LineBasicMaterial).opacity = flicker * 0.9;
-            } else if (child instanceof THREE.Mesh) {
-              (child.material as THREE.MeshBasicMaterial).opacity = flicker * 0.4;
-            } else if (child instanceof THREE.PointLight) {
-              child.intensity = flicker * 8;
-            }
-          });
-        } else {
-          // All off
-          group.children.forEach(child => {
-            if (child instanceof THREE.Line) {
-              (child.material as THREE.LineBasicMaterial).opacity = 0;
-            } else if (child instanceof THREE.Mesh) {
-              (child.material as THREE.MeshBasicMaterial).opacity = 0;
-            } else if (child instanceof THREE.PointLight) {
-              child.intensity = 0;
+              const mat = child.material as THREE.LineBasicMaterial;
+              mat.opacity = flicker;
             }
           });
           lf.timer = 0;
           lf.cooldown = 80 + Math.random() * 300;
-          // Regenerate bolt geometry for next flash (different path)
+          // Rewrite vertices in-place (reuse geometry buffer, no allocation)
           group.children.forEach(child => {
             if (child instanceof THREE.Line) {
-              const points: THREE.Vector3[] = [];
-              const segments = 6 + Math.floor(Math.random() * 4);
+              const posAttr = child.geometry.attributes['position'] as THREE.BufferAttribute;
+              if (!posAttr) return;
+              const segments = Math.min(posAttr.count, 6 + Math.floor(Math.random() * 4));
               let px = (Math.random() - 0.5) * 0.3;
               let py = (Math.random() - 0.5) * 0.3;
               let pz = 0;
               const boltLen = 0.3 + Math.random() * 0.5;
-              for (let s = 0; s <= segments; s++) {
-                points.push(new THREE.Vector3(px, py, pz));
-                px += (Math.random() - 0.5) * 0.15;
-                py += (Math.random() - 0.5) * 0.15;
-                pz += boltLen / segments;
+              for (let s = 0; s < posAttr.count; s++) {
+                if (s <= segments) {
+                  posAttr.setXYZ(s, px, py, pz);
+                  px += (Math.random() - 0.5) * 0.15;
+                  py += (Math.random() - 0.5) * 0.15;
+                  pz += boltLen / segments;
+                } else {
+                  // Degenerate remaining verts to last point
+                  posAttr.setXYZ(s, px, py, pz);
+                }
               }
-              child.geometry.dispose();
-              child.geometry = new THREE.BufferGeometry().setFromPoints(points);
+              posAttr.needsUpdate = true;
             }
           });
           // Reposition on night side
@@ -7611,7 +8343,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       fragmentShader: `
         varying float vAlpha;
         void main() {
-          float d = length(gl_PointCoord - vec2(0.5));
+          olarWind.frustumCulled = false;
+    this.sfloat d = length(gl_PointCoord - vec2(0.5));
           if (d > 0.5) discard;
           float a = smoothstep(0.5, 0.0, d) * 0.08;
           gl_FragColor = vec4(1.0, 0.95, 0.7, a);
@@ -7864,6 +8597,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const dist3D = ep.distanceTo(jp);
     const minDist3D = 30, maxDist3D = 54;
     const frac = Math.max(0, Math.min(1, (dist3D - minDist3D) / (maxDist3D - minDist3D)));
+    // Skip rendering while tab is hidden to prevent time jumps
+    if (this.tabHidden) return;
+
     const km = Math.round(588 + frac * (968 - 588));
     if (km !== this.lastEmittedKm) {
       this.lastEmittedKm = km;
@@ -7935,7 +8671,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
     this.updateDistanceBeam(time);
 
-    this.updateMoons();
+    this.updateMoons(time);
     this.updateSpaceships(time);
     this.updateStarsAndDust(time);
 
@@ -7944,7 +8680,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateComet();
     this.updateDeathStar(time);
     this.updateLightsaberDuel(time);
-    this.updateHyperspace(deltaTime);
+    this.updateHyperspace(deltaTime, time);
 
     // Rotate Saturn slowly
     if (this.saturnGroup) {
@@ -7958,6 +8694,34 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Rotate Mars
     if (this.marsMesh) {
       this.marsMesh.rotation.y += 0.003;
+    }
+
+    // Starman — Tesla Roadster in a lazy heliocentric orbit, tumbling in zero-G
+    if (this.starmanGroup) {
+      // Show during Earth, Moon, and Mars tour stops (inner solar system)
+      const showStarman = this.tourActive && (
+        this.activeCameraAnchorKey === 'aarde' ||
+        this.activeCameraAnchorKey === 'maan' ||
+        this.activeCameraAnchorKey === 'mars'
+      );
+      // Also show during slides that have Earth visible
+      const earthVisible = this.earthMesh?.visible ?? false;
+      this.starmanGroup.visible = showStarman || earthVisible;
+      if (this.starmanGroup.visible && this.earthMesh) {
+        // Orbit between Earth and Mars — radius ~4 units from Earth's position
+        this.starmanOrbitAngle += 0.0006;
+        const ep = this.earthMesh.position;
+        const orbitR = 4;
+        this.starmanGroup.position.set(
+          ep.x + orbitR * Math.cos(this.starmanOrbitAngle),
+          ep.y + 1.0 * Math.sin(this.starmanOrbitAngle * 0.7),
+          ep.z + orbitR * Math.sin(this.starmanOrbitAngle)
+        );
+        // Slow tumble — weightless drift
+        this.starmanGroup.rotation.x += 0.003;
+        this.starmanGroup.rotation.z += 0.001;
+        this.starmanGroup.rotation.y += 0.002;
+      }
     }
     // Rotate Venus (retrograde, very slow)
     if (this.venusMesh) {

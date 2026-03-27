@@ -154,7 +154,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Starman — Tesla Roadster drifting in heliocentric orbit (easter egg)
   private starmanGroup!: THREE.Group;
-  private starmanOrbitAngle = Math.random() * Math.PI * 2;
+  private starmanOrbitAngle = 0.5; // Start in front of Earth relative to default camera
 
   // Distance beam between Earth and Jupiter
   private distanceBeam!: THREE.Group;
@@ -372,6 +372,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private updatePlanetTour(time: number) {
     if (!this.tourActive || this.tourStops.length === 0) return;
+
+    // Freeze tour progression while Falcon is in flight so the landing stays on-screen
+    if (this.falconLaunched) {
+      this.tourStopTime = time - this.TOUR_STOP_DURATION; // Hold the clock
+      return;
+    }
 
     const elapsed = time - this.tourStopTime;
     const stop = this.tourStops[this.tourStopIndex];
@@ -1934,19 +1940,22 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.02;
         }
 
-        const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
-        this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
-        this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
-        this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
+        // When Falcon is in flight, let its camera tracking take priority
+        if (!this.falconLaunched) {
+          const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
+          this.baseCameraX = anchor.x + this.theatreCameraValues.offset.x;
+          this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
+          this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
 
-        this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
-        this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
-        this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
-        this.targetLookAt.set(
-          anchor.x + this.theatreCameraValues.lookOffset.x,
-          anchor.y + this.theatreCameraValues.lookOffset.y,
-          anchor.z + this.theatreCameraValues.lookOffset.z,
-        );
+          this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
+          this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
+          this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
+          this.targetLookAt.set(
+            anchor.x + this.theatreCameraValues.lookOffset.x,
+            anchor.y + this.theatreCameraValues.lookOffset.y,
+            anchor.z + this.theatreCameraValues.lookOffset.z,
+          );
+        }
 
         this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
         this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
@@ -3338,7 +3347,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.falconLaunched = true;
     this.falconHyperspaceTriggered = false;
     this.falconLaunchTime = (Date.now() - this.startTime) * 0.001;
-    this.falconGroup.scale.setScalar(1.8);
+    this.falconGroup.scale.setScalar(2.5);
     // Start and end positions — read from physics after setting translation
     this.falconStartPos.copy(this.falconGroup.position);
     this.falconTargetPos.copy(this.marsMesh.position).add(new THREE.Vector3(0.42, 0.58, 0.38));
@@ -3381,14 +3390,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (t < 0.82) {
       const cruiseT = (t - 0.24) / 0.58;
       const cruiseEase = 1 - Math.pow(1 - cruiseT, 2);
-      const scale = Math.max(0.65, 1.8 - cruiseT * 1.1);
+      const scale = Math.max(0.9, 2.5 - cruiseT * 1.5);
       this.falconGroup.scale.setScalar(scale);
       return new THREE.Vector3().lerpVectors(this.getFalconCruiseMidpoint(), this.getFalconApproachPosition(), cruiseEase);
     }
 
     const landingT = (t - 0.82) / 0.18;
     const landingEase = 1 - Math.pow(1 - landingT, 3);
-    const landingScale = Math.max(0.55, 0.7 - landingT * 0.12);
+    const landingScale = Math.max(0.8, 1.0 - landingT * 0.15);
     this.falconGroup.scale.setScalar(landingScale);
     return new THREE.Vector3().lerpVectors(this.getFalconApproachPosition(), this.falconTargetPos, landingEase);
   }
@@ -3408,6 +3417,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (light) light.intensity = 0;
     // Clear telemetry HUD
     this.ngZone.run(() => this.telemetry.emit(null));
+    // Resume planet tour — reset the stop timer so we get a full dwell before moving on
+    this.tourStopTime = (Date.now() - this.startTime) * 0.001;
   }
 
   private createStarman() {
@@ -3416,11 +3427,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.loadPromises.push(new Promise<void>((resolve) => {
       loader.load('2008_tesla_roadster.glb', (gltf) => {
         const model = gltf.scene;
-        // Scale to a small car-sized object (~0.4 scene units long)
+        // Scale to a visible car-sized object (~0.8 scene units long)
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 0.4 / maxDim;
+        const scale = 0.8 / maxDim;
         model.scale.setScalar(scale);
         const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
         model.position.sub(center);
@@ -3494,7 +3505,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const mat = this.falconExhaust.material as THREE.ShaderMaterial;
     mat.uniforms['uTime'].value = time - this.falconLaunchTime;
 
-    // 3. Cinematic Camera Tracking
+    // 3. Cinematic Camera Tracking (faster lerp for snappy follow)
+    this.cameraLerpSpeed = 0.06;
     if (t < 0.3 && this.earthMesh) {
       // Ground Tracking Cam — looking up from Earth
       this.targetCameraX = this.earthMesh.position.x - 2;
@@ -5311,17 +5323,23 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Starman — Tesla Roadster in a lazy heliocentric orbit, tumbling in zero-G
     if (this.starmanGroup) {
-      // Show only when Earth is visible (tour is active in inner solar system)
+      // Show during Earth, Moon, and Mars tour stops (inner solar system)
+      const showStarman = this.tourActive && (
+        this.activeCameraAnchorKey === 'aarde' ||
+        this.activeCameraAnchorKey === 'maan' ||
+        this.activeCameraAnchorKey === 'mars'
+      );
+      // Also show during slides that have Earth visible
       const earthVisible = this.earthMesh?.visible ?? false;
-      this.starmanGroup.visible = earthVisible;
-      if (earthVisible && this.earthMesh) {
-        // Orbit between Earth and Mars — radius ~6 units from Earth's position
-        this.starmanOrbitAngle += 0.0004;
+      this.starmanGroup.visible = showStarman || earthVisible;
+      if (this.starmanGroup.visible && this.earthMesh) {
+        // Orbit between Earth and Mars — radius ~4 units from Earth's position
+        this.starmanOrbitAngle += 0.0006;
         const ep = this.earthMesh.position;
-        const orbitR = 6;
+        const orbitR = 4;
         this.starmanGroup.position.set(
           ep.x + orbitR * Math.cos(this.starmanOrbitAngle),
-          ep.y + 0.8 * Math.sin(this.starmanOrbitAngle * 0.7),
+          ep.y + 1.0 * Math.sin(this.starmanOrbitAngle * 0.7),
           ep.z + orbitR * Math.sin(this.starmanOrbitAngle)
         );
         // Slow tumble — weightless drift

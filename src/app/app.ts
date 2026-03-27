@@ -793,12 +793,12 @@ export class App implements AfterViewInit, OnDestroy {
     if (planetName === 'maan' && !this.moonAudioPlayed && !this.isMuted()) {
       this.moonAudioPlayed = true;
       this.fadeBgMusicTo(0.08);
-      // "Contact light" — first words spoken on the Moon, after 1s delay
-      setTimeout(() => this.playRadioVoice('Contact light.', 0.5), 1000);
-      // "One small step for a man" — the restored "a" easter egg, after 4s
-      setTimeout(() => this.playRadioVoice('That\'s one small step for a man, one giant leap for mankind.', 0.6), 4000);
+      // Brief radio static burst for "Contact light" moment
+      setTimeout(() => this.playRadioVoice('Contact light.', 0.35), 1000);
+      // Real NASA recording: "That's one small step for a man..."
+      setTimeout(() => this.playNasaClip('one_small_step.mp3', 0.7), 4000);
       // Restore music after the quotes
-      setTimeout(() => this.fadeBgMusicTo(0.3), 12000);
+      setTimeout(() => this.fadeBgMusicTo(0.3), 14000);
     }
     if (planetName !== 'maan') {
       this.moonAudioPlayed = false;
@@ -1185,6 +1185,54 @@ export class App implements AfterViewInit, OnDestroy {
       const enVoice = voices.find(v => v.lang.startsWith('en'));
       if (enVoice) utter.voice = enVoice;
       speechSynthesis.speak(utter);
+    }
+  }
+
+  /** Play a real NASA audio clip with radio-static overlay */
+  private async playNasaClip(url: string, volume: number) {
+    if (!this.isBrowser) return;
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    const ctx = this.audioCtx;
+
+    try {
+      const response = await fetch(url);
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+      // Play NASA audio — no extra filter, the original already has the radio quality
+      const source = ctx.createBufferSource();
+      source.buffer = audioBuffer;
+      const gainNode = ctx.createGain();
+      gainNode.gain.value = volume;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      source.start();
+
+      // Overlay radio static noise
+      const noiseDuration = audioBuffer.duration + 1;
+      const sampleRate = ctx.sampleRate;
+      const noiseBuffer = ctx.createBuffer(1, sampleRate * noiseDuration, sampleRate);
+      const noiseData = noiseBuffer.getChannelData(0);
+      for (let i = 0; i < noiseData.length; i++) {
+        noiseData[i] = (Math.random() * 2 - 1) * 0.12;
+      }
+      const noiseSource = ctx.createBufferSource();
+      noiseSource.buffer = noiseBuffer;
+      const noiseBandpass = ctx.createBiquadFilter();
+      noiseBandpass.type = 'bandpass';
+      noiseBandpass.frequency.value = 2000;
+      noiseBandpass.Q.value = 0.7;
+      const noiseGain = ctx.createGain();
+      noiseGain.gain.value = volume * 0.15;
+      noiseSource.connect(noiseBandpass);
+      noiseBandpass.connect(noiseGain);
+      noiseGain.connect(ctx.destination);
+      noiseSource.start();
+      noiseSource.stop(ctx.currentTime + noiseDuration);
+      noiseGain.gain.setValueAtTime(volume * 0.15, ctx.currentTime + noiseDuration - 0.8);
+      noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + noiseDuration);
+    } catch (e) {
+      console.warn('NASA audio clip failed to load', e);
     }
   }
 

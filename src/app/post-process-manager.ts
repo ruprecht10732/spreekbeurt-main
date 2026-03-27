@@ -38,11 +38,11 @@ export class PostProcessManager {
     // Bloom tuned for cinematic space — picks up bright star spikes and hero stars
     this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
-      intensity: 1.6,
-      luminanceThreshold: 0.78,
-      luminanceSmoothing: 0.18,
+      intensity: 1.2,
+      luminanceThreshold: 0.88,
+      luminanceSmoothing: 0.12,
       mipmapBlur: true,
-      radius: 0.92,
+      radius: 0.65,
     });
 
     this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
@@ -58,17 +58,17 @@ export class PostProcessManager {
     }) : null;
 
     const chromaticAberration = new ChromaticAberrationEffect({
-      offset: new THREE.Vector2(0.0006, 0.0006),
+      offset: new THREE.Vector2(0.00015, 0.00015),
       radialModulation: true,
-      modulationOffset: 0.3,
+      modulationOffset: 0.4,
     });
     this.chromaticAberrationEffect = chromaticAberration;
 
-    // Cinematic Depth of Field — subtle background softening only
+    // Cinematic Depth of Field — very subtle, almost imperceptible
     this.dofEffect = new DepthOfFieldEffect(camera, {
       focusDistance: 0.0,
-      focalLength: 0.01,
-      bokehScale: 0.5,
+      focalLength: 0.005,
+      bokehScale: 0.1,
     });
 
     // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)

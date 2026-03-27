@@ -289,11 +289,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // SpaceX Falcon 9 rocket launch
   private falconGroup!: THREE.Group;
+  private falconFirstStage!: THREE.Group;
+  private falconSecondStage!: THREE.Group;
+  private falconFairingL!: THREE.Mesh;
+  private falconFairingR!: THREE.Mesh;
   private falconExhaust!: THREE.Mesh;
+  private falconSecondExhaust!: THREE.Mesh;
   private falconLegs: THREE.Group[] = [];
   private falconLaunched = false;
   private falconLaunchTime = 0;
   private falconHyperspaceTriggered = false;
+  private falconSeparated = false;
+  private falconFairingsJettisoned = false;
   private readonly falconFlightDuration = 18;
   private readonly falconStartPos = new THREE.Vector3();
   private readonly falconTargetPos = new THREE.Vector3();
@@ -812,11 +819,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       logarithmicDepthBuffer: true,
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMappingExposure = 0.85;
+    this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -2685,32 +2692,54 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createBlackHole() {
     this.blackHoleGroup = new THREE.Group();
 
-    // 1. The Event Horizon (Pure Black Sphere)
+    // 1. Event Horizon — absolute black sphere, no light escapes
     const horizonGeo = new THREE.SphereGeometry(6, 64, 64);
     const horizonMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const eventHorizon = new THREE.Mesh(horizonGeo, horizonMat);
+    eventHorizon.renderOrder = -1;
     this.blackHoleGroup.add(eventHorizon);
 
-    // 2. Gravitational Lensing — high IOR refracts background skybox
-    const lensingGeo = new THREE.SphereGeometry(6.5, 64, 64);
+    // 2. Photon Sphere — thin bright ring at 1.5× Schwarzschild radius
+    const photonGeo = new THREE.TorusGeometry(9.0, 0.15, 32, 256);
+    const photonMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vViewDir;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vViewDir = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vViewDir;
+        void main() {
+          float fresnel = pow(1.0 - abs(dot(vNormal, vViewDir)), 3.0);
+          vec3 col = mix(vec3(1.0, 0.85, 0.5), vec3(1.0, 1.0, 1.0), fresnel);
+          gl_FragColor = vec4(col * 2.5, fresnel * 0.9);
+        }`,
+      transparent: true, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const photonRing = new THREE.Mesh(photonGeo, photonMat);
+    photonRing.rotation.x = Math.PI / 2;
+    this.blackHoleGroup.add(photonRing);
+
+    // 3. Gravitational Lensing shell — distorts background via refraction
+    const lensingGeo = new THREE.SphereGeometry(7.5, 64, 64);
     const lensingMat = new THREE.MeshPhysicalMaterial({
-      transmission: 1.0,
-      opacity: 1.0,
-      ior: 2.8,
-      roughness: 0,
-      thickness: 15.0,
-      side: THREE.BackSide,
+      transmission: 1.0, opacity: 1.0, ior: 2.33,
+      roughness: 0, thickness: 12.0, side: THREE.BackSide,
+      attenuationColor: new THREE.Color(0.02, 0.01, 0.0),
+      attenuationDistance: 20,
     });
     const lensingSphere = new THREE.Mesh(lensingGeo, lensingMat);
     this.blackHoleGroup.add(lensingSphere);
 
-    // 3. Accretion Disk — Interstellar-style custom shader with Doppler beaming
-    const diskGeo = new THREE.RingGeometry(8, 22, 128, 64);
+    // 4. Accretion Disk — Interstellar-style with Doppler beaming, temperature gradient, turbulence
+    const diskGeo = new THREE.RingGeometry(8, 28, 256, 64);
     const diskMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uColor1: { value: new THREE.Color(1.0, 0.4, 0.1) },
-        uColor2: { value: new THREE.Color(1.0, 0.9, 0.5) },
       },
       vertexShader: `
         varying vec2 vUv;
@@ -2724,51 +2753,105 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       `,
       fragmentShader: `
         uniform float uTime;
-        uniform vec3 uColor1;
-        uniform vec3 uColor2;
         varying vec2 vUv;
-        varying vec3 vWorldPos;
 
-        float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
+        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+
         float noise(vec2 p) {
           vec2 i = floor(p); vec2 f = fract(p);
-          float a = hash(i); float b = hash(i + vec2(1.0, 0.0));
-          float c = hash(i + vec2(0.0, 1.0)); float d = hash(i + vec2(1.0, 1.0));
-          vec2 u = f * f * (3.0 - 2.0 * f);
-          return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+          float a = hash(i); float b = hash(i + vec2(1,0));
+          float c = hash(i + vec2(0,1)); float d = hash(i + vec2(1,1));
+          vec2 u = f*f*(3.0-2.0*f);
+          return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
         }
+
         float fbm(vec2 p) {
-          float f = 0.0;
-          f += 0.5000 * noise(p); p = p * 2.02;
-          f += 0.2500 * noise(p); p = p * 2.03;
-          f += 0.1250 * noise(p); p = p * 2.01;
-          f += 0.0625 * noise(p);
-          return f;
+          float v = 0.0; float a = 0.5; mat2 rot = mat2(cos(0.5),sin(0.5),-sin(0.5),cos(0.5));
+          for(int i = 0; i < 6; i++) {
+            v += a * noise(p); p = rot * p * 2.01; a *= 0.5;
+          }
+          return v;
         }
 
         void main() {
-          vec2 centered = vUv - 0.5;
-          float radius = length(centered) * 2.0;
-          float angle = atan(centered.y, centered.x);
-          float spin = angle + uTime * (1.5 / max(radius, 0.01));
-          float n = fbm(vec2(spin * 4.0, radius * 10.0 - uTime));
-          float doppler = 1.0 + 0.8 * sin(angle);
-          float edgeAlpha = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.8, vUv.x);
-          float intensity = pow(n, 1.5) * doppler * edgeAlpha;
-          vec3 finalColor = mix(uColor1, uColor2, intensity) * (intensity * 3.0);
-          gl_FragColor = vec4(finalColor, intensity);
+          vec2 c = vUv - 0.5;
+          float r = length(c) * 2.0;
+          float angle = atan(c.y, c.x);
+
+          // Keplerian rotation — inner orbits much faster
+          float angularVel = 3.0 / pow(max(r, 0.05), 1.5);
+          float spin = angle + uTime * angularVel;
+
+          // Multi-scale turbulence for gaseous structure
+          float n1 = fbm(vec2(spin * 3.0, r * 8.0 - uTime * 0.5));
+          float n2 = fbm(vec2(spin * 6.0 + 2.3, r * 16.0 - uTime * 0.3));
+          float n3 = fbm(vec2(spin * 1.5 - 0.7, r * 4.0 + uTime * 0.2));
+          float turb = n1 * 0.6 + n2 * 0.25 + n3 * 0.15;
+
+          // Temperature gradient: white-hot inner → orange → dull red outer
+          float temp = smoothstep(1.0, 0.0, r) * 0.8 + turb * 0.2;
+          vec3 hotWhite = vec3(1.0, 0.98, 0.95);
+          vec3 orange   = vec3(1.0, 0.55, 0.1);
+          vec3 deepRed  = vec3(0.6, 0.12, 0.02);
+          vec3 col = temp > 0.6 ? mix(orange, hotWhite, (temp - 0.6) / 0.4)
+                   : temp > 0.25 ? mix(deepRed, orange, (temp - 0.25) / 0.35)
+                   : deepRed * (temp / 0.25);
+
+          // Relativistic Doppler beaming — approaching side boosted, receding dimmed
+          float doppler = 1.0 + 0.7 * sin(angle + 0.3);
+          // Limb brightening at inner edge (photon pile-up)
+          float innerBright = exp(-pow((r - 0.05) * 5.0, 2.0)) * 3.0;
+
+          // Radial density profile: fades at both edges
+          float density = smoothstep(0.0, 0.12, r) * smoothstep(1.0, 0.65, r);
+
+          // Ring sub-structure — concentric density waves
+          float rings = 0.7 + 0.3 * sin(r * 60.0 + turb * 8.0);
+
+          float intensity = pow(turb, 1.2) * doppler * density * rings + innerBright;
+
+          // HDR emission
+          vec3 final = col * intensity * 4.0;
+
+          gl_FragColor = vec4(final, intensity * 0.95);
         }
       `,
-      transparent: true,
-      side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
+      transparent: true, side: THREE.DoubleSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
     });
 
     this.accretionDisk = new THREE.Mesh(diskGeo, diskMat);
-    this.accretionDisk.rotation.x = Math.PI / 2.2;
-    this.accretionDisk.rotation.y = 0.2;
+    this.accretionDisk.rotation.x = Math.PI / 2.15;
+    this.accretionDisk.rotation.y = 0.15;
     this.blackHoleGroup.add(this.accretionDisk);
+
+    // 5. Volumetric glow halo — warm ambient light surrounding the disk
+    const glowGeo = new THREE.SphereGeometry(30, 32, 32);
+    const glowMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vViewDir;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          vViewDir = normalize(-mv.xyz);
+          gl_Position = projectionMatrix * mv;
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vViewDir;
+        void main() {
+          float fresnel = pow(1.0 - abs(dot(vNormal, vViewDir)), 5.0);
+          vec3 col = vec3(1.0, 0.45, 0.1) * fresnel * 0.3;
+          gl_FragColor = vec4(col, fresnel * 0.15);
+        }`,
+      transparent: true, side: THREE.BackSide,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    this.blackHoleGroup.add(new THREE.Mesh(glowGeo, glowMat));
+
+    // 6. Ambient light from accretion disk — subtle warm illumination
+    const diskLight = new THREE.PointLight(0xff7733, 2, 80, 1.5);
+    diskLight.position.set(0, 3, 0);
+    this.blackHoleGroup.add(diskLight);
 
     // Position far into deep space, past Pluto
     this.blackHoleGroup.position.set(-350, -50, -400);
@@ -3818,109 +3901,155 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private buildFalcon9(): THREE.Group {
     const group = new THREE.Group();
-
-    // First stage — tall white cylinder (Falcon 9 is ~70m tall, we use ~0.5 scene units)
     const bodyMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.3, metalness: 0.4 });
-    const firstStage = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.028, 0.32, 12), bodyMat);
-    firstStage.position.y = 0.16;
-    group.add(firstStage);
+    const interMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6, metalness: 0.3 });
+    const engMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
 
-    // Grid fins (4 small rectangles at base of first stage)
+    const exhaustVert = `
+      varying vec2 vUv;
+      void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }`;
+    const exhaustFrag = `
+      uniform float uTime;
+      varying vec2 vUv;
+      void main() {
+        float dist = length(vUv - vec2(0.5, 0.0));
+        float core = smoothstep(0.5, 0.0, dist);
+        vec3 col = mix(vec3(1.0,0.3,0.05), vec3(1.0,0.95,0.8), core*core);
+        float flicker = 0.85 + 0.15*sin(uTime*30.0 + vUv.y*20.0);
+        float alpha = core * flicker * smoothstep(1.0, 0.0, vUv.y);
+        gl_FragColor = vec4(col, alpha*0.9);
+      }`;
+
+    // === FIRST STAGE SUB-GROUP ===
+    this.falconFirstStage = new THREE.Group();
+
+    const s1Body = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.028, 0.32, 12), bodyMat);
+    s1Body.position.y = 0.16;
+    this.falconFirstStage.add(s1Body);
+
+    // Grid fins (4)
     const finMat = new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.5, metalness: 0.6 });
     for (let i = 0; i < 4; i++) {
       const fin = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.015, 0.003), finMat);
       const angle = (i * Math.PI) / 2;
       fin.position.set(Math.cos(angle) * 0.03, 0.28, Math.sin(angle) * 0.03);
       fin.rotation.y = angle;
-      group.add(fin);
+      this.falconFirstStage.add(fin);
     }
 
-    // Interstage — dark band
-    const interMat = new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.6, metalness: 0.3 });
+    // Interstage
     const interstage = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.03, 12), interMat);
     interstage.position.y = 0.335;
-    group.add(interstage);
+    this.falconFirstStage.add(interstage);
 
-    // Second stage — shorter white cylinder
-    const secondStage = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.025, 0.12, 12), bodyMat);
-    secondStage.position.y = 0.41;
-    group.add(secondStage);
-
-    // Payload fairing — nose cone
-    const fairingMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.25, metalness: 0.3 });
-    const fairing = new THREE.Mesh(new THREE.ConeGeometry(0.026, 0.07, 12), fairingMat);
-    fairing.position.y = 0.505;
-    group.add(fairing);
-
-    // SpaceX logo strip — subtle dark band on first stage
+    // SpaceX logo strip
     const logoStrip = new THREE.Mesh(new THREE.CylinderGeometry(0.029, 0.029, 0.02, 12), interMat);
     logoStrip.position.y = 0.12;
-    group.add(logoStrip);
+    this.falconFirstStage.add(logoStrip);
 
-    // Landing legs — grouped for pivot animation
+    // Landing legs (4)
     const legMat = new THREE.MeshStandardMaterial({ color: 0x444444, roughness: 0.7, metalness: 0.5 });
     this.falconLegs = [];
     for (let i = 0; i < 4; i++) {
       const legGroup = new THREE.Group();
       const leg = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.06, 0.015), legMat);
-      leg.position.set(0, -0.03, 0); // Offset so pivot is at the top
+      leg.position.set(0, -0.03, 0);
       legGroup.add(leg);
-
       const angle = (i * Math.PI) / 2 + Math.PI / 4;
       legGroup.position.set(Math.cos(angle) * 0.03, 0.04, Math.sin(angle) * 0.03);
       legGroup.rotation.y = angle;
-      legGroup.rotation.x = 0; // Folded up flat against the rocket
-
+      legGroup.rotation.x = 0;
       this.falconLegs.push(legGroup);
-      group.add(legGroup);
+      this.falconFirstStage.add(legGroup);
     }
 
     // Merlin engines (9 at base — 1 center + 8 octaweb)
-    const engMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, roughness: 0.4, metalness: 0.8 });
     for (let i = 0; i < 9; i++) {
       const eng = new THREE.Mesh(new THREE.CylinderGeometry(0.006, 0.008, 0.015, 8), engMat);
       if (i === 0) {
-        eng.position.set(0, -0.005, 0); // Center engine
+        eng.position.set(0, -0.005, 0);
       } else {
         const angle = ((i - 1) * Math.PI * 2) / 8;
         eng.position.set(Math.cos(angle) * 0.016, -0.005, Math.sin(angle) * 0.016);
       }
-      group.add(eng);
+      this.falconFirstStage.add(eng);
     }
 
-    // Exhaust plume — fiery cone pointing downward
-    const exhaustMat = new THREE.ShaderMaterial({
-      vertexShader: `
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }`,
-      fragmentShader: `
-        uniform float uTime;
-        varying vec2 vUv;
-        void main() {
-          float dist = length(vUv - vec2(0.5, 0.0));
-          float core = smoothstep(0.5, 0.0, dist);
-          // Hot white core → orange → red → transparent
-          vec3 col = mix(vec3(1.0, 0.3, 0.05), vec3(1.0, 0.95, 0.8), core * core);
-          float flicker = 0.85 + 0.15 * sin(uTime * 30.0 + vUv.y * 20.0);
-          float alpha = core * flicker * smoothstep(1.0, 0.0, vUv.y);
-          gl_FragColor = vec4(col, alpha * 0.9);
-        }`,
+    // First stage exhaust (9 Merlins — large plume)
+    const s1ExhaustMat = new THREE.ShaderMaterial({
+      vertexShader: exhaustVert, fragmentShader: exhaustFrag,
       uniforms: { uTime: { value: 0 } },
       transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
-    this.falconExhaust = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.25, 12, 1, true), exhaustMat);
+    this.falconExhaust = new THREE.Mesh(new THREE.ConeGeometry(0.04, 0.25, 12, 1, true), s1ExhaustMat);
     this.falconExhaust.position.y = -0.14;
-    this.falconExhaust.rotation.x = Math.PI; // Flip so tip faces down
+    this.falconExhaust.rotation.x = Math.PI;
     this.falconExhaust.visible = false;
-    group.add(this.falconExhaust);
+    this.falconFirstStage.add(this.falconExhaust);
+    const s1Light = new THREE.PointLight(0xff6622, 0, 3, 2);
+    s1Light.name = 'exhaustLight';
+    this.falconExhaust.add(s1Light);
 
-    // Exhaust glow (point light for dramatic lighting)
-    const exhaustLight = new THREE.PointLight(0xff6622, 0, 3, 2);
-    exhaustLight.name = 'exhaustLight';
-    this.falconExhaust.add(exhaustLight);
+    group.add(this.falconFirstStage);
+
+    // === SECOND STAGE SUB-GROUP ===
+    this.falconSecondStage = new THREE.Group();
+
+    const s2Body = new THREE.Mesh(new THREE.CylinderGeometry(0.023, 0.025, 0.12, 12), bodyMat);
+    s2Body.position.y = 0.41;
+    this.falconSecondStage.add(s2Body);
+
+    // MVac engine
+    const mvac = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.012, 0.02, 8), engMat);
+    mvac.position.y = 0.34;
+    this.falconSecondStage.add(mvac);
+
+    // Second stage exhaust (single MVac — smaller, bluer plume)
+    const s2ExhaustMat = new THREE.ShaderMaterial({
+      vertexShader: exhaustVert, fragmentShader: exhaustFrag,
+      uniforms: { uTime: { value: 0 } },
+      transparent: true, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.falconSecondExhaust = new THREE.Mesh(new THREE.ConeGeometry(0.02, 0.18, 12, 1, true), s2ExhaustMat);
+    this.falconSecondExhaust.position.y = 0.24;
+    this.falconSecondExhaust.rotation.x = Math.PI;
+    this.falconSecondExhaust.visible = false;
+    this.falconSecondStage.add(this.falconSecondExhaust);
+    const s2Light = new THREE.PointLight(0x4488ff, 0, 2, 2);
+    s2Light.name = 'exhaustLight2';
+    this.falconSecondExhaust.add(s2Light);
+
+    // Payload fairing — two halves (will jettison separately)
+    const fairingMat = new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.25, metalness: 0.3 });
+    this.falconFairingL = new THREE.Mesh(
+      new THREE.CylinderGeometry(0, 0.026, 0.07, 12, 1, false, 0, Math.PI), fairingMat
+    );
+    this.falconFairingL.position.y = 0.505;
+    this.falconSecondStage.add(this.falconFairingL);
+
+    this.falconFairingR = new THREE.Mesh(
+      new THREE.CylinderGeometry(0, 0.026, 0.07, 12, 1, false, Math.PI, Math.PI), fairingMat
+    );
+    this.falconFairingR.position.y = 0.505;
+    this.falconSecondStage.add(this.falconFairingR);
+
+    // Dragon capsule (revealed after fairing jettison)
+    const capsule = new THREE.Mesh(
+      new THREE.ConeGeometry(0.018, 0.04, 12),
+      new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.35, metalness: 0.3 })
+    );
+    capsule.position.y = 0.49;
+    this.falconSecondStage.add(capsule);
+
+    // Trunk section
+    const trunk = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.02, 0.02, 0.03, 12),
+      new THREE.MeshStandardMaterial({ color: 0x333333, roughness: 0.6, metalness: 0.2 })
+    );
+    trunk.position.y = 0.465;
+    this.falconSecondStage.add(trunk);
+
+    group.add(this.falconSecondStage);
 
     group.visible = false;
     return group;
@@ -3928,23 +4057,45 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private launchFalcon9() {
     if (!this.falconGroup || !this.earthMesh || !this.marsMesh) return;
-    // Position at Earth's surface
+
+    // Re-attach first stage if previously separated
+    if (this.falconSeparated && this.falconFirstStage.parent !== this.falconGroup) {
+      this.scene.remove(this.falconFirstStage);
+      this.falconGroup.add(this.falconFirstStage);
+      this.falconFirstStage.position.set(0, 0, 0);
+      this.falconFirstStage.quaternion.identity();
+    }
+    // Re-attach fairings
+    if (this.falconFairingsJettisoned) {
+      if (this.falconFairingL.parent === this.scene) this.scene.remove(this.falconFairingL);
+      if (this.falconFairingR.parent === this.scene) this.scene.remove(this.falconFairingR);
+      this.falconSecondStage.add(this.falconFairingL);
+      this.falconSecondStage.add(this.falconFairingR);
+      this.falconFairingL.position.y = 0.505;
+      this.falconFairingR.position.y = 0.505;
+      this.falconFairingL.quaternion.identity();
+      this.falconFairingR.quaternion.identity();
+      this.falconFairingL.visible = true;
+      this.falconFairingR.visible = true;
+    }
+
+    this.falconSeparated = false;
+    this.falconFairingsJettisoned = false;
+
     const earthPos = this.earthMesh.position;
     this.falconGroup.position.set(earthPos.x + 0.5, earthPos.y + 0.9, earthPos.z + 0.5);
     this.falconGroup.visible = true;
     this.falconExhaust.visible = true;
+    this.falconSecondExhaust.visible = false;
     this.falconLaunched = true;
     this.falconHyperspaceTriggered = false;
     this.falconLaunchTime = (Date.now() - this.startTime) * 0.001;
     this.falconGroup.scale.setScalar(2.5);
-    // Start and end positions — read from physics after setting translation
     this.falconStartPos.copy(this.falconGroup.position);
     this.falconTargetPos.copy(this.marsMesh.position).add(new THREE.Vector3(0.42, 0.58, 0.38));
     this.physicsManager.setTranslation(this.falconGroup, this.falconStartPos, true);
     this.physicsManager.setLinvel(this.falconGroup, new THREE.Vector3(), true);
-    // Gentle initial lift impulse
     this.physicsManager.applyImpulse(this.falconGroup, new THREE.Vector3(0, 1.8, 0.4), true);
-    // Point exhaust light on
     const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
     if (light) light.intensity = 4;
   }
@@ -3994,16 +4145,24 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private finalizeFalconLanding() {
     this.falconExhaust.visible = false;
+    this.falconSecondExhaust.visible = false;
     this.physicsManager.setTranslation(this.falconGroup, this.falconTargetPos, true);
     this.physicsManager.setLinvel(this.falconGroup, new THREE.Vector3(), true);
     this.falconGroup.quaternion.slerp(new THREE.Quaternion(), 1);
     this.falconGroup.visible = true;
     this.falconLaunched = false;
-    // Legs fully deployed
-    this.falconLegs.forEach(leg => leg.rotation.x = 1.2);
-    // Exhaust light off
+    // Hide separated first stage (it "landed" back on Earth off-camera)
+    if (this.falconFirstStage.parent === this.scene) {
+      this.falconFirstStage.visible = false;
+    }
+    // Hide jettisoned fairings
+    if (this.falconFairingL.parent === this.scene) this.falconFairingL.visible = false;
+    if (this.falconFairingR.parent === this.scene) this.falconFairingR.visible = false;
+    // Exhaust lights off
     const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
     if (light) light.intensity = 0;
+    const light2 = this.falconSecondExhaust.getObjectByName('exhaustLight2') as THREE.PointLight;
+    if (light2) light2.intensity = 0;
     // Clear telemetry HUD
     this.ngZone.run(() => this.telemetry.emit(null));
     // Skip ahead in tour — don't return to Earth, jump to the stop after Mars
@@ -4054,7 +4213,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const totalDuration = this.falconFlightDuration;
     const t = Math.min(elapsed / totalDuration, 1);
 
-    // 1. Scripted cinematic movement (smoother than pure physics)
+    // Scripted cinematic movement for main stack (second stage after sep)
     const targetPosition = this.getFalconFlightTarget(t);
     this.physicsManager.setTranslation(this.falconGroup, targetPosition, true);
 
@@ -4064,60 +4223,202 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.triggerHyperspaceJump();
     }
 
-    // 2. Flight Profile — thrust, orientation, leg deployment
-    const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
-    let thrust = 0;
+    // Update exhaust shader time
+    const s1Mat = this.falconExhaust.material as THREE.ShaderMaterial;
+    s1Mat.uniforms['uTime'].value = elapsed;
+    const s2Mat = this.falconSecondExhaust.material as THREE.ShaderMaterial;
+    s2Mat.uniforms['uTime'].value = elapsed;
 
-    if (t < 0.2) {
-      // Stage 1: Launch & Gravity Turn
+    const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+    const s2Light = this.falconSecondExhaust.getObjectByName('exhaustLight2') as THREE.PointLight;
+    let thrust = 0;
+    let phase = 'LIFTOFF';
+
+    // === FLIGHT PHASES WITH STAGING ===
+
+    if (t < 0.14) {
+      // Phase 1: Full-stack launch — 9 Merlins firing
       thrust = 2.0;
+      phase = t < 0.06 ? 'LIFTOFF' : 'MAX-Q';
       const lookTarget = this.getFalconFlightTarget(Math.min(t + 0.05, 1));
       this.falconGroup.lookAt(lookTarget);
+      this.falconExhaust.visible = true;
+      this.falconSecondExhaust.visible = false;
+      if (s1Light) s1Light.intensity = thrust * 3;
       this.falconLegs.forEach(leg => leg.rotation.x = 0);
-    } else if (t < 0.7) {
-      // Stage 2: Coasting (engine off) — slowly rotate retrograde for landing
-      thrust = 0.0;
-      this.falconGroup.rotation.x -= 0.005;
-    } else if (t < 0.8) {
-      // Stage 3: Entry Burn (short burst to slow down)
-      thrust = 1.5;
-      this.falconGroup.lookAt(targetPosition.clone().sub(new THREE.Vector3(0, 1, 0)));
-    } else {
-      // Stage 4: Hoverslam & Landing
-      thrust = (1 - t) * 3.0 + 0.5;
-      this.falconGroup.lookAt(targetPosition.clone().sub(new THREE.Vector3(0, 1, 0)));
 
-      // Deploy legs smoothly in the last 10%
-      const deployT = Math.max(0, (t - 0.9) * 10);
-      this.falconLegs.forEach(leg => leg.rotation.x = deployT * 1.2);
+    } else if (t < 0.16) {
+      // Phase 2: MECO — Main Engine Cut-Off
+      phase = 'MECO';
+      thrust = 0;
+      this.falconExhaust.visible = false;
+      if (s1Light) s1Light.intensity = 0;
+
+    } else if (t < 0.18) {
+      // Phase 3: Stage Separation
+      phase = 'STAGE SEP';
+      thrust = 0;
+
+      if (!this.falconSeparated) {
+        this.falconSeparated = true;
+        // Detach first stage → independent scene object
+        const worldPos = new THREE.Vector3();
+        const worldQuat = new THREE.Quaternion();
+        const worldScale = new THREE.Vector3();
+        this.falconFirstStage.getWorldPosition(worldPos);
+        this.falconFirstStage.getWorldQuaternion(worldQuat);
+        this.falconGroup.getWorldScale(worldScale);
+        this.falconGroup.remove(this.falconFirstStage);
+        this.falconFirstStage.position.copy(worldPos);
+        this.falconFirstStage.quaternion.copy(worldQuat);
+        this.falconFirstStage.scale.copy(worldScale);
+        this.scene.add(this.falconFirstStage);
+      }
+      // First stage drifts backward slowly
+      this.falconFirstStage.position.y -= 0.004;
+
+    } else if (t < 0.20) {
+      // Phase 4: MVac ignition + first stage flip
+      phase = 'MVAC IGN';
+      thrust = 1.2;
+      this.falconSecondExhaust.visible = true;
+      if (s2Light) s2Light.intensity = 3;
+      const lookTarget = this.getFalconFlightTarget(Math.min(t + 0.05, 1));
+      this.falconGroup.lookAt(lookTarget);
+      // First stage starts flipping 180°
+      if (this.falconFirstStage.parent === this.scene) {
+        this.falconFirstStage.rotateX(0.08);
+        this.falconFirstStage.position.y -= 0.002;
+      }
+
+    } else if (t < 0.22) {
+      // Phase 5: Fairing jettison
+      phase = 'FAIRING SEP';
+      thrust = 1.2;
+      this.falconSecondExhaust.visible = true;
+      if (s2Light) s2Light.intensity = 2;
+
+      if (!this.falconFairingsJettisoned) {
+        this.falconFairingsJettisoned = true;
+        const wPos = new THREE.Vector3();
+        const wQuat = new THREE.Quaternion();
+        const wScale = new THREE.Vector3();
+        this.falconGroup.getWorldScale(wScale);
+
+        this.falconFairingL.getWorldPosition(wPos);
+        this.falconFairingL.getWorldQuaternion(wQuat);
+        this.falconSecondStage.remove(this.falconFairingL);
+        this.falconFairingL.position.copy(wPos);
+        this.falconFairingL.quaternion.copy(wQuat);
+        this.falconFairingL.scale.copy(wScale);
+        this.scene.add(this.falconFairingL);
+
+        const wPos2 = new THREE.Vector3();
+        const wQuat2 = new THREE.Quaternion();
+        this.falconFairingR.getWorldPosition(wPos2);
+        this.falconFairingR.getWorldQuaternion(wQuat2);
+        this.falconSecondStage.remove(this.falconFairingR);
+        this.falconFairingR.position.copy(wPos2);
+        this.falconFairingR.quaternion.copy(wQuat2);
+        this.falconFairingR.scale.copy(wScale);
+        this.scene.add(this.falconFairingR);
+      }
+
+      // Fairings tumble away
+      if (this.falconFairingL.parent === this.scene) {
+        this.falconFairingL.position.x -= 0.012;
+        this.falconFairingL.position.y -= 0.006;
+        this.falconFairingL.rotateZ(0.06);
+        this.falconFairingR.position.x += 0.012;
+        this.falconFairingR.position.y -= 0.006;
+        this.falconFairingR.rotateZ(-0.06);
+      }
+
+      // First stage continues boostback
+      if (this.falconFirstStage.parent === this.scene) {
+        this.falconExhaust.visible = true;
+        if (s1Light) s1Light.intensity = 2;
+        this.falconFirstStage.rotateX(0.03);
+      }
+
+      const lookTarget = this.getFalconFlightTarget(Math.min(t + 0.05, 1));
+      this.falconGroup.lookAt(lookTarget);
+
+    } else if (t < 0.82) {
+      // Phase 6: Second stage cruise to Mars
+      phase = 'COAST';
+      thrust = t < 0.40 ? 1.0 : 0.0;
+      this.falconSecondExhaust.visible = thrust > 0;
+      if (s2Light) s2Light.intensity = thrust > 0 ? 2 : 0;
+
+      const lookTarget = this.getFalconFlightTarget(Math.min(t + 0.02, 1));
+      this.falconGroup.lookAt(lookTarget);
+
+      // Fade out fairings
+      if (this.falconFairingsJettisoned && this.falconFairingL.parent === this.scene) {
+        this.falconFairingL.position.x -= 0.002;
+        this.falconFairingL.rotateZ(0.01);
+        this.falconFairingR.position.x += 0.002;
+        this.falconFairingR.rotateZ(-0.01);
+        if (t > 0.32) {
+          this.falconFairingL.visible = false;
+          this.falconFairingR.visible = false;
+        }
+      }
+
+      // First stage independent return animation
+      if (this.falconSeparated && this.falconFirstStage.parent === this.scene) {
+        this.updateFirstStageReturn(t);
+      }
+
+    } else {
+      // Phase 7: Mars approach & landing
+      phase = t < 0.90 ? 'ENTRY BURN' : 'HOVERSLAM';
+      thrust = (1 - t) * 3.0 + 0.5;
+      this.falconSecondExhaust.visible = true;
+      if (s2Light) s2Light.intensity = thrust * 2;
+      this.falconGroup.lookAt(targetPosition.clone().sub(new THREE.Vector3(0, 1, 0)));
     }
 
-    // Update exhaust visuals
-    this.falconExhaust.visible = thrust > 0;
-    this.falconExhaust.scale.set(thrust, thrust * (1 + Math.random() * 0.2), thrust);
-    if (light) light.intensity = thrust * 3;
+    // Update first stage exhaust scale only when visible
+    if (this.falconExhaust.visible) {
+      const s1Thrust = this.falconExhaust.visible && t < 0.14 ? thrust : 1.0;
+      this.falconExhaust.scale.set(s1Thrust, s1Thrust * (1 + Math.random() * 0.2), s1Thrust);
+    }
+    // Update second stage exhaust scale
+    if (this.falconSecondExhaust.visible) {
+      const s2Thrust = Math.max(0.3, thrust);
+      this.falconSecondExhaust.scale.set(s2Thrust * 0.6, s2Thrust * 0.6 * (1 + Math.random() * 0.15), s2Thrust * 0.6);
+    }
 
-    // Update exhaust shader time
-    const mat = this.falconExhaust.material as THREE.ShaderMaterial;
-    mat.uniforms['uTime'].value = time - this.falconLaunchTime;
-
-    // 3. Cinematic Camera Tracking
+    // === CINEMATIC CAMERA ===
     this.cameraLerpSpeed = 0.06;
+
     if (t < 0.12 && this.earthMesh) {
-      // Close-up ground cam — low angle looking up at launch
+      // Ground cam — close-up launch
       this.targetCameraX = this.earthMesh.position.x + 0.8;
       this.targetCameraY = this.earthMesh.position.y + 0.3;
       this.targetCameraZ = this.earthMesh.position.z + 1.8;
       this.targetLookAt.copy(targetPosition);
-    } else if (t < 0.3 && this.earthMesh) {
-      // Pull-back tracking shot — wider view of ascent
-      const lerpT = (t - 0.12) / 0.18;
+    } else if (t < 0.19 && this.earthMesh) {
+      // Wide shot showing stage separation
+      this.targetCameraX = targetPosition.x + 2.0;
+      this.targetCameraY = targetPosition.y + 0.5;
+      this.targetCameraZ = targetPosition.z + 3.0;
+      this.targetLookAt.copy(targetPosition);
+      if (this.falconSeparated && this.falconFirstStage.parent === this.scene) {
+        const midpoint = new THREE.Vector3().lerpVectors(targetPosition, this.falconFirstStage.position, 0.3);
+        this.targetLookAt.copy(midpoint);
+      }
+    } else if (t < 0.30 && this.earthMesh) {
+      // Pull-back tracking shot
+      const lerpT = (t - 0.19) / 0.11;
       this.targetCameraX = this.earthMesh.position.x - 1.5 - lerpT * 1.5;
       this.targetCameraY = this.earthMesh.position.y + 1.5 + lerpT * 2;
       this.targetCameraZ = this.earthMesh.position.z + 4 + lerpT * 2;
       this.targetLookAt.copy(targetPosition);
     } else if (t < 0.8) {
-      // Chase Cam — following the rocket through space, offset rotates for visual interest
+      // Chase Cam — following second stage through space
       const chaseT = (t - 0.3) / 0.5;
       const angle = chaseT * 0.8;
       const offset = new THREE.Vector3(
@@ -4130,28 +4431,66 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.targetCameraZ = targetPosition.z + offset.z;
       this.targetLookAt.copy(targetPosition);
     } else if (this.marsMesh) {
-      // Landing Pad Cam — low angle from Mars surface looking up
+      // Landing Pad Cam
       this.targetCameraX = this.marsMesh.position.x + 1.5;
       this.targetCameraY = this.marsMesh.position.y + 0.3;
       this.targetCameraZ = this.marsMesh.position.z + 2.5;
       this.targetLookAt.copy(targetPosition);
-      // Gentle landing vibration — smooth sine-based, not random jitter
-      const landT = (time - this.falconLaunchTime) * 12;
+      const landT = elapsed * 12;
       this.targetCameraX += Math.sin(landT) * thrust * 0.008;
       this.targetCameraY += Math.cos(landT * 1.3) * thrust * 0.005;
     }
 
-    // 4. Emit Telemetry to Angular UI
+    // Telemetry
     this.ngZone.run(() => {
       this.telemetry.emit({
         altitude: Math.round((1 - t) * 250000),
-        speed: Math.round(thrust * 8000),
-        phase: t < 0.2 ? 'MAX-Q' : t < 0.7 ? 'COAST' : t < 0.8 ? 'ENTRY BURN' : 'HOVERSLAM'
+        speed: Math.round(Math.max(thrust, 0.5) * 8000),
+        phase
       });
     });
 
     if (t >= 1) {
       this.finalizeFalconLanding();
+    }
+  }
+
+  private updateFirstStageReturn(t: number) {
+    // First stage: boostback burn → coast → entry → landing near Earth
+    const returnT = Math.min(1, (t - 0.16) / 0.60);
+    if (!this.earthMesh) return;
+
+    const landingSpot = this.earthMesh.position.clone().add(new THREE.Vector3(0.6, 0.5, 0.6));
+
+    if (returnT < 0.20) {
+      // Boostback burn
+      this.falconExhaust.visible = true;
+      const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+      if (s1Light) s1Light.intensity = 3;
+      this.falconFirstStage.position.lerp(landingSpot, 0.008);
+      this.falconFirstStage.lookAt(landingSpot);
+    } else if (returnT < 0.55) {
+      // Coast — no engines
+      this.falconExhaust.visible = false;
+      const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+      if (s1Light) s1Light.intensity = 0;
+      this.falconFirstStage.position.lerp(landingSpot, 0.012);
+    } else if (returnT < 0.80) {
+      // Entry burn
+      this.falconExhaust.visible = true;
+      const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+      if (s1Light) s1Light.intensity = 2;
+      this.falconFirstStage.position.lerp(landingSpot, 0.02);
+      this.falconFirstStage.lookAt(landingSpot);
+    } else {
+      // Landing burn — deploy legs
+      this.falconExhaust.visible = true;
+      const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
+      if (s1Light) s1Light.intensity = (1 - returnT) * 10;
+      this.falconFirstStage.position.lerp(landingSpot, 0.04);
+      this.falconFirstStage.lookAt(landingSpot);
+      const deployT = Math.min(1, (returnT - 0.80) / 0.15);
+      this.falconLegs.forEach(leg => leg.rotation.x = deployT * 1.2);
     }
   }
 
@@ -4168,7 +4507,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Saturn texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_saturn.webp', (tex) => {
+      this.textureLoader.load('8k_saturn.webp', (tex) => {
         tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         saturnMat.map = tex; saturnMat.color.setHex(0xffffff); saturnMat.needsUpdate = true;
@@ -4376,14 +4715,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Venus — inner solar system, near the Sun direction
     // Venus radius: 6,052 km → 6052/71492 × 10 = 0.846 scene units
-    const venusGeo = new THREE.SphereGeometry(0.846, 32, 32);
+    const venusGeo = new THREE.SphereGeometry(0.846, 64, 64);
     const venusMat = new THREE.MeshStandardMaterial({ color: 0xe8cda0, roughness: 0.7, metalness: 0.05 });
     this.venusMesh = new THREE.Mesh(venusGeo, venusMat);
     this.venusMesh.position.set(-42, 8, 25);
     this.scene.add(this.venusMesh);
     // Venus atmosphere texture (thick sulfuric acid clouds)
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_venus_atmosphere.webp', (tex) => {
+      this.textureLoader.load('8k_venus_surface.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         venusMat.map = tex; venusMat.color.setHex(0xffffff); venusMat.needsUpdate = true;
         resolve();
@@ -4413,14 +4752,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Mercury — smallest planet, closest to the Sun
     // Mercury radius: 2,440 km → 2440/71492 × 10 = 0.341 scene units
-    const mercuryGeo = new THREE.SphereGeometry(0.341, 32, 32);
+    const mercuryGeo = new THREE.SphereGeometry(0.341, 64, 64);
     const mercuryMat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.9, metalness: 0.15 });
     this.mercuryMesh = new THREE.Mesh(mercuryGeo, mercuryMat);
     this.mercuryMesh.position.set(-35, 5, 15);
     this.scene.add(this.mercuryMesh);
     // Mercury texture — cratered surface
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_mercury.webp', (tex) => {
+      this.textureLoader.load('8k_mercury.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         mercuryMat.map = tex; mercuryMat.color.setHex(0xffffff); mercuryMat.needsUpdate = true;
         resolve();
@@ -4430,7 +4769,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Uranus — distant ice giant, opposite direction from Sun
     // Uranus radius: 25,559 km → 25559/71492 × 10 = 3.575 scene units
     this.uranusGroup = new THREE.Group();
-    const uranusGeo = new THREE.SphereGeometry(3.575, 32, 32);
+    const uranusGeo = new THREE.SphereGeometry(3.575, 64, 64);
     const uranusMat = new THREE.MeshStandardMaterial({ color: 0x9dd8d8, roughness: 0.4, metalness: 0.05 });
     this.uranusMesh = new THREE.Mesh(uranusGeo, uranusMat);
     this.uranusGroup.add(this.uranusMesh);
@@ -4510,7 +4849,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Neptune — farthest giant planet
     // Neptune radius: 24,764 km → 24764/71492 × 10 = 3.464 scene units
     this.neptuneGroup = new THREE.Group();
-    const neptuneGeo = new THREE.SphereGeometry(3.464, 48, 48);
+    const neptuneGeo = new THREE.SphereGeometry(3.464, 64, 64);
     const neptuneMat = new THREE.MeshStandardMaterial({ color: 0x3366cc, roughness: 0.4, metalness: 0.05 });
     this.neptuneMesh = new THREE.Mesh(neptuneGeo, neptuneMat);
     this.neptuneGroup.add(this.neptuneMesh);

@@ -1,0 +1,229 @@
+:host {
+	perspective: 1200px;
+}
+
+@keyframes fadeIn {
+	from { opacity: 0; transform: translateY(10px); }
+	to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+	0%, 100% { text-shadow: 0 0 20px rgba(255, 232, 31, 0.3), 0 0 40px rgba(255, 232, 31, 0.1); }
+	50% { text-shadow: 0 0 40px rgba(255, 232, 31, 0.6), 0 0 80px rgba(255, 232, 31, 0.3), 0 0 120px rgba(255, 232, 31, 0.1); }
+}
+
+.title-shimmer {
+	animation: shimmer 3s ease-in-out infinite;
+}
+
+@keyframes starBirth {
+	0% {
+		opacity: 0;
+		transform: scale(0) rotate(-20deg);
+		text-shadow: none;
+		filter: blur(20px);
+	}
+	12% {
+		opacity: 1;
+		transform: scale(3) rotate(8deg);
+		text-shadow: 0 0 80px #fff, 0 0 160px rgba(255, 232, 31, 0.9), 0 0 300px rgba(100, 150, 255, 0.6);
+		filter: blur(3px);
+		color: white;
+	}
+	30% {
+		transform: scale(0.85) rotate(-3deg);
+		text-shadow: 0 0 50px rgba(255, 232, 31, 0.8), 0 0 100px rgba(255, 232, 31, 0.4);
+		filter: blur(0px);
+	}
+	50% {
+		transform: scale(1.08) rotate(1deg);
+	}
+	70% {
+		transform: scale(0.97) rotate(0deg);
+	}
+	100% {
+		opacity: 1;
+		transform: scale(1) rotate(0deg);
+		text-shadow: 0 0 15px rgba(255, 232, 31, 0.5), 0 0 50px rgba(255, 232, 31, 0.2), 0 0 100px rgba(100, 150, 255, 0.08);
+		filter: blur(0px);
+	}
+}
+
+.name-char {
+	opacity: 0;
+	animation: starBirth 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	will-change: transform, opacity, filter;
+}
+
+.name-char::after {
+	content: '✦';
+	position: absolute;
+	top: -0.2em;
+	right: -0.05em;
+	font-size: 0.15em;
+	opacity: 0;
+	animation: sparkleOut 2.5s ease-out forwards;
+	animation-delay: inherit;
+	pointer-events: none;
+}
+
+@keyframes sparkleOut {
+	0% { opacity: 0; transform: scale(0); }
+	12% { opacity: 1; transform: scale(3); color: white; }
+	30% { opacity: 0.8; transform: scale(1.5); color: #ffe81f; }
+	100% { opacity: 0; transform: scale(0) translateY(-30px); }
+}
+
+.name-backdrop::before {
+	content: '';
+	position: absolute;
+	inset: -80px -100px;
+	background: radial-gradient(ellipse at center, rgba(255, 232, 31, 0.07) 0%, rgba(100, 150, 255, 0.04) 35%, transparent 70%);
+	border-radius: 50%;
+	animation: nameGlow 5s ease-in-out 2.5s infinite;
+	pointer-events: none;
+}
+
+@keyframes nameGlow {
+	0%, 100% { opacity: 0.5; transform: scale(1); }
+	50% { opacity: 1; transform: scale(1.2); }
+}
+
+.name-subtitle {
+	animation: fadeIn 1s ease-out 1.8s forwards;
+	opacity: 0;
+}
+
+@keyframes playPulse {
+	0%, 100% { box-shadow: 0 0 40px rgba(255, 232, 31, 0.3); }
+	50% { box-shadow: 0 0 60px rgba(255, 232, 31, 0.6), 0 0 100px rgba(255, 232, 31, 0.2); }
+}
+
+.play-pulse {
+	animation: playPulse 2s ease-in-out infinite;
+}
+
+@keyframes trophyBounce {
+	0%, 100% { transform: translateY(0) rotate(0deg); }
+	25% { transform: translateY(-8px) rotate(-5deg); }
+	75% { transform: translateY(-4px) rotate(5deg); }
+}
+
+.trophy-bounce {
+	animation: trophyBounce 2s ease-in-out infinite;
+}
+
+.animate-fade-in {
+	animation: fadeIn 0.5s ease-out forwards;
+}
+
+@keyframes annotationFloat {
+	0%, 100% { transform: translateY(0); }
+	50% { transform: translateY(-4px); }
+}
+
+.annotation-layer > div {
+	animation: annotationFloat 6s ease-in-out infinite;
+}
+
+.annotation-layer > div:nth-child(2) { animation-delay: -1s; }
+.annotation-layer > div:nth-child(3) { animation-delay: -2s; }
+.annotation-layer > div:nth-child(4) { animation-delay: -3s; }
+.annotation-layer > div:nth-child(5) { animation-delay: -4s; }
+.perspective-1000 { perspective: 1000px; }
+.transform-style-3d { transform-style: preserve-3d; }
+.backface-hidden { backface-visibility: hidden; }
+.rotate-y-180 { transform: rotateY(180deg); }
+
+.perspective-\[800px\] {
+	perspective: 800px;
+}
+
+.rotate-x-\[20deg\] {
+	transform: rotateX(20deg);
+}
+
+.slide-item,
+.slide-item * {
+	text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+}
+
+.slide-item {
+	background: rgba(0,0,0,0.15);
+	padding: 0.375rem 0.625rem;
+	border-radius: 0.375rem;
+	backdrop-filter: blur(2px);
+}
+
+.slide-title {
+	text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 30px rgba(0,0,0,0.5), 0 0 60px rgba(0,0,0,0.3);
+}
+
+.quiz-option,
+.quiz-option * {
+	text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.5);
+}
+
+.quiz-complete,
+.quiz-complete * {
+	text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6);
+}
+
+.video-scrim {
+	background:
+		radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%),
+		linear-gradient(to right, rgba(0,0,0,0.5) 0%, transparent 40%, transparent 70%, rgba(0,0,0,0.3) 100%),
+		linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 30%);
+	animation: scrimFadeIn 1.2s ease-out forwards;
+}
+
+@keyframes scrimFadeIn {
+	from { opacity: 0; }
+	to { opacity: 1; }
+}
+
+.video-readability-overlay > div:first-child {
+	background: linear-gradient(to right, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 45%, transparent 100%) !important;
+}
+
+.tour-facts-card {
+	animation: tourCardIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tourCardIn {
+	from { opacity: 0; transform: translateX(-40px) translateY(20px); filter: blur(8px); }
+	to { opacity: 1; transform: translateX(0) translateY(0); filter: blur(0px); }
+}
+
+.tour-fact-item {
+	opacity: 0;
+	animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+}
+
+.tour-stat-card {
+	opacity: 0;
+	animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+	text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
+	background: rgba(0,0,0,0.25);
+	padding: 0.5rem 0.75rem;
+	border-radius: 0.5rem;
+	backdrop-filter: blur(4px);
+}
+
+@keyframes tourFactIn {
+	from { opacity: 0; transform: translateX(-20px); filter: blur(4px); }
+	to { opacity: 1; transform: translateX(0); filter: blur(0px); }
+}
+
+.tour-accent-line {
+	animation: tourLineIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
+	transform-origin: left;
+	transform: scaleX(0);
+	opacity: 0;
+}
+
+@keyframes tourLineIn {
+	from { transform: scaleX(0); opacity: 0; }
+	to { transform: scaleX(1); opacity: 1; }
+}

@@ -144,7 +144,7 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     flareVisible: true,
   },
   mercurius: {
-    offset: { x: 2.0, y: 0.8, z: 1.6 },
+    offset: { x: 2, y: 0.8, z: 1.6 },
     lookOffset: { x: 0, y: 0, z: 0 },
     drift: { x: -0.0008, y: 0.0004, z: 0.0008 },
     mouseParallax: { x: 0.3, y: 0.3, z: 0 },
@@ -152,7 +152,7 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     flareVisible: true,
   },
   venus: {
-    offset: { x: 3.0, y: 1.2, z: 2.8 },
+    offset: { x: 3, y: 1.2, z: 2.8 },
     lookOffset: { x: 0, y: 0, z: 0 },
     drift: { x: 0.001, y: 0.0004, z: -0.0007 },
     mouseParallax: { x: 0.3, y: 0.3, z: 0 },

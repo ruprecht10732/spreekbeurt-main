@@ -5,6 +5,62 @@ import { Background3DComponent } from './background-3d.component';
 import { SLIDES } from './slides.data';
 import { animate, stagger, cubicBezier } from 'motion';
 
+type CelebrationType = 'answer' | 'finale';
+
+interface CelebrationStar {
+  x: number;
+  y: number;
+  r: number;
+  alpha: number;
+  decay: number;
+  color: string;
+  pulse: number;
+}
+
+interface CelebrationMeteor {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  len: number;
+  alpha: number;
+  decay: number;
+  color: string;
+  trail: Array<{ x: number; y: number }>;
+}
+
+interface CelebrationNova {
+  x: number;
+  y: number;
+  r: number;
+  maxR: number;
+  alpha: number;
+  color: string;
+  ring: number;
+}
+
+interface CelebrationSpark {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  alpha: number;
+  decay: number;
+  size: number;
+  color: string;
+}
+
+interface CelebrationFrameState {
+  width: number;
+  height: number;
+  frame: number;
+  maxFrames: number;
+  stars: CelebrationStar[];
+  meteors: CelebrationMeteor[];
+  novas: CelebrationNova[];
+  sparks: CelebrationSpark[];
+}
+
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-root',
@@ -457,206 +513,7 @@ import { animate, stagger, cubicBezier } from 'motion';
       </div>
     </div>
   `,
-  styles: [`
-    :host {
-      perspective: 1200px;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    @keyframes shimmer {
-      0%, 100% { text-shadow: 0 0 20px rgba(255, 232, 31, 0.3), 0 0 40px rgba(255, 232, 31, 0.1); }
-      50% { text-shadow: 0 0 40px rgba(255, 232, 31, 0.6), 0 0 80px rgba(255, 232, 31, 0.3), 0 0 120px rgba(255, 232, 31, 0.1); }
-    }
-    .title-shimmer {
-      animation: shimmer 3s ease-in-out infinite;
-    }
-    @keyframes starBirth {
-      0% {
-        opacity: 0;
-        transform: scale(0) rotate(-20deg);
-        text-shadow: none;
-        filter: blur(20px);
-      }
-      12% {
-        opacity: 1;
-        transform: scale(3) rotate(8deg);
-        text-shadow: 0 0 80px #fff, 0 0 160px rgba(255, 232, 31, 0.9), 0 0 300px rgba(100, 150, 255, 0.6);
-        filter: blur(3px);
-        color: white;
-      }
-      30% {
-        transform: scale(0.85) rotate(-3deg);
-        text-shadow: 0 0 50px rgba(255, 232, 31, 0.8), 0 0 100px rgba(255, 232, 31, 0.4);
-        filter: blur(0px);
-      }
-      50% {
-        transform: scale(1.08) rotate(1deg);
-      }
-      70% {
-        transform: scale(0.97) rotate(0deg);
-      }
-      100% {
-        opacity: 1;
-        transform: scale(1) rotate(0deg);
-        text-shadow: 0 0 15px rgba(255, 232, 31, 0.5), 0 0 50px rgba(255, 232, 31, 0.2), 0 0 100px rgba(100, 150, 255, 0.08);
-        filter: blur(0px);
-      }
-    }
-    .name-char {
-      opacity: 0;
-      animation: starBirth 2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      will-change: transform, opacity, filter;
-    }
-    .name-char::after {
-      content: '✦';
-      position: absolute;
-      top: -0.2em;
-      right: -0.05em;
-      font-size: 0.15em;
-      opacity: 0;
-      animation: sparkleOut 2.5s ease-out forwards;
-      animation-delay: inherit;
-      pointer-events: none;
-    }
-    @keyframes sparkleOut {
-      0% { opacity: 0; transform: scale(0); }
-      12% { opacity: 1; transform: scale(3); color: white; }
-      30% { opacity: 0.8; transform: scale(1.5); color: #ffe81f; }
-      100% { opacity: 0; transform: scale(0) translateY(-30px); }
-    }
-    .name-backdrop::before {
-      content: '';
-      position: absolute;
-      inset: -80px -100px;
-      background: radial-gradient(ellipse at center, rgba(255, 232, 31, 0.07) 0%, rgba(100, 150, 255, 0.04) 35%, transparent 70%);
-      border-radius: 50%;
-      animation: nameGlow 5s ease-in-out 2.5s infinite;
-      pointer-events: none;
-    }
-    @keyframes nameGlow {
-      0%, 100% { opacity: 0.5; transform: scale(1); }
-      50% { opacity: 1; transform: scale(1.2); }
-    }
-    .name-subtitle {
-      animation: fadeIn 1s ease-out 1.8s forwards;
-      opacity: 0;
-    }
-    @keyframes playPulse {
-      0%, 100% { box-shadow: 0 0 40px rgba(255, 232, 31, 0.3); }
-      50% { box-shadow: 0 0 60px rgba(255, 232, 31, 0.6), 0 0 100px rgba(255, 232, 31, 0.2); }
-    }
-    .play-pulse {
-      animation: playPulse 2s ease-in-out infinite;
-    }
-    @keyframes trophyBounce {
-      0%, 100% { transform: translateY(0) rotate(0deg); }
-      25% { transform: translateY(-8px) rotate(-5deg); }
-      75% { transform: translateY(-4px) rotate(5deg); }
-    }
-    .trophy-bounce {
-      animation: trophyBounce 2s ease-in-out infinite;
-    }
-    .animate-fade-in {
-      animation: fadeIn 0.5s ease-out forwards;
-    }
-    @keyframes annotationFloat {
-      0%, 100% { transform: translateY(0); }
-      50% { transform: translateY(-4px); }
-    }
-    .annotation-layer > div {
-      animation: annotationFloat 6s ease-in-out infinite;
-    }
-    .annotation-layer > div:nth-child(2) { animation-delay: -1s; }
-    .annotation-layer > div:nth-child(3) { animation-delay: -2s; }
-    .annotation-layer > div:nth-child(4) { animation-delay: -3s; }
-    .annotation-layer > div:nth-child(5) { animation-delay: -4s; }
-    .perspective-1000 { perspective: 1000px; }
-    .transform-style-3d { transform-style: preserve-3d; }
-    .backface-hidden { backface-visibility: hidden; }
-    .rotate-y-180 { transform: rotateY(180deg); }
-    .perspective-\\[800px\\] {
-      perspective: 800px;
-    }
-    .rotate-x-\\[20deg\\] {
-      transform: rotateX(20deg);
-    }
-    /* Space-overlay text readability — multi-layer dark halo behind all text */
-    .slide-item,
-    .slide-item * {
-      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
-    }
-    .slide-item {
-      background: rgba(0,0,0,0.15);
-      padding: 0.375rem 0.625rem;
-      border-radius: 0.375rem;
-      backdrop-filter: blur(2px);
-    }
-    .slide-title {
-      text-shadow: 0 0 10px rgba(0,0,0,0.9), 0 0 30px rgba(0,0,0,0.5), 0 0 60px rgba(0,0,0,0.3);
-    }
-    .quiz-option,
-    .quiz-option * {
-      text-shadow: 0 1px 3px rgba(0,0,0,0.9), 0 0 12px rgba(0,0,0,0.5);
-    }
-    .quiz-complete,
-    .quiz-complete * {
-      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6);
-    }
-    /* Video background scrim — cinematic vignette for readability */
-    .video-scrim {
-      background:
-        radial-gradient(ellipse at center, transparent 30%, rgba(0,0,0,0.55) 100%),
-        linear-gradient(to right, rgba(0,0,0,0.5) 0%, transparent 40%, transparent 70%, rgba(0,0,0,0.3) 100%),
-        linear-gradient(to top, rgba(0,0,0,0.5) 0%, transparent 30%);
-      animation: scrimFadeIn 1.2s ease-out forwards;
-    }
-    @keyframes scrimFadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    /* Extra readability overlay when video plays behind text */
-    .video-readability-overlay > div:first-child {
-      background: linear-gradient(to right, rgba(0,0,0,0.75) 0%, rgba(0,0,0,0.35) 45%, transparent 100%) !important;
-    }
-    /* Planet tour animations */
-    .tour-facts-card {
-      animation: tourCardIn 1.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-    }
-    @keyframes tourCardIn {
-      from { opacity: 0; transform: translateX(-40px) translateY(20px); filter: blur(8px); }
-      to { opacity: 1; transform: translateX(0) translateY(0); filter: blur(0px); }
-    }
-    .tour-fact-item {
-      opacity: 0;
-      animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
-    }
-    .tour-stat-card {
-      opacity: 0;
-      animation: tourFactIn 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      text-shadow: 0 1px 4px rgba(0,0,0,0.95), 0 0 20px rgba(0,0,0,0.6), 0 4px 30px rgba(0,0,0,0.3);
-      background: rgba(0,0,0,0.25);
-      padding: 0.5rem 0.75rem;
-      border-radius: 0.5rem;
-      backdrop-filter: blur(4px);
-    }
-    @keyframes tourFactIn {
-      from { opacity: 0; transform: translateX(-20px); filter: blur(4px); }
-      to { opacity: 1; transform: translateX(0); filter: blur(0px); }
-    }
-    .tour-accent-line {
-      animation: tourLineIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) 0.1s forwards;
-      transform-origin: left;
-      transform: scaleX(0);
-      opacity: 0;
-    }
-    @keyframes tourLineIn {
-      from { transform: scaleX(0); opacity: 0; }
-      to { transform: scaleX(1); opacity: 1; }
-    }
-  `]
+  styleUrl: './app.css'
 })
 export class App implements AfterViewInit, OnDestroy {
   slides = SLIDES;
@@ -683,10 +540,10 @@ export class App implements AfterViewInit, OnDestroy {
   // 1 AU = 149,597,870.7 km
   lightTravelAU = computed(() => (this.currentDistance() * 1_000_000 / 149_597_870.7).toFixed(2));
   private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
-  private bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
+  private readonly bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
   private bgMusicVolumeRafId: number | null = null;
-  private isBrowser: boolean;
-  private platformId = inject(PLATFORM_ID);
+  private readonly isBrowser: boolean;
+  private readonly platformId = inject(PLATFORM_ID);
   private audioCtx: AudioContext | null = null;
   private falconAudioPlaying = false;
   private moonAudioPlayed = false;
@@ -991,76 +848,91 @@ export class App implements AfterViewInit, OnDestroy {
     const customEase = cubicBezier(0.16, 1, 0.3, 1);
     const dir = this.direction();
 
-    if (this.crawlContainer?.nativeElement) {
-      const crawlEl = this.crawlContainer.nativeElement;
+    this.animateCrawlIn(dir);
+    if (this.animateSlideContainerIn(dir, customEase)) {
+      return;
+    }
+
+    if (!this.crawlContainer?.nativeElement) {
+      setTimeout(() => this.isTransitioning.set(false), 500);
+    }
+  }
+
+  private animateCrawlIn(dir: 1 | -1) {
+    const crawlEl = this.crawlContainer?.nativeElement;
+    if (!crawlEl) {
+      return;
+    }
+
+    animate(
+      crawlEl,
+      {
+        y: [dir === 1 ? '40vh' : '-40vh', '0vh'],
+        opacity: [0, 1],
+        rotateX: [40, 20],
+        filter: ['blur(16px)', 'blur(0px)'],
+        scale: [0.8, 1]
+      },
+      { duration: 1.2, ease: 'easeOut' }
+    ).finished.then(() => {
+      this.clearAnimatedInlineStyles(crawlEl);
+      this.isTransitioning.set(false);
+    });
+  }
+
+  private animateSlideContainerIn(dir: 1 | -1, customEase: ReturnType<typeof cubicBezier>): boolean {
+    const container = this.slideContainer?.nativeElement;
+    if (!container) {
+      return false;
+    }
+
+    const items = container.querySelectorAll('.slide-item');
+    const accentLine = container.querySelector('.accent-line');
+
+    animate(
+      container,
+      {
+        opacity: [0, 1],
+        scale: [0.85, 1],
+        x: [dir === 1 ? 200 : -200, 0],
+        y: [dir === 1 ? 30 : -30, 0],
+        filter: ['blur(16px)', 'blur(0px)']
+      },
+      { duration: 0.9, ease: customEase }
+    ).finished.then(() => {
+      this.isTransitioning.set(false);
+    });
+
+    if (accentLine) {
       animate(
-        crawlEl,
-        { 
-          y: [dir === 1 ? '40vh' : '-40vh', '0vh'],
+        accentLine,
+        { scaleX: [0, 1], opacity: [0, 1] },
+        { duration: 0.8, delay: 0.2, ease: customEase }
+      );
+    }
+
+    if (items.length > 0) {
+      animate(
+        items,
+        {
           opacity: [0, 1],
-          rotateX: [40, 20],
-          filter: ['blur(16px)', 'blur(0px)'],
-          scale: [0.8, 1]
+          x: [dir === 1 ? 40 : -40, 0],
+          y: [15, 0],
+          filter: ['blur(6px)', 'blur(0px)']
         },
-        { duration: 1.2, ease: 'easeOut' }
-      ).finished.then(() => {
-        // Clear ALL committed inline styles — motion/WAAPI persists opacity, filter,
-        // transform, will-change and scale as inline styles after animation ends,
-        // overriding any CSS class bindings (like [class.opacity-0]="tourMode()").
-        crawlEl.style.removeProperty('opacity');
-        crawlEl.style.removeProperty('filter');
-        crawlEl.style.removeProperty('transform');
-        crawlEl.style.removeProperty('will-change');
-        crawlEl.style.removeProperty('scale');
-        this.isTransitioning.set(false);
-      });
+        { delay: stagger(0.12), duration: 0.8, ease: customEase }
+      );
     }
 
-    if (this.slideContainer?.nativeElement) {
-      const container = this.slideContainer.nativeElement;
-      const items = container.querySelectorAll('.slide-item');
-      const accentLine = container.querySelector('.accent-line');
-      
-      // Main container entrance
-      animate(
-        container,
-        { 
-          opacity: [0, 1], 
-          scale: [0.85, 1],
-          x: [dir === 1 ? 200 : -200, 0],
-          y: [dir === 1 ? 30 : -30, 0],
-          filter: ['blur(16px)', 'blur(0px)']
-        },
-        { duration: 0.9, ease: customEase }
-      ).finished.then(() => {
-        this.isTransitioning.set(false);
-      });
+    return true;
+  }
 
-      // Accent line draws in from left
-      if (accentLine) {
-        animate(
-          accentLine,
-          { scaleX: [0, 1], opacity: [0, 1] },
-          { duration: 0.8, delay: 0.2, ease: customEase }
-        );
-      }
-
-      // Staggered items with vertical offset
-      if (items.length > 0) {
-        animate(
-          items,
-          { 
-            opacity: [0, 1], 
-            x: [dir === 1 ? 40 : -40, 0],
-            y: [15, 0],
-            filter: ['blur(6px)', 'blur(0px)']
-          },
-          { delay: stagger(0.12), duration: 0.8, ease: customEase }
-        );
-      }
-    } else if (!this.crawlContainer?.nativeElement) {
-       setTimeout(() => this.isTransitioning.set(false), 500);
-    }
+  private clearAnimatedInlineStyles(element: HTMLElement) {
+    element.style.removeProperty('opacity');
+    element.style.removeProperty('filter');
+    element.style.removeProperty('transform');
+    element.style.removeProperty('will-change');
+    element.style.removeProperty('scale');
   }
 
   @HostListener('window:keydown', ['$event'])
@@ -1155,8 +1027,7 @@ export class App implements AfterViewInit, OnDestroy {
   /** Play a voice line through radio static (Web Audio + Speech Synthesis) */
   private playRadioVoice(text: string, volume: number) {
     if (!this.isBrowser) return;
-    if (!this.audioCtx) this.audioCtx = new AudioContext();
-    const ctx = this.audioCtx;
+    const ctx = this.getOrCreateAudioContext();
 
     // Radio static noise bed
     const noiseDuration = text.length * 0.08 + 2;
@@ -1189,24 +1060,23 @@ export class App implements AfterViewInit, OnDestroy {
     noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + noiseDuration);
 
     // Speech synthesis for the voice line
-    if ('speechSynthesis' in window) {
+    if ('speechSynthesis' in globalThis) {
       const utter = new SpeechSynthesisUtterance(text);
       utter.rate = 0.85;
       utter.pitch = 0.9;
       utter.volume = volume;
       // Prefer an English voice
-      const voices = speechSynthesis.getVoices();
+      const voices = globalThis.speechSynthesis.getVoices();
       const enVoice = voices.find(v => v.lang.startsWith('en'));
       if (enVoice) utter.voice = enVoice;
-      speechSynthesis.speak(utter);
+      globalThis.speechSynthesis.speak(utter);
     }
   }
 
   /** Play a real NASA audio clip with radio-static overlay */
   private async playNasaClip(url: string, volume: number) {
     if (!this.isBrowser) return;
-    if (!this.audioCtx) this.audioCtx = new AudioContext();
-    const ctx = this.audioCtx;
+    const ctx = this.getOrCreateAudioContext();
 
     try {
       const response = await fetch(url);
@@ -1253,8 +1123,7 @@ export class App implements AfterViewInit, OnDestroy {
   /** Procedural rocket launch rumble using Web Audio API */
   private playRocketRumble(durationSec: number) {
     if (!this.isBrowser) return;
-    if (!this.audioCtx) this.audioCtx = new AudioContext();
-    const ctx = this.audioCtx;
+    const ctx = this.getOrCreateAudioContext();
 
     // Low-frequency rumble from filtered noise
     const sampleRate = ctx.sampleRate;
@@ -1310,38 +1179,35 @@ export class App implements AfterViewInit, OnDestroy {
     midSource.stop(ctx.currentTime + durationSec);
   }
 
+  private getOrCreateAudioContext(): AudioContext {
+    this.audioCtx ??= new AudioContext();
+    return this.audioCtx;
+  }
+
   private meteorEdgeX(W: number) { return Math.random() > 0.5 ? -20 : W + 20; }
   private meteorSideAngle() { return Math.random() > 0.5 ? Math.PI / 6 : Math.PI * 5 / 6; }
 
   /** Spectacular space-themed celebration: shooting stars, nova bursts, sparkling stars */
-  private fireSpaceCelebration(type: 'answer' | 'finale') {
+  private fireSpaceCelebration(type: CelebrationType) {
     const canvas = this.celebrationCanvas?.nativeElement;
     if (!canvas) return;
+
     this.celebrationActive.set(true);
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    const ctx = canvas.getContext('2d')!;
-    const W = canvas.width, H = canvas.height;
+    this.setCelebrationCanvasSize(canvas);
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const W = canvas.width;
+    const H = canvas.height;
     const isFinale = type === 'finale';
-
-    interface Star { x: number; y: number; r: number; alpha: number; decay: number; color: string; pulse: number; }
-    interface Meteor { x: number; y: number; vx: number; vy: number; len: number; alpha: number; decay: number; color: string; trail: { x: number; y: number }[]; }
-    interface Nova { x: number; y: number; r: number; maxR: number; alpha: number; color: string; ring: number; }
-    interface Spark { x: number; y: number; vx: number; vy: number; alpha: number; decay: number; size: number; color: string; }
-
-    const stars: Star[] = [];
-    const meteors: Meteor[] = [];
-    const novas: Nova[] = [];
-    const sparks: Spark[] = [];
 
     const colors = ['#ffe81f', '#88bbff', '#ff6644', '#4ade80', '#c084fc', '#38bdf8', '#fbbf24', '#f472b6'];
     const pick = () => colors[Math.floor(Math.random() * colors.length)];
 
-    // Spawn initial stars
-    const starCount = isFinale ? 120 : 50;
-    for (let i = 0; i < starCount; i++) {
-      stars.push({ x: Math.random() * W, y: Math.random() * H, r: Math.random() * 2.5 + 0.5, alpha: 0, decay: 0.003 + Math.random() * 0.006, color: pick(), pulse: Math.random() * Math.PI * 2 });
-    }
+    const stars = this.createCelebrationStars(W, H, isFinale, pick);
+    const meteors: CelebrationMeteor[] = [];
+    const novas: CelebrationNova[] = [];
+    const sparks: CelebrationSpark[] = [];
 
     // Spawn meteors in waves
     const spawnMeteor = () => {
@@ -1367,138 +1233,247 @@ export class App implements AfterViewInit, OnDestroy {
       }
     };
 
-    // Schedule waves
-    const meteorCount = isFinale ? 30 : 10;
-    for (let i = 0; i < meteorCount; i++) setTimeout(spawnMeteor, i * (isFinale ? 80 : 150) + Math.random() * 200);
-    const novaCount = isFinale ? 8 : 3;
-    for (let i = 0; i < novaCount; i++) setTimeout(() => { const nx = Math.random() * W; const ny = Math.random() * H; spawnNova(nx, ny); spawnSparks(nx, ny, isFinale ? 30 : 12); }, 200 + i * (isFinale ? 300 : 500));
-    if (isFinale) {
-      // Massive center nova starburst
-      setTimeout(() => { spawnNova(W / 2, H / 2); spawnSparks(W / 2, H / 2, 60); }, 800);
-      // Extra meteors in second wave
-      for (let i = 0; i < 20; i++) setTimeout(spawnMeteor, 1500 + i * 60);
-    }
+    this.scheduleCelebrationBursts(isFinale, W, H, spawnMeteor, spawnNova, spawnSparks);
 
     let frame = 0;
     const maxFrames = isFinale ? 300 : 180; // ~5s or ~3s at 60fps
 
     const renderFrame = () => {
       frame++;
-      ctx.clearRect(0, 0, W, H);
-
-      // Twinkling stars — fade in then hold
-      for (const s of stars) {
-        if (s.alpha < 1 && frame < maxFrames * 0.6) s.alpha = Math.min(1, s.alpha + 0.03);
-        if (frame > maxFrames * 0.7) s.alpha = Math.max(0, s.alpha - 0.02);
-        const twinkle = 0.5 + 0.5 * Math.sin(frame * 0.08 + s.pulse);
-        ctx.globalAlpha = s.alpha * twinkle;
-        // Draw star with glow
-        const grad = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 4);
-        grad.addColorStop(0, s.color);
-        grad.addColorStop(0.3, s.color + '88');
-        grad.addColorStop(1, 'transparent');
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r * 4, 0, Math.PI * 2);
-        ctx.fill();
-        // Core
-        ctx.fillStyle = '#ffffff';
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      // Meteors with trails
-      for (let i = meteors.length - 1; i >= 0; i--) {
-        const m = meteors[i];
-        m.trail.push({ x: m.x, y: m.y });
-        if (m.trail.length > 20) m.trail.shift();
-        m.x += m.vx;
-        m.y += m.vy;
-        // Draw trail
-        for (let t = 0; t < m.trail.length; t++) {
-          const frac = t / m.trail.length;
-          ctx.globalAlpha = m.alpha * frac * 0.6;
-          ctx.fillStyle = m.color;
-          ctx.beginPath();
-          ctx.arc(m.trail[t].x, m.trail[t].y, (1 + frac * 2), 0, Math.PI * 2);
-          ctx.fill();
-        }
-        // Head glow
-        ctx.globalAlpha = m.alpha;
-        const headGrad = ctx.createRadialGradient(m.x, m.y, 0, m.x, m.y, 8);
-        headGrad.addColorStop(0, '#fff');
-        headGrad.addColorStop(0.3, m.color);
-        headGrad.addColorStop(1, 'transparent');
-        ctx.fillStyle = headGrad;
-        ctx.beginPath();
-        ctx.arc(m.x, m.y, 8, 0, Math.PI * 2);
-        ctx.fill();
-        // Fade and remove
-        if (m.x < -50 || m.x > W + 50 || m.y > H + 50) { meteors.splice(i, 1); continue; }
-        m.alpha -= m.decay;
-        if (m.alpha <= 0) meteors.splice(i, 1);
-      }
-
-      // Nova bursts — expanding rings of light
-      for (let i = novas.length - 1; i >= 0; i--) {
-        const n = novas[i];
-        n.r += (n.maxR - n.r) * 0.08;
-        n.alpha *= 0.96;
-        n.ring += 2;
-        // Outer ring
-        ctx.globalAlpha = n.alpha * 0.6;
-        ctx.strokeStyle = n.color;
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-        ctx.stroke();
-        // Inner glow fill
-        ctx.globalAlpha = n.alpha * 0.15;
-        const novaGrad = ctx.createRadialGradient(n.x, n.y, 0, n.x, n.y, n.r);
-        novaGrad.addColorStop(0, n.color);
-        novaGrad.addColorStop(1, 'transparent');
-        ctx.fillStyle = novaGrad;
-        ctx.beginPath();
-        ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
-        ctx.fill();
-        if (n.alpha < 0.02) novas.splice(i, 1);
-      }
-
-      // Sparks
-      for (let i = sparks.length - 1; i >= 0; i--) {
-        const sp = sparks[i];
-        sp.x += sp.vx;
-        sp.y += sp.vy;
-        sp.vx *= 0.98;
-        sp.vy *= 0.98;
-        sp.alpha -= sp.decay;
-        if (sp.alpha <= 0) { sparks.splice(i, 1); continue; }
-        ctx.globalAlpha = sp.alpha;
-        ctx.fillStyle = sp.color;
-        ctx.beginPath();
-        ctx.arc(sp.x, sp.y, sp.size, 0, Math.PI * 2);
-        ctx.fill();
-        // Tiny glow
-        ctx.globalAlpha = sp.alpha * 0.3;
-        ctx.beginPath();
-        ctx.arc(sp.x, sp.y, sp.size * 3, 0, Math.PI * 2);
-        ctx.fill();
-      }
-
-      ctx.globalAlpha = 1;
+      this.renderCelebrationFrame(ctx, {
+        width: W,
+        height: H,
+        frame,
+        maxFrames,
+        stars,
+        meteors,
+        novas,
+        sparks,
+      });
 
       if (frame < maxFrames) {
         this.celebrationAnimId = requestAnimationFrame(renderFrame);
       } else {
-        ctx.clearRect(0, 0, W, H);
-        this.celebrationActive.set(false);
-        this.celebrationAnimId = null;
+        this.finishCelebration(ctx, W, H);
       }
     };
 
     // Cancel any running celebration
     if (this.celebrationAnimId) cancelAnimationFrame(this.celebrationAnimId);
     this.celebrationAnimId = requestAnimationFrame(renderFrame);
+  }
+
+  private setCelebrationCanvasSize(canvas: HTMLCanvasElement) {
+    canvas.width = globalThis.innerWidth;
+    canvas.height = globalThis.innerHeight;
+  }
+
+  private createCelebrationStars(width: number, height: number, isFinale: boolean, pickColor: () => string): CelebrationStar[] {
+    const stars: CelebrationStar[] = [];
+    const starCount = isFinale ? 120 : 50;
+
+    for (let i = 0; i < starCount; i++) {
+      stars.push({
+        x: Math.random() * width,
+        y: Math.random() * height,
+        r: Math.random() * 2.5 + 0.5,
+        alpha: 0,
+        decay: 0.003 + Math.random() * 0.006,
+        color: pickColor(),
+        pulse: Math.random() * Math.PI * 2
+      });
+    }
+
+    return stars;
+  }
+
+  private scheduleCelebrationBursts(
+    isFinale: boolean,
+    width: number,
+    height: number,
+    spawnMeteor: () => void,
+    spawnNova: (x?: number, y?: number) => void,
+    spawnSparks: (x: number, y: number, count: number) => void,
+  ) {
+    const meteorCount = isFinale ? 30 : 10;
+    for (let i = 0; i < meteorCount; i++) {
+      setTimeout(spawnMeteor, i * (isFinale ? 80 : 150) + Math.random() * 200);
+    }
+
+    const novaCount = isFinale ? 8 : 3;
+    for (let i = 0; i < novaCount; i++) {
+      setTimeout(() => {
+        const nx = Math.random() * width;
+        const ny = Math.random() * height;
+        spawnNova(nx, ny);
+        spawnSparks(nx, ny, isFinale ? 30 : 12);
+      }, 200 + i * (isFinale ? 300 : 500));
+    }
+
+    if (!isFinale) {
+      return;
+    }
+
+    setTimeout(() => {
+      spawnNova(width / 2, height / 2);
+      spawnSparks(width / 2, height / 2, 60);
+    }, 800);
+
+    for (let i = 0; i < 20; i++) {
+      setTimeout(spawnMeteor, 1500 + i * 60);
+    }
+  }
+
+  private renderCelebrationFrame(
+    ctx: CanvasRenderingContext2D,
+    state: CelebrationFrameState,
+  ) {
+    ctx.clearRect(0, 0, state.width, state.height);
+    this.renderCelebrationStars(ctx, state.frame, state.maxFrames, state.stars);
+    this.renderCelebrationMeteors(ctx, state.width, state.height, state.meteors);
+    this.renderCelebrationNovas(ctx, state.novas);
+    this.renderCelebrationSparks(ctx, state.sparks);
+    ctx.globalAlpha = 1;
+  }
+
+  private renderCelebrationStars(
+    ctx: CanvasRenderingContext2D,
+    frame: number,
+    maxFrames: number,
+    stars: CelebrationStar[],
+  ) {
+    for (const star of stars) {
+      if (star.alpha < 1 && frame < maxFrames * 0.6) {
+        star.alpha = Math.min(1, star.alpha + 0.03);
+      }
+      if (frame > maxFrames * 0.7) {
+        star.alpha = Math.max(0, star.alpha - 0.02);
+      }
+
+      const twinkle = 0.5 + 0.5 * Math.sin(frame * 0.08 + star.pulse);
+      ctx.globalAlpha = star.alpha * twinkle;
+
+      const gradient = ctx.createRadialGradient(star.x, star.y, 0, star.x, star.y, star.r * 4);
+      gradient.addColorStop(0, star.color);
+      gradient.addColorStop(0.3, `${star.color}88`);
+      gradient.addColorStop(1, 'transparent');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.r * 4, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.fillStyle = '#ffffff';
+      ctx.beginPath();
+      ctx.arc(star.x, star.y, star.r * 0.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  private renderCelebrationMeteors(
+    ctx: CanvasRenderingContext2D,
+    width: number,
+    height: number,
+    meteors: CelebrationMeteor[],
+  ) {
+    for (let i = meteors.length - 1; i >= 0; i--) {
+      const meteor = meteors[i];
+      meteor.trail.push({ x: meteor.x, y: meteor.y });
+      if (meteor.trail.length > 20) {
+        meteor.trail.shift();
+      }
+
+      meteor.x += meteor.vx;
+      meteor.y += meteor.vy;
+
+      for (let trailIndex = 0; trailIndex < meteor.trail.length; trailIndex++) {
+        const frac = trailIndex / meteor.trail.length;
+        ctx.globalAlpha = meteor.alpha * frac * 0.6;
+        ctx.fillStyle = meteor.color;
+        ctx.beginPath();
+        ctx.arc(meteor.trail[trailIndex].x, meteor.trail[trailIndex].y, 1 + frac * 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+
+      ctx.globalAlpha = meteor.alpha;
+      const headGradient = ctx.createRadialGradient(meteor.x, meteor.y, 0, meteor.x, meteor.y, 8);
+      headGradient.addColorStop(0, '#fff');
+      headGradient.addColorStop(0.3, meteor.color);
+      headGradient.addColorStop(1, 'transparent');
+      ctx.fillStyle = headGradient;
+      ctx.beginPath();
+      ctx.arc(meteor.x, meteor.y, 8, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (meteor.x < -50 || meteor.x > width + 50 || meteor.y > height + 50) {
+        meteors.splice(i, 1);
+        continue;
+      }
+
+      meteor.alpha -= meteor.decay;
+      if (meteor.alpha <= 0) {
+        meteors.splice(i, 1);
+      }
+    }
+  }
+
+  private renderCelebrationNovas(ctx: CanvasRenderingContext2D, novas: CelebrationNova[]) {
+    for (let i = novas.length - 1; i >= 0; i--) {
+      const nova = novas[i];
+      nova.r += (nova.maxR - nova.r) * 0.08;
+      nova.alpha *= 0.96;
+      nova.ring += 2;
+
+      ctx.globalAlpha = nova.alpha * 0.6;
+      ctx.strokeStyle = nova.color;
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(nova.x, nova.y, nova.r, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.globalAlpha = nova.alpha * 0.15;
+      const gradient = ctx.createRadialGradient(nova.x, nova.y, 0, nova.x, nova.y, nova.r);
+      gradient.addColorStop(0, nova.color);
+      gradient.addColorStop(1, 'transparent');
+      ctx.fillStyle = gradient;
+      ctx.beginPath();
+      ctx.arc(nova.x, nova.y, nova.r, 0, Math.PI * 2);
+      ctx.fill();
+
+      if (nova.alpha < 0.02) {
+        novas.splice(i, 1);
+      }
+    }
+  }
+
+  private renderCelebrationSparks(ctx: CanvasRenderingContext2D, sparks: CelebrationSpark[]) {
+    for (let i = sparks.length - 1; i >= 0; i--) {
+      const spark = sparks[i];
+      spark.x += spark.vx;
+      spark.y += spark.vy;
+      spark.vx *= 0.98;
+      spark.vy *= 0.98;
+      spark.alpha -= spark.decay;
+      if (spark.alpha <= 0) {
+        sparks.splice(i, 1);
+        continue;
+      }
+
+      ctx.globalAlpha = spark.alpha;
+      ctx.fillStyle = spark.color;
+      ctx.beginPath();
+      ctx.arc(spark.x, spark.y, spark.size, 0, Math.PI * 2);
+      ctx.fill();
+
+      ctx.globalAlpha = spark.alpha * 0.3;
+      ctx.beginPath();
+      ctx.arc(spark.x, spark.y, spark.size * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  private finishCelebration(ctx: CanvasRenderingContext2D, width: number, height: number) {
+    ctx.clearRect(0, 0, width, height);
+    this.celebrationActive.set(false);
+    this.celebrationAnimId = null;
   }
 }

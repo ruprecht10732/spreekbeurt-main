@@ -66,7 +66,7 @@ export class PostProcessManager {
 
     // Cinematic Depth of Field — very subtle, almost imperceptible
     this.dofEffect = new DepthOfFieldEffect(camera, {
-      focusDistance: 0.0,
+      focusDistance: 0,
       focalLength: 0.005,
       bokehScale: 0.1,
     });

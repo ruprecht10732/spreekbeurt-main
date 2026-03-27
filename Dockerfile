@@ -24,10 +24,11 @@ COPY --from=build /app/dist/app ./dist/app
 # Only install production dependencies
 COPY package.json package-lock.json* ./
 COPY scripts/ ./scripts/
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev && npm cache clean --force \
+	&& addgroup -S appgroup \
+	&& adduser -S appuser -G appgroup
 
 # Don't run as root
-RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
 EXPOSE 3000

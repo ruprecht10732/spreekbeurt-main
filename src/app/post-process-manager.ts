@@ -31,11 +31,11 @@ export class PostProcessManager {
     // Optimized Bloom for CPU
     this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
-      intensity: 1.0,
-      luminanceThreshold: 0.85,
-      luminanceSmoothing: 0.08,
+      intensity: 1.12,
+      luminanceThreshold: 0.8,
+      luminanceSmoothing: 0.12,
       mipmapBlur: false, // Saves huge CPU overhead
-      radius: 0.5,
+      radius: 0.58,
       resolutionScale: 0.5 // Computes bloom at half-resolution to save framerate
     });
 

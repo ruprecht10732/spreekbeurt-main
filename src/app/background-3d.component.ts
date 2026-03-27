@@ -2191,8 +2191,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Death Star with superlaser
     this.createDeathStar();
 
-    // Lightsaber duel (Sith vs Jedi easter egg)
-    this.createLightsaberDuel();
+    // Lightsaber duel removed by request.
 
     // Galaxy effects for deep-space feel
     this.createGalaxyEffects();
@@ -2949,7 +2948,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     const starMat = this.julianaStars.material as THREE.ShaderMaterial;
-    starMat.uniforms['uOpacity'].value = Math.min(1, (expTime - 3.0) * 0.7);
+    starMat.uniforms['uOpacity'].value = Math.min(1, (expTime - 3.0) * 1.05);
   }
 
   private updatePeriodicSuperlaser(time: number) {
@@ -3041,12 +3040,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // 4. "JULIANASCHOOL" Constellation (Canvas to Particles)
     const canvas = document.createElement('canvas');
-    canvas.width = 1024; canvas.height = 256;
+    canvas.width = 2048; canvas.height = 512;
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'white';
-    ctx.font = 'bold 130px "Pathway Gothic One", Arial, sans-serif';
+    ctx.font = '900 230px "Pathway Gothic One", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
@@ -3056,18 +3055,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const starColors: number[] = [];
     const starSizes: number[] = [];
 
-    for (let y = 0; y < canvas.height; y += 3) {
-      for (let x = 0; x < canvas.width; x += 3) {
+    for (let y = 0; y < canvas.height; y += 2) {
+      for (let x = 0; x < canvas.width; x += 2) {
         const idx = (y * canvas.width + x) * 4;
-        if (imgData[idx] > 128) {
-          const px = (x - canvas.width / 2) * 0.018;
-          const py = -(y - canvas.height / 2) * 0.018;
-          const pz = (Math.random() - 0.5) * 0.3;
+        if (imgData[idx] > 32) {
+          const px = (x - canvas.width / 2) * 0.009;
+          const py = -(y - canvas.height / 2) * 0.009;
+          const pz = (Math.random() - 0.5) * 0.2;
           starPositions.push(px, py, pz);
           const isGold = Math.random() > 0.4;
           const color = new THREE.Color(isGold ? 0xffe81f : 0xaaccff);
           starColors.push(color.r, color.g, color.b);
-          starSizes.push(Math.random() * 4 + 2);
+          starSizes.push(Math.random() * 5 + 3.4);
         }
       }
     }
@@ -3086,7 +3085,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * (150.0 / -mvPosition.z);
+          gl_PointSize = aSize * (190.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -3096,8 +3095,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           float d = length(gl_PointCoord - vec2(0.5));
           if (d > 0.5) discard;
-          float glow = exp(-d * 6.0);
-          gl_FragColor = vec4(vColor, glow * uOpacity);
+          float glow = exp(-d * 4.5);
+          gl_FragColor = vec4(vColor, glow * min(1.0, uOpacity * 1.15));
         }
       `,
       transparent: true,
@@ -3401,7 +3400,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.columbiaShuttleMesh = new THREE.Group();
     const loader = new GLTFLoader();
     this.loadPromises.push(new Promise<void>((resolve) => {
-      loader.load('/space_shuttle_columbia.glb', (gltf) => {
+      const onModelLoaded = (gltf: { scene: THREE.Group }) => {
         const model = gltf.scene;
         // Normalize to ~4 scene units long (similar to the old procedural shuttle)
         const box = new THREE.Box3().setFromObject(model);
@@ -3427,16 +3426,22 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
         this.columbiaShuttleMesh.add(model);
         resolve();
-      }, undefined, () => {
-        // Fallback: simple recognizable shuttle shape if GLB fails
-        const fb = new THREE.Mesh(
-          new THREE.ConeGeometry(0.5, 4, 8),
-          new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }),
-        );
-        fb.rotation.z = -Math.PI / 2;
-        this.columbiaShuttleMesh.add(fb);
-        resolve();
-      });
+      };
+
+      const loadFallback = () => {
+        loader.load('space_shuttle_columbia.glb', onModelLoaded, undefined, () => {
+          // Fallback: simple recognizable shuttle shape if GLB fails
+          const fb = new THREE.Mesh(
+            new THREE.ConeGeometry(0.5, 4, 8),
+            new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }),
+          );
+          fb.rotation.z = -Math.PI / 2;
+          this.columbiaShuttleMesh.add(fb);
+          resolve();
+        });
+      };
+
+      loader.load('/space_shuttle_columbia.glb', onModelLoaded, undefined, loadFallback);
     }));
 
     this.columbiaShuttleMesh.scale.setScalar(0.8);
@@ -4786,7 +4791,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       { object: this.trojanL5, radius: 28 },
       { object: this.starClusters, radius: 1500 },
       { object: this.deathStarGroup, radius: 12 },
-      { object: this.lightsaberGroup, radius: 6 },
       { object: this.asbjornStormGroup, radius: 30 },
       { object: this.crossConstellation, radius: 20 },
     );
@@ -4802,7 +4806,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (target.object === this.plutoMesh && this.plutoDestroyed) continue;
       // Easter-egg objects only visible when tour is active
       if (!this.tourActive && (
-        target.object === this.lightsaberGroup ||
         target.object === this.asbjornStormGroup ||
         target.object === this.crossConstellation ||
         target.object === this.deathStarGroup
@@ -5134,7 +5137,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.starmanGroup = new THREE.Group();
     const loader = new GLTFLoader();
     this.loadPromises.push(new Promise<void>((resolve) => {
-      loader.load('2008_tesla_roadster.glb', (gltf) => {
+      const onModelLoaded = (gltf: { scene: THREE.Group }) => {
         const model = gltf.scene;
         // Scale to a visible car-sized object (~0.8 scene units long)
         const box = new THREE.Box3().setFromObject(model);
@@ -5160,15 +5163,21 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
         this.starmanGroup.add(model);
         resolve();
-      }, undefined, () => {
-        // Fallback: simple red box if GLB fails
-        const fallback = new THREE.Mesh(
-          new THREE.BoxGeometry(0.35, 0.12, 0.15),
-          new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.3, metalness: 0.7 })
-        );
-        this.starmanGroup.add(fallback);
-        resolve();
-      });
+      };
+
+      const loadFallback = () => {
+        loader.load('2008_tesla_roadster.glb', onModelLoaded, undefined, () => {
+          // Fallback: simple red box if GLB fails
+          const fallback = new THREE.Mesh(
+            new THREE.BoxGeometry(0.35, 0.12, 0.15),
+            new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.3, metalness: 0.7 })
+          );
+          this.starmanGroup.add(fallback);
+          resolve();
+        });
+      };
+
+      loader.load('/2008_tesla_roadster.glb', onModelLoaded, undefined, loadFallback);
     }));
 
     // Dedicated key+fill lights so the Tesla is visible against black space
@@ -5264,7 +5273,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         // Continue the flip — first stage rotates 180° for boostback
         this.falconFirstStage.rotateX(0.10);
         // Keep drifting apart from second stage
-        this.falconFirstStage.position.y -= 0.008;
+        this.falconFirstStage.position.y -= 0.028;
+        this.falconFirstStage.position.x -= 0.015;
       }
       return { thrust, phase: 'MVAC IGN' };
     }
@@ -5282,7 +5292,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const worldScale = new THREE.Vector3();
       this.falconFirstStage.getWorldPosition(worldPos);
       this.falconFirstStage.getWorldQuaternion(worldQuat);
-      this.falconGroup.getWorldScale(worldScale);
+      this.falconFirstStage.getWorldScale(worldScale);
       this.falconGroup.remove(this.falconFirstStage);
       this.falconFirstStage.position.copy(worldPos);
       this.falconFirstStage.quaternion.copy(worldQuat);
@@ -5308,7 +5318,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       requestAnimationFrame(fadeFlash);
     }
     // Strong push-off: first stage falls away rapidly to create visible gap
-    this.falconFirstStage.position.y -= 0.015;
+    this.falconFirstStage.position.y -= 0.06;
+    this.falconFirstStage.position.x -= 0.035;
     // Begin the signature Falcon 9 flip — rotate towards boostback orientation
     this.falconFirstStage.rotateX(0.12);
   }
@@ -6071,29 +6082,33 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createLabelSprite(text: string, scale: number): THREE.Sprite {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 256;
-    canvas.height = 64;
-    ctx.clearRect(0, 0, 256, 64);
-    ctx.font = '600 28px Inter, sans-serif';
+    canvas.width = 512;
+    canvas.height = 128;
+    ctx.clearRect(0, 0, 512, 128);
+    ctx.font = '700 54px "Pathway Gothic One", "Segoe UI", sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     // Subtle glow behind text
-    ctx.shadowColor = 'rgba(180,200,255,0.5)';
-    ctx.shadowBlur = 8;
-    ctx.fillStyle = 'rgba(220,230,255,0.7)';
-    ctx.fillText(text, 128, 32);
+    ctx.shadowColor = 'rgba(180,210,255,0.7)';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = 'rgba(230,240,255,0.9)';
+    ctx.fillText(text, 256, 64);
     // Second pass for crispness
     ctx.shadowBlur = 0;
-    ctx.fillStyle = 'rgba(220,230,255,0.55)';
-    ctx.fillText(text, 128, 32);
+    ctx.strokeStyle = 'rgba(20,30,60,0.8)';
+    ctx.lineWidth = 5;
+    ctx.strokeText(text, 256, 64);
+    ctx.fillStyle = 'rgba(240,248,255,0.95)';
+    ctx.fillText(text, 256, 64);
 
     const texture = new THREE.CanvasTexture(canvas);
     texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
+    texture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     const spriteMat = new THREE.SpriteMaterial({
       map: texture, transparent: true, depthWrite: false, depthTest: false,
-      blending: THREE.AdditiveBlending, fog: false
+      blending: THREE.NormalBlending, fog: false, opacity: 0.95
     });
     const sprite = new THREE.Sprite(spriteMat);
     sprite.scale.set(scale * 4, scale, 1);
@@ -7630,7 +7645,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateComet();
     this.updateDeathStar(time);
     this.updateBlackHole(time);
-    this.updateLightsaberDuel(time);
     this.updateHyperspace(deltaTime, time);
   }
 
@@ -7688,13 +7702,21 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       return;
     }
 
-    this.starmanOrbitAngle += 0.0006;
+    this.starmanOrbitAngle += 0.0008;
     const earthPosition = this.earthMesh.position;
-    const orbitRadius = 1.5;
+    const orbitRadius = 1.65;
+    const cameraDir = this.camera.position.clone().sub(earthPosition).normalize();
+    const lateral = new THREE.Vector3().crossVectors(new THREE.Vector3(0, 1, 0), cameraDir).normalize();
+    if (lateral.lengthSq() < 1e-4) {
+      lateral.set(1, 0, 0);
+    }
+    const phase = this.starmanOrbitAngle;
+    const frontOffset = orbitRadius * (1.2 + Math.cos(phase) * 0.18);
+    const sideOffset = orbitRadius * Math.sin(phase) * 0.35;
     this.starmanGroup.position.set(
-      earthPosition.x + orbitRadius * Math.cos(this.starmanOrbitAngle),
-      earthPosition.y + 0.4 * Math.sin(this.starmanOrbitAngle * 0.7),
-      earthPosition.z + orbitRadius * Math.sin(this.starmanOrbitAngle)
+      earthPosition.x + cameraDir.x * frontOffset + lateral.x * sideOffset,
+      earthPosition.y + 0.45 * Math.sin(this.starmanOrbitAngle * 0.7) + 0.2,
+      earthPosition.z + cameraDir.z * frontOffset + lateral.z * sideOffset
     );
     this.starmanGroup.rotation.x += 0.003;
     this.starmanGroup.rotation.z += 0.001;

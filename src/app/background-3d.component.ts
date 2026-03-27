@@ -869,26 +869,20 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.fog = new THREE.FogExp2(0x000000, 0.00015);
 
     // Camera
-    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 50000);
+    this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
     this.camera.position.z = this.targetCameraZ;
     this.camera.position.x = this.targetCameraX;
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
-      antialias: false,
+      antialias: true,
       alpha: true,
       powerPreference: 'high-performance',
-      logarithmicDepthBuffer: true,
     });
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    // Limit pixel ratio so high-res monitors don't freeze without a dedicated GPU
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.shadowMap.enabled = true;
-    // BasicShadowMap is extremely fast and fixes the "LINEAR depth" warning on CPU
-    this.renderer.shadowMap.type = THREE.BasicShadowMap;
-    this.renderer.toneMappingExposure = 1.3;
+    this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -1248,7 +1242,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const fallbackTexture = this.generateJupiterTexture();
     fallbackTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     
-    const jupiterGeometry = new THREE.SphereGeometry(10, 48, 48);
+    const jupiterGeometry = new THREE.SphereGeometry(10, 128, 128);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
       roughness: 0.65,
@@ -1393,17 +1387,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPosition);
           float fresnel = 1.0 - dot(viewDir, vNormal);
-          fresnel = pow(clamp(fresnel, 0.0, 1.0), 6.0);
+          fresnel = pow(fresnel, 3.0);
           vec3 color = mix(vec3(0.3, 0.6, 1.0), vec3(0.6, 0.85, 1.0), fresnel);
-          gl_FragColor = vec4(color, fresnel * 0.3);
+          gl_FragColor = vec4(color, fresnel * 0.7);
         }
       `,
       transparent: true,
-      side: THREE.FrontSide, // Enables Early-Z rejection
+      side: THREE.BackSide,
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
-    const earthAtmo = new THREE.Mesh(new THREE.SphereGeometry(1.02, 32, 32), earthAtmoMat);
+    const earthAtmo = new THREE.Mesh(new THREE.SphereGeometry(1.08, 32, 32), earthAtmoMat);
     this.earthMesh.add(earthAtmo);
 
       // ─── Earth's Moon (Luna) ─────────────────────────────────────────────
@@ -2009,12 +2003,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       vertexShader,
       fragmentShader,
       blending: THREE.AdditiveBlending,
-      side: THREE.FrontSide, // CRITICAL FOR CPU: Enables Early-Z rejection to prevent massive overdraw
+      side: THREE.BackSide,
       transparent: true,
       depthWrite: false
     });
 
-    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(10.3, 48, 48), atmosphereMaterial);
+    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(10.3, 64, 64), atmosphereMaterial);
     this.jupiterGroup.add(this.atmosphere);
 
     // The 4 Galilean Moons — Kepler's 3rd law: T² ∝ a³, so ω ∝ a^(-3/2)
@@ -2099,29 +2093,33 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     
     this.jupiterGroup.add(this.smallMoons);
 
-    // Lighting — dark deep-space: single harsh sun, minimal fill
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.015);
+    // Lighting — physically motivated but cinematic
+    // Deep space has virtually no ambient light; minimal fill preserves realism
+    const ambientLight = new THREE.AmbientLight(0x050510, 0.25);
     this.scene.add(ambientLight);
 
-    // Main sun light — the only significant light source, like real space
-    this.sunLight = new THREE.DirectionalLight(0xfffdfa, 4.0);
-    this.sunLight.position.set(-25, 5, 5);
-    this.sunLight.target = this.jupiterGroup;
-    this.sunLight.castShadow = true;
-    // Tightened shadow frustum for razor-sharp moon eclipses on Jupiter
-    this.sunLight.shadow.camera.top = 18;
-    this.sunLight.shadow.camera.bottom = -18;
-    this.sunLight.shadow.camera.left = -18;
-    this.sunLight.shadow.camera.right = 18;
-    this.sunLight.shadow.bias = -0.001;
-    // Reduced from 4096 to 1024 — avoids crushing a software renderer
-    this.sunLight.shadow.mapSize.width = 1024;
-    this.sunLight.shadow.mapSize.height = 1024;
+    // Main sun light — warm white (5778K blackbody close to 0xfff5e0)
+    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 3.2);
+    this.sunLight.position.set(-50, 10, 30);
     this.scene.add(this.sunLight);
+
+    // Point light at the Sun — natural inverse-square falloff for nearby objects
+    const sunPointLight = new THREE.PointLight(0xffeedd, 8, 200, 1.5);
+    sunPointLight.position.set(-50, 10, 30);
+    this.scene.add(sunPointLight);
+
+    // Dim blue-ish fill from opposite side — scattered light / ISM reflection
+    const fillLight = new THREE.DirectionalLight(0x0d1a33, 0.35);
+    fillLight.position.set(50, -10, -30);
+    this.scene.add(fillLight);
+
+    // Subtle overhead hemisphere fill for readability
+    const hemiLight = new THREE.HemisphereLight(0x0a0a18, 0x000000, 0.15);
+    this.scene.add(hemiLight);
 
     // Earthshine — faint blue fill from Earth's reflected light onto the Moon
     this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.05);
-    this.earthshineLight.position.set(10, 5, -5); // will be updated to track Earth
+    this.earthshineLight.position.set(10, 5, -5);
     this.scene.add(this.earthshineLight);
     this.scene.add(this.earthshineLight.target);
 
@@ -5771,7 +5769,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.85, 0.55, 0.2), vec3(1.0, 0.75, 0.35), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.6);
         }`,
-      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.titanMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.58, 24, 24), titanAtmoMat));
 
@@ -5814,7 +5812,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.4, 0.55, 0.8), vec3(0.6, 0.75, 1.0), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.35);
         }`,
-      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.plutoMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.36, 20, 20), plutoAtmoMat));
   }
@@ -5858,7 +5856,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.9, 0.5, 0.25), vec3(1.0, 0.65, 0.35), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.3);
         }`,
-      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.52, 24, 24), marsAtmoMat);
     this.marsMesh.add(marsAtmo);
@@ -5897,7 +5895,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.95, 0.85, 0.6), vec3(1.0, 0.92, 0.7), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.2);
         }`,
-      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.venusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.9, 32, 32), venusAtmoMat));
   }
@@ -5958,7 +5956,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.5, 0.85, 0.9), vec3(0.7, 0.95, 1.0), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.4);
         }`,
-      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.uranusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(3.85, 32, 32), uranusAtmoMat));
   }
@@ -6059,7 +6057,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.15, 0.3, 0.8), vec3(0.3, 0.5, 1.0), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.5);
         }`,
-      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.neptuneMesh.add(new THREE.Mesh(new THREE.SphereGeometry(3.75, 32, 32), neptuneAtmoMat));
     // Neptune ring system — faint ring arcs (Adams, Le Verrier, Galle)
@@ -6865,7 +6863,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Thin bright ring at the very edge — Hα red-pink emission
           float chromo = pow(rim, 6.0) * 2.0;
           vec3 color = mix(vec3(1.0, 0.3, 0.15), vec3(1.0, 0.5, 0.3), rim);
-          gl_FragColor = vec4(color * 1.45, chromo * 0.42);
+          gl_FragColor = vec4(color * 2.0, chromo * 0.8);
         }
       `,
       transparent: true, side: THREE.FrontSide,
@@ -6912,13 +6910,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           streamers *= 0.7 + 0.3 * noise2(vec2(angle * 3.0, uTime * 0.05));
           
           // Corona intensity falls off as ~r^-2.5
-          float corona = pow(rim, 1.8) * 1.35;
+          float corona = pow(rim, 1.8) * 2.0;
           corona *= (0.6 + 0.4 * streamers);
           
           // Pearly white with slight warm tint
           vec3 color = mix(vec3(1.0, 0.96, 0.88), vec3(1.0, 0.8, 0.5), rim * 0.5);
           
-          gl_FragColor = vec4(color * 1.1, corona * 0.24);
+          gl_FragColor = vec4(color * 1.5, corona * 0.5);
         }
       `,
       transparent: true, side: THREE.BackSide,
@@ -6947,11 +6945,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPos);
           float rim = 1.0 - dot(viewDir, vNormal);
-          float corona = pow(rim, 1.5) * 0.52;
+          float corona = pow(rim, 1.5) * 0.8;
           // Slow breathing
           corona *= 0.9 + 0.1 * sin(uTime * 0.3);
           vec3 color = vec3(1.0, 0.88, 0.65);
-          gl_FragColor = vec4(color, corona * 0.08);
+          gl_FragColor = vec4(color, corona * 0.12);
         }
       `,
       transparent: true, side: THREE.BackSide,
@@ -6977,7 +6975,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPos);
           float facing = max(dot(viewDir, vNormal), 0.0);
-          float glow = pow(facing, 3.4) * 0.08;
+          float glow = pow(facing, 3.0) * 0.15;
           vec3 color = vec3(1.0, 0.92, 0.7);
           gl_FragColor = vec4(color, glow);
         }

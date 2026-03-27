@@ -756,8 +756,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
     }
     texture.wrapS = THREE.RepeatWrapping;
-    texture.generateMipmaps = true;
-    texture.minFilter = THREE.LinearMipmapLinearFilter;
+    texture.generateMipmaps = false;
+    texture.minFilter = THREE.LinearFilter;
     texture.magFilter = THREE.LinearFilter;
     return texture;
   }
@@ -842,7 +842,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.renderer.toneMappingExposure = 0.82;
     container.appendChild(this.renderer.domElement);
 
@@ -1022,6 +1022,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     psfCtx.putImageData(psfData, 0, 0);
     const starPsfTexture = new THREE.CanvasTexture(starPsfCanvas);
+    starPsfTexture.generateMipmaps = false;
     starPsfTexture.minFilter = THREE.LinearFilter;
     starPsfTexture.magFilter = THREE.LinearFilter;
 
@@ -1441,6 +1442,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const terrainNormalTex = new THREE.CanvasTexture(normalCanvas);
       terrainNormalTex.wrapS = THREE.RepeatWrapping;
       terrainNormalTex.wrapT = THREE.RepeatWrapping;
+      terrainNormalTex.generateMipmaps = false;
+      terrainNormalTex.minFilter = THREE.LinearFilter;
+      terrainNormalTex.magFilter = THREE.LinearFilter;
 
       const terrainMat = new THREE.MeshStandardMaterial({
         color: 0x8a8478,
@@ -1573,6 +1577,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         bCtx.fillRect(22, 14 + i * 5, 20, 2);
       }
       const bootTex = new THREE.CanvasTexture(bootCanvas);
+      bootTex.generateMipmaps = false;
+      bootTex.minFilter = THREE.LinearFilter;
+      bootTex.magFilter = THREE.LinearFilter;
       const bootMat = new THREE.MeshStandardMaterial({
         map: bootTex, transparent: true, roughness: 1, metalness: 0,
         color: 0x888880,
@@ -4770,6 +4777,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     const ringTexture = new THREE.CanvasTexture(ringCanvas);
     ringTexture.wrapS = THREE.ClampToEdgeWrapping;
+    ringTexture.generateMipmaps = false;
     ringTexture.minFilter = THREE.LinearFilter;
     ringTexture.magFilter = THREE.LinearFilter;
     // Custom lit ring shader — scatters sunlight with forward/back-scatter
@@ -5053,6 +5061,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     const ringTexture = new THREE.CanvasTexture(ringCanvas);
     ringTexture.wrapS = THREE.ClampToEdgeWrapping;
+    ringTexture.generateMipmaps = false;
+    ringTexture.minFilter = THREE.LinearFilter;
+    ringTexture.magFilter = THREE.LinearFilter;
     return ringTexture;
   }
 
@@ -5133,6 +5144,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     const neptuneRingTex = new THREE.CanvasTexture(neptuneRingCanvas);
     neptuneRingTex.wrapS = THREE.ClampToEdgeWrapping;
+    neptuneRingTex.generateMipmaps = false;
+    neptuneRingTex.minFilter = THREE.LinearFilter;
+    neptuneRingTex.magFilter = THREE.LinearFilter;
     const neptuneRingMat = new THREE.MeshBasicMaterial({
       map: neptuneRingTex, transparent: true, side: THREE.DoubleSide, depthWrite: false
     });
@@ -5172,7 +5186,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     ctx.fillText(text, 128, 32);
 
     const texture = new THREE.CanvasTexture(canvas);
+    texture.generateMipmaps = false;
     texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
     const spriteMat = new THREE.SpriteMaterial({
       map: texture, transparent: true, depthWrite: false, depthTest: false,
       blending: THREE.AdditiveBlending, fog: false

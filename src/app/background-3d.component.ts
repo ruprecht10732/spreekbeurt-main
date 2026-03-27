@@ -843,7 +843,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.toneMappingExposure = 0.82;
+    this.renderer.toneMappingExposure = 0.88;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -1749,11 +1749,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         float terminatorBand = 1.0 - smoothstep(0.0, 0.16, abs(sunDot));
 
         // Forward scattering through the limb (light shining through the atmosphere edge)
-        float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 8.0);
+        float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 6.0);
 
         // Deep orange/red "sunset" band at the terminator edge (Rayleigh scattering through dense gas)
-        vec3 sunsetColor = vec3(1.0, 0.3, 0.05);
-        float sunsetIntensity = smoothstep(-0.05, 0.05, sunDot) * smoothstep(0.15, 0.0, sunDot);
+        vec3 sunsetColor = vec3(1.0, 0.35, 0.08);
+        float sunsetIntensity = smoothstep(-0.08, 0.06, sunDot) * smoothstep(0.18, 0.0, sunDot);
         vec3 dayColor = mix(vec3(0.92, 0.88, 0.8), vec3(0.98, 0.95, 0.86), daySide);
 
         // Blend nightside black → sunset orange → day color
@@ -1761,13 +1761,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         finalAtmoColor = mix(finalAtmoColor, dayColor, daySide);
 
         // Atmosphere only glows where the sun illuminates, with slight wrap-around at terminator
-        float alpha = fresnel * terminator * 0.8;
-        alpha += fresnel * terminatorBand * 0.35;
-        alpha += fresnel * sunsetIntensity * 0.4;
-        alpha += forwardScatter * 0.08;
+        float alpha = fresnel * terminator * 0.85;
+        alpha += fresnel * terminatorBand * 0.45;
+        alpha += fresnel * sunsetIntensity * 0.55;
+        alpha += forwardScatter * 0.12;
         alpha *= pulse;
 
-        gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.25));
+        gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.3));
       }
     `;
 
@@ -2098,6 +2098,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     const targetPosition = this.getTheatreSequencePositionForKey(key);
     const currentPosition = sequence.position;
+
+    // Moon stop uses local-space offsets; interpolating from world-space
+    // values would fling the camera wildly, so snap instantly.
+    if (key === 'maan') {
+      sequence.pause();
+      sequence.position = targetPosition;
+      this.theatreCurrentSequencePosition = targetPosition;
+      return;
+    }
+
     if (Math.abs(targetPosition - currentPosition) < 0.001) {
       sequence.position = targetPosition;
       this.theatreCurrentSequencePosition = targetPosition;
@@ -2188,6 +2198,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private updateCamera() {
     if (!this.camera) {
       return;
+    }
+
+    // Adjust near plane for moon close-up (terrain is only 0.08 units)
+    const desiredNear = (this.activeCameraAnchorKey === 'maan' && this.tranquilityGroup) ? 0.001 : 0.1;
+    if (this.camera.near !== desiredNear) {
+      this.camera.near = desiredNear;
+      this.camera.updateProjectionMatrix();
     }
 
     if (this.userInteracting) {
@@ -4879,10 +4896,33 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }, undefined, () => resolve());
     }));
 
+    // Titan's thick nitrogen-methane haze (characteristic orange glow — Cassini/Huygens)
+    const titanAtmoMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPosition, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vec3 viewDir = normalize(-vPosition);
+          float fresnel = 1.0 - dot(viewDir, vNormal);
+          fresnel = pow(fresnel, 2.2);
+          // Thick orange photochemical haze — Titan's signature look
+          vec3 col = mix(vec3(0.85, 0.55, 0.2), vec3(1.0, 0.75, 0.35), fresnel);
+          gl_FragColor = vec4(col, fresnel * 0.6);
+        }`,
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.titanMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.58, 24, 24), titanAtmoMat));
+
     // ─── Pluto — dwarf planet beyond Neptune ─────────────────────────────
-    const plutoGeo = new THREE.SphereGeometry(0.32, 20, 20);
+    const plutoGeo = new THREE.SphereGeometry(0.32, 32, 32);
     const plutoMat = new THREE.MeshStandardMaterial({
-      color: 0xc4a882, roughness: 0.95, metalness: 0
+      color: 0xd8c0a0, roughness: 0.92, metalness: 0
     });
     this.plutoMesh = new THREE.Mesh(plutoGeo, plutoMat);
     this.plutoMesh.position.set(-240, -25, -220);
@@ -4893,11 +4933,34 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.textureLoader.load('8k_moon.webp', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         plutoMat.map = tex;
-        plutoMat.color.setHex(0xc4a882);
+        plutoMat.color.setHex(0xd8c0a0);
         plutoMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
     }));
+
+    // Pluto's thin nitrogen atmosphere — backlit blue haze (New Horizons flyby imagery)
+    const plutoAtmoMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPosition, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vec3 viewDir = normalize(-vPosition);
+          float fresnel = 1.0 - dot(viewDir, vNormal);
+          fresnel = pow(fresnel, 3.5);
+          // Blue nitrogen haze — New Horizons revealed this backlit glow
+          vec3 col = mix(vec3(0.4, 0.55, 0.8), vec3(0.6, 0.75, 1.0), fresnel);
+          gl_FragColor = vec4(col, fresnel * 0.35);
+        }`,
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+    });
+    this.plutoMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.36, 20, 20), plutoAtmoMat));
   }
 
   private createMarsSystem() {
@@ -4920,11 +4983,28 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
 
     // Mars atmosphere (thin, subtle — real Mars atmosphere is only 1% of Earth's)
-    const marsAtmoMat = new THREE.MeshBasicMaterial({
-      color: 0xff6633, transparent: true, opacity: 0.05,
-      side: THREE.BackSide, blending: THREE.AdditiveBlending, depthWrite: false
+    // Fresnel-based shader gives a realistic dusty-orange limb glow
+    const marsAtmoMat = new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          vPosition = (modelViewMatrix * vec4(position, 1.0)).xyz;
+          gl_Position = projectionMatrix * vec4(vPosition, 1.0);
+        }`,
+      fragmentShader: `
+        varying vec3 vNormal; varying vec3 vPosition;
+        void main() {
+          vec3 viewDir = normalize(-vPosition);
+          float fresnel = 1.0 - dot(viewDir, vNormal);
+          fresnel = pow(fresnel, 4.0);
+          // Dusty peach-orange Mars limb — very thin
+          vec3 col = mix(vec3(0.9, 0.5, 0.25), vec3(1.0, 0.65, 0.35), fresnel);
+          gl_FragColor = vec4(col, fresnel * 0.3);
+        }`,
+      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
-    const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.52, 16, 16), marsAtmoMat);
+    const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.52, 24, 24), marsAtmoMat);
     this.marsMesh.add(marsAtmo);
   }
 

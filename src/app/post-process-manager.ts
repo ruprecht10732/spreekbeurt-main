@@ -35,23 +35,23 @@ export class PostProcessManager {
 
     this.renderPass = new RenderPass(scene, camera);
 
-    // Bloom tuned for cinematic space — picks up bright star spikes and hero stars
+    // Bloom tuned for cinematic space — catches atmospheric glows, star PSFs, and hero lights
     this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
-      intensity: 1.2,
-      luminanceThreshold: 0.88,
-      luminanceSmoothing: 0.12,
+      intensity: 1.35,
+      luminanceThreshold: 0.82,
+      luminanceSmoothing: 0.15,
       mipmapBlur: true,
-      radius: 0.65,
+      radius: 0.7,
     });
 
     this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
       blendFunction: BlendFunction.SCREEN,
-      samples: 32,
-      density: 0.84,
-      decay: 0.95,
-      weight: 0.22,
-      exposure: 0.22,
+      samples: 48,
+      density: 0.86,
+      decay: 0.94,
+      weight: 0.28,
+      exposure: 0.26,
       clampMax: 1,
       kernelSize: KernelSize.LARGE,
       blur: true,
@@ -64,11 +64,11 @@ export class PostProcessManager {
     });
     this.chromaticAberrationEffect = chromaticAberration;
 
-    // Cinematic Depth of Field — very subtle, almost imperceptible
+    // Cinematic Depth of Field — gentle bokeh on extreme foreground/background
     this.dofEffect = new DepthOfFieldEffect(camera, {
       focusDistance: 0,
-      focalLength: 0.005,
-      bokehScale: 0.1,
+      focalLength: 0.008,
+      bokehScale: 1.8,
     });
 
     // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)

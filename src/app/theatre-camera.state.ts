@@ -28,6 +28,7 @@ export const THEATRE_TOUR_SEQUENCE_POSITIONS = {
   mercurius: 28,
   venus: 32,
   aarde: 36,
+  maan: 38,
   mars: 40,
   saturnus: 44,
   uranus: 48,
@@ -74,8 +75,8 @@ const SHOTS: Record<keyof typeof THEATRE_SLIDE_SEQUENCE_POSITIONS, CameraShot> =
     flareVisible: false,
   },
   h3: {
-    offset: { x: -12, y: 14, z: 32 },
-    lookOffset: { x: -10, y: 0, z: 2 },
+    offset: { x: -18, y: 20, z: 55 },
+    lookOffset: { x: -12, y: -2, z: 0 },
     drift: { x: 0.005, y: -0.002, z: 0 },
     mouseParallax: DEFAULT_MOUSE_PARALLAX,
     lerp: 0.02,
@@ -163,6 +164,14 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     mouseParallax: { x: 0.3, y: 0.3, z: 0 },
     lerp: 0.028,
     flareVisible: true,
+  },
+  maan: {
+    offset: { x: 0.15, y: 0.06, z: 0.35 },
+    lookOffset: { x: 0.02, y: -0.02, z: 0 },
+    drift: { x: 0.0003, y: 0.0001, z: -0.0002 },
+    mouseParallax: { x: 0.05, y: 0.05, z: 0 },
+    lerp: 0.035,
+    flareVisible: false,
   },
   mars: {
     offset: { x: 2.4, y: 1.2, z: 2.2 },

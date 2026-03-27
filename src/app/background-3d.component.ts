@@ -143,6 +143,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   // Earth's Moon (Luna) orbiting Earth
   private moonMesh!: THREE.Mesh;
   private moonOrbitAngle = 0;
+  private tranquilityGroup!: THREE.Group; // Apollo 11 landing site artifacts
 
   // Titan — Saturn's largest moon
   private titanMesh!: THREE.Mesh;
@@ -150,6 +151,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Pluto — dwarf planet beyond Neptune
   private plutoMesh!: THREE.Mesh;
+
+  // Starman — Tesla Roadster drifting in heliocentric orbit (easter egg)
+  private starmanGroup!: THREE.Group;
+  private starmanOrbitAngle = Math.random() * Math.PI * 2;
 
   // Distance beam between Earth and Jupiter
   private distanceBeam!: THREE.Group;
@@ -334,6 +339,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.earthMesh.visible = true;
       this.earthMesh.position.set(-8, 2, -5);
       this.tourStops.push({ name: 'aarde' });
+    }
+    if (this.moonMesh) {
+      this.tourStops.push({ name: 'maan' });
     }
     if (this.marsMesh) {
       this.tourStops.push({ name: 'mars' });
@@ -747,7 +755,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
-      antialias: false,
+      antialias: true,
       alpha: true,
       powerPreference: 'high-performance',
       logarithmicDepthBuffer: true,
@@ -757,8 +765,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.toneMappingExposure = 1.0;
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
+    this.renderer.toneMappingExposure = 0.85;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -810,7 +817,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_stars_milky_way.webp', (tex) => {
         skyMat.map = tex;
-        skyMat.color.setHex(0x222233); // muted blue-grey — natural deep-space tint
+        skyMat.color.setHex(0x18182a); // deep space with visible Milky Way band
         skyMat.needsUpdate = true;
         resolve();
       }, undefined, () => resolve());
@@ -833,36 +840,35 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }));
     this.scene.add(fgDust);
 
-    // Stars - Multi-colored with size variation and twinkle
+    // Stars — realistic magnitude distribution with spectral-class colors
+    // Bright stars are rare but have visible halos+spikes; faint stars are crisp pinpoints
     const starsGeometry = new THREE.BufferGeometry();
-    const starsVertices = [];
-    const starsColors = [];
-    const starsSizes = [];
-    // Spectral-class star colors (Hertzsprung-Russell diagram)
-    // O/B type: blue-white, A type: white, F type: yellow-white,
-    // G type: yellow (Sun), K type: orange, M type: red-orange
+    const starsVertices: number[] = [];
+    const starsColors: number[] = [];
+    const starsSizes: number[] = [];
+    // Spectral-class colors (Hertzsprung-Russell): hot blue → cold red
     const starColorPalette = [
-      [0.65, 0.75, 1.0],   // O/B — hot blue-white (rare, bright)
-      [0.82, 0.87, 1.0],   // A — white-blue (Sirius, Vega)
-      [1.0, 0.98, 0.95],   // F — warm white
-      [1.0, 0.94, 0.8],    // G — yellow-white (Sun-like)
-      [1.0, 0.82, 0.62],   // K — orange (most common visible)
-      [1.0, 0.7, 0.5],     // M — red-orange (faint)
+      [0.62, 0.72, 1.0],   // O/B — hot blue-white (rare, very bright)
+      [0.80, 0.87, 1.0],   // A — blue-white (Sirius, Vega)
+      [1.0, 0.97, 0.94],   // F — warm white
+      [1.0, 0.93, 0.78],   // G — yellow-white (Sun-like)
+      [1.0, 0.80, 0.60],   // K — orange
+      [1.0, 0.68, 0.45],   // M — red-orange (faintest)
     ];
-    // Weighted distribution: M>K>G>F>A>O (realistic stellar population)
-    const starWeights = [0.03, 0.08, 0.15, 0.22, 0.30, 0.22];
+    const starWeights = [0.02, 0.06, 0.12, 0.20, 0.32, 0.28];
     const pickStarColor = () => {
       let r = Math.random();
       for (let i = 0; i < starWeights.length; i++) {
         r -= starWeights[i];
         if (r <= 0) return starColorPalette[i];
       }
-      return starColorPalette[4]; // fallback K-type
+      return starColorPalette[4];
     };
 
-    for (let i = 0; i < 100000; i++) {
-      // Spherical distribution — no visible cube edges from any angle
-      const r = 50 + Math.pow(Math.random(), 0.5) * 1950;
+    const STAR_COUNT = 150000;
+    for (let i = 0; i < STAR_COUNT; i++) {
+      // Spherical distribution
+      const r = 80 + Math.pow(Math.random(), 0.5) * 1920;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(2 * Math.random() - 1);
       starsVertices.push(
@@ -872,7 +878,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       );
       const color = pickStarColor();
       starsColors.push(color[0], color[1], color[2]);
-      starsSizes.push(Math.random() * 2.5 + 0.5);
+      // Realistic magnitude distribution: power-law with extended bright tail
+      const mag = Math.random();
+      let sz: number;
+      if (mag < 0.65) sz = 0.2 + Math.random() * 0.6;        // Faint pinpoints
+      else if (mag < 0.88) sz = 0.8 + Math.random() * 1.8;   // Moderate
+      else if (mag < 0.96) sz = 2.5 + Math.random() * 3.5;   // Bright — halo visible
+      else if (mag < 0.993) sz = 6.0 + Math.random() * 5.0;  // Very bright — full spikes
+      else sz = 11.0 + Math.random() * 7.0;                   // Hero stars — dramatic spikes
+      starsSizes.push(sz);
     }
 
     starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsVertices, 3));
@@ -886,40 +900,83 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         attribute vec3 color;
         varying vec3 vColor;
         varying float vSize;
+        varying float vTwinkle;
         uniform float uTime;
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          // Subtle atmospheric scintillation (twinkling) — seed from vertex color to avoid hyperspace strobe
-          float twinkle = sin(uTime * 1.8 + color.r * 100.0 + color.g * 73.0) * 0.25 + 0.75;
+          // Multi-frequency scintillation — 3 incommensurate sine waves
+          float phase = color.r * 127.1 + color.g * 311.7 + position.x * 0.013;
+          float t1 = sin(uTime * 1.1 + phase) * 0.12;
+          float t2 = sin(uTime * 2.7 + phase * 1.37) * 0.08;
+          float t3 = sin(uTime * 0.4 + phase * 0.71) * 0.06;
+          float twinkle = 0.74 + t1 + t2 + t3;
+          vTwinkle = twinkle;
           float sz = aSize * twinkle * (300.0 / -mvPosition.z);
           vSize = sz;
-          gl_PointSize = sz;
+          gl_PointSize = min(sz, 96.0);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
         varying float vSize;
+        varying float vTwinkle;
         void main() {
           vec2 uv = gl_PointCoord - vec2(0.5);
           float dist = length(uv);
           if (dist > 0.5) discard;
-          
-          // Soft Airy-disk-like falloff (realistic point-spread function)
-          float alpha = smoothstep(0.5, 0.0, dist);
-          float core = smoothstep(0.15, 0.0, dist);
-          
-          // Diffraction spikes for brighter stars (cross pattern)
+
+          // ──── Realistic multi-layer PSF ────
+          // 1. Tight Gaussian core (Airy disk center)
+          float core = exp(-dist * dist * 450.0);
+          // 2. First Airy ring — subtle ring around core for medium+ stars
+          float ringDist = abs(dist - 0.12);
+          float airyRing = exp(-ringDist * ringDist * 2000.0) * 0.15 * smoothstep(2.0, 6.0, vSize);
+          // 3. Soft exponential halo
+          float haloStrength = smoothstep(1.5, 6.0, vSize);
+          float halo = exp(-dist * 10.0) * 0.3 * haloStrength;
+          // 4. Wide outer glow for brightest stars
+          float outerGlow = exp(-dist * 4.5) * 0.1 * smoothstep(5.0, 12.0, vSize);
+
+          float luminance = core + airyRing + halo + outerGlow;
+
+          // ──── 6-point JWST-style diffraction spikes ────
           float spike = 0.0;
-          if (vSize > 3.0) {
-            float sx = smoothstep(0.08, 0.0, abs(uv.y)) * smoothstep(0.5, 0.1, abs(uv.x));
-            float sy = smoothstep(0.08, 0.0, abs(uv.x)) * smoothstep(0.5, 0.1, abs(uv.y));
-            spike = (sx + sy) * 0.4 * smoothstep(3.0, 6.0, vSize);
+          if (vSize > 2.0) {
+            float spikeStr = smoothstep(2.0, 12.0, vSize) * 0.45;
+            float radial = exp(-dist * 4.0);
+            // 6 spike arms at 60° intervals
+            for (int i = 0; i < 3; i++) {
+              float angle = float(i) * 1.0471975; // π/3 = 60°
+              float cs = cos(angle);
+              float sn = sin(angle);
+              // Project uv onto spike axis and perpendicular
+              float along = uv.x * cs + uv.y * sn;
+              float perp  = abs(-uv.x * sn + uv.y * cs);
+              float arm = exp(-perp * 55.0) * exp(-abs(along) * 3.5);
+              spike += arm;
+            }
+            spike *= spikeStr * radial;
           }
-          
-          vec3 finalColor = vColor + core * 0.6;
-          gl_FragColor = vec4(finalColor, clamp(alpha * 0.9 + spike, 0.0, 1.0));
+
+          // Chromatic fringing on spike tips (bright stars only)
+          float chromatic = 0.0;
+          vec3 fringeColor = vColor;
+          if (vSize > 5.0) {
+            float fringeStr = smoothstep(5.0, 14.0, vSize) * 0.25;
+            // Slight red shift at outer edges of spikes
+            float redShift = spike * (1.0 - core) * fringeStr;
+            fringeColor = vColor + vec3(redShift * 0.4, -redShift * 0.1, redShift * 0.3);
+          }
+
+          // White-hot core → spectral color gradient
+          vec3 finalColor = mix(fringeColor, vec3(1.0, 1.0, 0.98), core * 0.8 + airyRing * 0.3);
+          // Boost spike color slightly brighter
+          finalColor += spike * vec3(0.9, 0.85, 1.0) * 0.3;
+
+          float alpha = clamp(luminance + spike, 0.0, 1.0);
+          gl_FragColor = vec4(finalColor * (0.85 + vTwinkle * 0.2), alpha);
         }
       `,
       transparent: true,
@@ -1220,6 +1277,104 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         }, undefined, () => resolve());
       }));
 
+      // ─── Apollo 11 "Tranquility Base" artifacts on the Moon surface ─────
+      this.tranquilityGroup = new THREE.Group();
+
+      // Lunar Module Descent Stage — gold-foil body on 4 legs
+      const lmBody = new THREE.Mesh(
+        new THREE.BoxGeometry(0.018, 0.012, 0.018),
+        new THREE.MeshStandardMaterial({ color: 0xccaa44, roughness: 0.4, metalness: 0.7 })
+      );
+      lmBody.position.y = 0.012;
+      this.tranquilityGroup.add(lmBody);
+      // LM platform / base plate (silver)
+      const lmBase = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.014, 0.014, 0.003, 8),
+        new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.3, metalness: 0.8 })
+      );
+      lmBase.position.y = 0.005;
+      this.tranquilityGroup.add(lmBase);
+      // 4 landing legs
+      const legMat = new THREE.MeshStandardMaterial({ color: 0x999999, roughness: 0.5, metalness: 0.6 });
+      for (let i = 0; i < 4; i++) {
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.001, 0.001, 0.016, 4), legMat);
+        const angle = (i / 4) * Math.PI * 2;
+        leg.position.set(Math.cos(angle) * 0.013, 0.005, Math.sin(angle) * 0.013);
+        leg.rotation.z = Math.cos(angle) * 0.35;
+        leg.rotation.x = Math.sin(angle) * 0.35;
+        this.tranquilityGroup.add(leg);
+        // Foot pad
+        const pad = new THREE.Mesh(
+          new THREE.CylinderGeometry(0.003, 0.003, 0.001, 6),
+          legMat
+        );
+        pad.position.set(Math.cos(angle) * 0.018, 0.001, Math.sin(angle) * 0.018);
+        this.tranquilityGroup.add(pad);
+      }
+
+      // Bootprint in the dust — iconic single print
+      const bootCanvas = document.createElement('canvas');
+      bootCanvas.width = 64; bootCanvas.height = 64;
+      const bCtx = bootCanvas.getContext('2d')!;
+      bCtx.fillStyle = '#000000';
+      bCtx.fillRect(0, 0, 64, 64);
+      // Tread pattern
+      bCtx.fillStyle = '#444444';
+      bCtx.beginPath();
+      bCtx.ellipse(32, 32, 12, 22, 0, 0, Math.PI * 2);
+      bCtx.fill();
+      bCtx.fillStyle = '#333333';
+      for (let i = 0; i < 8; i++) {
+        bCtx.fillRect(22, 14 + i * 5, 20, 2);
+      }
+      const bootTex = new THREE.CanvasTexture(bootCanvas);
+      const bootprint = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.006, 0.01),
+        new THREE.MeshStandardMaterial({
+          map: bootTex, transparent: true, roughness: 1.0, metalness: 0.0,
+          color: 0x888880,
+        })
+      );
+      bootprint.rotation.x = -Math.PI / 2;
+      bootprint.position.set(0.025, 0.0005, 0.01);
+      this.tranquilityGroup.add(bootprint);
+
+      // Fallen Apollo 11 flag — bleached white, lying on the surface
+      const flagPole = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0005, 0.0005, 0.018, 4),
+        new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 })
+      );
+      flagPole.rotation.z = Math.PI / 2 - 0.15; // Fallen over, slight angle
+      flagPole.position.set(-0.02, 0.002, 0.015);
+      this.tranquilityGroup.add(flagPole);
+      // Flag cloth — white (bleached by UV radiation)
+      const flagCloth = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.012, 0.007),
+        new THREE.MeshStandardMaterial({
+          color: 0xeeeeee, roughness: 0.9, metalness: 0.0,
+          side: THREE.DoubleSide,
+        })
+      );
+      flagCloth.rotation.x = -Math.PI / 2 + 0.08; // Lying on ground, slight crumple
+      flagCloth.rotation.z = 0.1;
+      flagCloth.position.set(-0.028, 0.001, 0.015);
+      this.tranquilityGroup.add(flagCloth);
+
+      // Position on Moon surface — Sea of Tranquility is near the equator, center-right
+      // On a sphere of radius 0.28, place at ~(0.23°N, 23.5°E) normalized
+      const theta = 0.41; // longitude angle
+      const phi = 0.04;   // latitude angle (near equator)
+      const moonR = 0.28;
+      this.tranquilityGroup.position.set(
+        moonR * Math.cos(phi) * Math.sin(theta),
+        moonR * Math.sin(phi),
+        moonR * Math.cos(phi) * Math.cos(theta)
+      );
+      // Orient to face outward from Moon center
+      this.tranquilityGroup.lookAt(0, 0, 0);
+      this.tranquilityGroup.rotateY(Math.PI); // flip to face outward
+      this.moonMesh.add(this.tranquilityGroup);
+
     // Jupiter's Faint Ring System — discovered by Voyager 1 (1979)
     // Halo ring: 1.29-1.71 Rj, Main ring: 1.71-1.81 Rj, Gossamer rings: to 3.16 Rj
     // In scene units (Rj=10): halo 12.9-17.1, main 17.1-18.1, gossamer to 31.6
@@ -1403,13 +1558,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     
     this.jupiterGroup.add(this.smallMoons);
 
-    // Lighting — cinematic deep-space look with enough fill to read detail
-    const ambientLight = new THREE.AmbientLight(0x0a1018, 0.28);
+    // Lighting — dark deep-space: single harsh sun, minimal fill
+    const ambientLight = new THREE.AmbientLight(0x040608, 0.06);
     this.scene.add(ambientLight);
 
-    // Main sun light — warm white (≈5778 K blackbody)
-    this.sunLight = new THREE.DirectionalLight(0xfff3dd, 3.8);
-    this.sunLight.position.set(-50, 10, 30);
+    // Main sun light — the only significant light source, like real space
+    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 2.8);
+    this.sunLight.position.set(-25, 5, 5);
     this.sunLight.target = this.jupiterGroup;
     this.sunLight.castShadow = true;
     this.sunLight.shadow.camera.top = 30;
@@ -1421,22 +1576,22 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunLight.shadow.mapSize.height = 2048;
     this.scene.add(this.sunLight);
 
-    // Cool fill from opposite side — keeps nightside detail without washing out contrast
-    const fillLight = new THREE.DirectionalLight(0x1e3050, 0.45);
+    // Faint cool fill — just enough to hint at nightside silhouettes
+    const fillLight = new THREE.DirectionalLight(0x060e1c, 0.08);
     fillLight.position.set(50, -10, -30);
     this.scene.add(fillLight);
 
-    // Rim / kick light — edge separation for planet silhouettes
-    const rimLight = new THREE.DirectionalLight(0x5577bb, 0.25);
+    // Minimal rim light — very faint edge separation
+    const rimLight = new THREE.DirectionalLight(0x223366, 0.05);
     rimLight.position.set(0, 30, -40);
     this.scene.add(rimLight);
 
-    // Warm backlight — subtle golden rim from below/behind for depth
-    const backLight = new THREE.DirectionalLight(0xffd4a0, 0.15);
+    // Near-zero backlight
+    const backLight = new THREE.DirectionalLight(0xffd4a0, 0.02);
     backLight.position.set(30, -20, -50);
     this.scene.add(backLight);
 
-    const hemiLight = new THREE.HemisphereLight(0x121828, 0x050308, 0.12);
+    const hemiLight = new THREE.HemisphereLight(0x040608, 0x020104, 0.03);
     this.scene.add(hemiLight);
 
     // Cinematic Anamorphic Lens Flare
@@ -1498,8 +1653,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Soft cinematic vignette — wide falloff for natural look
           float vignette = smoothstep(1.1, 0.25, dist * 1.1);
           
-          // Very light film texture so bright highlights stay clean
-          float grain = (random(vUv * 420.0 + mod(uTime, 10.0)) - 0.5) * 0.008;
+          // Fine organic film grain (subtle, not distracting)
+          float grain = (random(vUv * 800.0 + mod(uTime, 10.0)) - 0.5) * 0.025;
           
           // Subtle anamorphic horizontal streak
           float streak = smoothstep(0.5, 0.0, abs(center.y)) * smoothstep(0.6, 0.3, abs(center.x)) * 0.012;
@@ -1513,7 +1668,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           overlayColor.b += dist * 0.035;
           
           overlayColor.rgb += grain;
-          overlayColor.a += abs(grain) * 0.08;
+          overlayColor.a += abs(grain) * 0.25;
           overlayColor.a = max(overlayColor.a - streak, 0.0);
           
           gl_FragColor = overlayColor;
@@ -1545,6 +1700,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // SpaceX Falcon 9 rocket (launches from Earth during tour)
     this.falconGroup = this.buildFalcon9();
     this.scene.add(this.falconGroup);
+
+    // Starman Easter Egg — Tesla Roadster drifting in solar orbit
+    this.createStarman();
 
     // Asteroid belt between Mars and Jupiter
     this.createAsteroidBelt();
@@ -1708,6 +1866,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         return this.venusMesh?.position ?? this.getSlideCameraAnchor();
       case 'aarde':
         return this.earthMesh?.position ?? this.getSlideCameraAnchor();
+      case 'maan':
+        return this.moonMesh?.position ?? this.getSlideCameraAnchor();
       case 'mars':
         return this.marsMesh?.position ?? this.getSlideCameraAnchor();
       case 'saturnus':
@@ -1760,18 +1920,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           this.cameraDriftZ = 0;
           this.camera.rotation.z = 0;
         } else {
-          // Stacked frequencies for organic "handheld" motion
-          const breatheX = Math.sin(t * 0.5) + Math.sin(t * 1.3) * 0.5 + Math.sin(t * 2.7) * 0.2;
-          const breatheY = Math.cos(t * 0.6) + Math.sin(t * 1.7) * 0.4 + Math.cos(t * 3.1) * 0.15;
-          const breatheZ = Math.sin(t * 0.4) + Math.cos(t * 1.1) * 0.6 + Math.sin(t * 2.2) * 0.25;
+          // Gentle slow drift — smooth sine waves, no high-frequency jitter
+          const breatheX = Math.sin(t * 0.23) + Math.sin(t * 0.61) * 0.4;
+          const breatheY = Math.cos(t * 0.29) + Math.sin(t * 0.73) * 0.35;
+          const breatheZ = Math.sin(t * 0.19) + Math.cos(t * 0.53) * 0.45;
 
-          this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 25;
-          this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 25;
-          this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 25;
+          this.cameraDriftX = breatheX * Math.abs(this.cameraDriftSpeedX) * 8;
+          this.cameraDriftY = breatheY * Math.abs(this.cameraDriftSpeedY) * 8;
+          this.cameraDriftZ = breatheZ * Math.abs(this.cameraDriftSpeedZ) * 8;
 
-          // "Dutch Angle" Z-axis roll for zero-gravity cinematic feel
-          const targetRoll = breatheX * 0.015;
-          this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.05;
+          // Very subtle Z-axis roll — barely perceptible, smoothly interpolated
+          const targetRoll = breatheX * 0.002;
+          this.camera.rotation.z += (targetRoll - this.camera.rotation.z) * 0.02;
         }
 
         const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
@@ -1953,17 +2113,43 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       });
     }));
 
-    // Superlaser beam (cylinder, hidden by default) — overlaid on the model
-    const beamGeo = new THREE.CylinderGeometry(0.08, 0.3, 50, 8);
-    const beamMat = new THREE.MeshBasicMaterial({
-      color: 0x44ff44,
+    // Superlaser beam — originates from the concave dish (top-hemisphere)
+    // The beam geometry is a tapered cylinder; the pivot is at y=0 of the geometry
+    // so we translate the geometry so the base sits at the dish
+    const beamGeo = new THREE.CylinderGeometry(0.06, 0.25, 50, 12);
+    beamGeo.translate(0, 25, 0); // Shift so base at origin, tip at y=50
+    const beamMat = new THREE.ShaderMaterial({
+      uniforms: { uOpacity: { value: 0.0 } },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying vec2 vUv;
+        void main() {
+          // Core brightness fades along length, radial falloff for glow edge
+          float radial = 1.0 - abs(vUv.x - 0.5) * 2.0;
+          float along = 1.0 - vUv.y * 0.4;
+          float core = pow(radial, 3.0) * along;
+          float glow = pow(radial, 1.2) * along * 0.3;
+          vec3 col = mix(vec3(0.2, 1.0, 0.2), vec3(0.7, 1.0, 0.7), core);
+          float alpha = (core + glow) * uOpacity;
+          gl_FragColor = vec4(col, alpha);
+        }
+      `,
       transparent: true,
-      opacity: 0,
+      depthWrite: false,
       blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
     });
     this.superlaserBeam = new THREE.Mesh(beamGeo, beamMat);
-    this.superlaserBeam.position.set(0, 2.8, -2.8);
-    this.superlaserBeam.lookAt(0, 30, -30);
+    // Position at the concave dish — top of the sphere, slightly indented
+    this.superlaserBeam.position.set(0, 3.2, 0);
+    // Point outward from the dish (fire "up" in local space = away from planet center)
     this.superlaserBeam.visible = false;
     this.deathStarGroup.add(this.superlaserBeam);
 
@@ -2007,23 +2193,23 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     if (this.superlaserFiring) {
       const elapsed = time - this.superlaserTimer;
-      const mat = this.superlaserBeam.material as THREE.MeshBasicMaterial;
+      const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
       if (elapsed < 0.5) {
         // Charge-up: scale grows, opacity rises
         const t = elapsed / 0.5;
-        mat.opacity = t * 0.9;
+        mat.uniforms['uOpacity'].value = t * 0.9;
         this.superlaserBeam.scale.set(t, 1, t);
       } else if (elapsed < 1.8) {
         // Full fire: flicker
-        mat.opacity = 0.7 + Math.random() * 0.3;
+        mat.uniforms['uOpacity'].value = 0.7 + Math.random() * 0.3;
         this.superlaserBeam.scale.set(1, 1, 1);
       } else if (elapsed < 2.2) {
         // Fade out
         const t = 1 - (elapsed - 1.8) / 0.4;
-        mat.opacity = t * 0.9;
+        mat.uniforms['uOpacity'].value = t * 0.9;
         this.superlaserBeam.scale.set(t, 1, t);
       } else {
-        mat.opacity = 0;
+        mat.uniforms['uOpacity'].value = 0;
         this.superlaserBeam.visible = false;
         this.superlaserFiring = false;
       }
@@ -2306,7 +2492,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.originalFov = this.camera.fov;
   }
 
-  private updateHyperspace(deltaTime: number) {
+  private updateHyperspace(deltaTime: number, time: number) {
     if (!this.hyperspaceActive) return;
     this.hyperspaceTimer += deltaTime;
     const t = this.hyperspaceTimer / this.hyperspaceDuration;
@@ -2330,11 +2516,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       );
     }
 
-    // Camera shake — subtle during warp
+    // Camera shake — very subtle during warp, sine-based to avoid jitter
     if (t > 0.1 && t < 0.85) {
-      const shakeIntensity = t < 0.3 ? 0.15 : 0.06;
-      this.camera.position.x += (Math.random() - 0.5) * shakeIntensity;
-      this.camera.position.y += (Math.random() - 0.5) * shakeIntensity * 0.6;
+      const shakeIntensity = t < 0.3 ? 0.04 : 0.015;
+      const warpT = (time - this.falconLaunchTime) * 18;
+      this.camera.position.x += Math.sin(warpT) * shakeIntensity;
+      this.camera.position.y += Math.cos(warpT * 1.4) * shakeIntensity * 0.6;
     }
 
     if (t < 0.2) {
@@ -2712,8 +2899,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private createGalaxyEffects() {
-    // Milky Way band - dense concentration of stars in a tilted plane
-    const bandCount = 35000;
+    // Milky Way band — dense galactic-plane stars with varied depth and color
+    const bandCount = 55000;
     const bandGeo = new THREE.BufferGeometry();
     const bandPos = new Float32Array(bandCount * 3);
     const bandColors = new Float32Array(bandCount * 3);
@@ -2721,31 +2908,42 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     for (let i = 0; i < bandCount; i++) {
       const i3 = i * 3;
-      const r = 80 + Math.pow(Math.random(), 0.5) * 700;
+      const r = 80 + Math.pow(Math.random(), 0.4) * 800;
       const theta = Math.random() * Math.PI * 2;
-      const thickness = (Math.random() - 0.5) * 30 * Math.exp(-Math.random() * 3);
+      // Exponential thickness falloff for realistic thin-disk appearance
+      const thickness = (Math.random() - 0.5) * 25 * Math.exp(-Math.random() * 3.5);
 
       const x = r * Math.cos(theta);
       const y = thickness;
       const z = r * Math.sin(theta);
 
       // Tilt 25° and shift back
-      const cosT = 0.906; // cos(25°)
-      const sinT = 0.423; // sin(25°)
+      const cosT = 0.906;
+      const sinT = 0.423;
       bandPos[i3] = x;
       bandPos[i3 + 1] = y * cosT - z * sinT + 60;
       bandPos[i3 + 2] = y * sinT + z * cosT - 300;
 
-      const b = 0.3 + Math.random() * 0.7;
+      // Richer spectral color variation
+      const b = 0.35 + Math.random() * 0.65;
       const colorRoll = Math.random();
-      if (colorRoll < 0.4) {
-        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.95; bandColors[i3 + 2] = b * 0.85;
+      if (colorRoll < 0.3) {
+        // Warm white-yellow (G/K type)
+        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.92; bandColors[i3 + 2] = b * 0.78;
+      } else if (colorRoll < 0.55) {
+        // Cool blue-white (B/A type)
+        bandColors[i3] = b * 0.8; bandColors[i3 + 1] = b * 0.88; bandColors[i3 + 2] = b;
       } else if (colorRoll < 0.75) {
-        bandColors[i3] = b * 0.85; bandColors[i3 + 1] = b * 0.9; bandColors[i3 + 2] = b;
+        // Faint reddish (M type — most common)
+        bandColors[i3] = b * 0.95; bandColors[i3 + 1] = b * 0.7; bandColors[i3 + 2] = b * 0.6;
+      } else if (colorRoll < 0.9) {
+        // Pure white
+        bandColors[i3] = b; bandColors[i3 + 1] = b; bandColors[i3 + 2] = b * 0.97;
       } else {
-        bandColors[i3] = b; bandColors[i3 + 1] = b * 0.75; bandColors[i3 + 2] = b * 0.8;
+        // Nebula-tinted (pinkish/bluish)
+        bandColors[i3] = b * 0.9; bandColors[i3 + 1] = b * 0.75; bandColors[i3 + 2] = b;
       }
-      bandSizes[i] = Math.random() * 1.5 + 0.3;
+      bandSizes[i] = Math.random() < 0.97 ? Math.random() * 1.2 + 0.2 : Math.random() * 3.0 + 1.5;
     }
 
     bandGeo.setAttribute('position', new THREE.Float32BufferAttribute(bandPos, 3));
@@ -2758,23 +2956,30 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         attribute float aSize;
         attribute vec3 color;
         varying vec3 vColor;
+        varying float vBrightness;
         uniform float uTime;
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          float twinkle = sin(uTime * 1.5 + position.x * 0.05 + position.z * 0.08) * 0.15 + 0.85;
-          gl_PointSize = aSize * twinkle * (200.0 / -mvPosition.z);
+          float phase = position.x * 0.037 + position.z * 0.051;
+          float twinkle = 0.82 + 0.18 * sin(uTime * 1.2 + phase);
+          vBrightness = twinkle;
+          gl_PointSize = aSize * twinkle * (220.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
         varying vec3 vColor;
+        varying float vBrightness;
         void main() {
-          float dist = length(gl_PointCoord - vec2(0.5));
+          vec2 uv = gl_PointCoord - vec2(0.5);
+          float dist = length(uv);
           if (dist > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.1, dist) * 0.5;
-          float core = smoothstep(0.2, 0.0, dist);
-          vec3 c = vColor + core * 0.4;
+          // Soft Gaussian core + gentle halo
+          float core = exp(-dist * dist * 200.0);
+          float glow = exp(-dist * 7.0) * 0.35;
+          float alpha = (core + glow) * 0.55 * vBrightness;
+          vec3 c = mix(vColor, vec3(1.0), core * 0.5);
           gl_FragColor = vec4(c, alpha);
         }
       `,
@@ -2786,38 +2991,55 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.galaxyBand = new THREE.Points(bandGeo, bandMat);
     this.scene.add(this.galaxyBand);
 
-    // Distant galaxy sprites
-    const galaxyCount = 50;
+    // Distant galaxy sprites — more count, varied color, hint of spiral structure
+    const galaxyCount = 80;
     const gGeo = new THREE.BufferGeometry();
     const gPos = new Float32Array(galaxyCount * 3);
     const gSizes = new Float32Array(galaxyCount);
+    const gColors = new Float32Array(galaxyCount * 3);
     for (let i = 0; i < galaxyCount; i++) {
-      gPos[i * 3] = (Math.random() - 0.5) * 1500;
-      gPos[i * 3 + 1] = (Math.random() - 0.5) * 800 + 50;
-      gPos[i * 3 + 2] = -200 - Math.random() * 800;
-      gSizes[i] = 2 + Math.random() * 5;
+      gPos[i * 3] = (Math.random() - 0.5) * 2000;
+      gPos[i * 3 + 1] = (Math.random() - 0.5) * 900 + 50;
+      gPos[i * 3 + 2] = -200 - Math.random() * 1000;
+      gSizes[i] = 2.5 + Math.random() * 6;
+      const gc = Math.random();
+      if (gc < 0.35) {
+        gColors[i*3] = 0.7; gColors[i*3+1] = 0.55; gColors[i*3+2] = 0.9; // lavender
+      } else if (gc < 0.65) {
+        gColors[i*3] = 1.0; gColors[i*3+1] = 0.9; gColors[i*3+2] = 0.75; // warm gold
+      } else {
+        gColors[i*3] = 0.6; gColors[i*3+1] = 0.75; gColors[i*3+2] = 1.0; // blue-white
+      }
     }
     gGeo.setAttribute('position', new THREE.Float32BufferAttribute(gPos, 3));
     gGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(gSizes, 1));
+    gGeo.setAttribute('color', new THREE.Float32BufferAttribute(gColors, 3));
 
     this.scene.add(new THREE.Points(gGeo, new THREE.ShaderMaterial({
       vertexShader: `
         attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vGColor;
         void main() {
+          vGColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
           gl_PointSize = aSize * (400.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
       fragmentShader: `
+        varying vec3 vGColor;
         void main() {
           vec2 c = gl_PointCoord - vec2(0.5);
           float d = length(c);
           if (d > 0.5) discard;
-          float glow = exp(-d * 6.0) * 0.6;
-          float core = exp(-d * 18.0);
-          vec3 color = mix(vec3(0.5, 0.4, 0.7), vec3(1.0, 0.95, 0.85), core);
-          gl_FragColor = vec4(color, (glow + core * 0.4) * 0.35);
+          // Elliptical + hint of spiral
+          float angle = atan(c.y, c.x);
+          float spiral = sin(angle * 2.0 + d * 12.0) * 0.15 * (1.0 - d * 2.0);
+          float glow = exp(-d * 6.5) * 0.6 + spiral * 0.12;
+          float core = exp(-d * 20.0);
+          vec3 col = mix(vGColor, vec3(1.0, 0.98, 0.92), core);
+          gl_FragColor = vec4(col, clamp((glow + core * 0.4) * 0.35, 0.0, 1.0));
         }
       `,
       transparent: true,
@@ -2825,39 +3047,41 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       blending: THREE.AdditiveBlending
     })));
 
-    // Volumetric cosmic dust clouds
-    const cDustCount = 3000;
+    // Volumetric cosmic dust clouds — denser, more color variety
+    const cDustCount = 5000;
     const cGeo = new THREE.BufferGeometry();
     const cPos = new Float32Array(cDustCount * 3);
     const cColors = new Float32Array(cDustCount * 3);
     for (let i = 0; i < cDustCount; i++) {
-      cPos[i * 3] = (Math.random() - 0.5) * 300;
-      cPos[i * 3 + 1] = (Math.random() - 0.5) * 300;
-      cPos[i * 3 + 2] = (Math.random() - 0.5) * 300;
+      cPos[i * 3] = (Math.random() - 0.5) * 400;
+      cPos[i * 3 + 1] = (Math.random() - 0.5) * 400;
+      cPos[i * 3 + 2] = (Math.random() - 0.5) * 400;
       const roll = Math.random();
-      if (roll < 0.33) {
-        cColors[i * 3] = 0.3; cColors[i * 3 + 1] = 0.2; cColors[i * 3 + 2] = 0.5;
-      } else if (roll < 0.66) {
+      if (roll < 0.25) {
+        cColors[i * 3] = 0.3; cColors[i * 3 + 1] = 0.2; cColors[i * 3 + 2] = 0.55;
+      } else if (roll < 0.5) {
         cColors[i * 3] = 0.2; cColors[i * 3 + 1] = 0.3; cColors[i * 3 + 2] = 0.5;
+      } else if (roll < 0.75) {
+        cColors[i * 3] = 0.45; cColors[i * 3 + 1] = 0.22; cColors[i * 3 + 2] = 0.2;
       } else {
-        cColors[i * 3] = 0.4; cColors[i * 3 + 1] = 0.25; cColors[i * 3 + 2] = 0.2;
+        cColors[i * 3] = 0.35; cColors[i * 3 + 1] = 0.15; cColors[i * 3 + 2] = 0.4;
       }
     }
     cGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
     cGeo.setAttribute('color', new THREE.Float32BufferAttribute(cColors, 3));
     this.scene.add(new THREE.Points(cGeo, new THREE.PointsMaterial({
-      size: 0.4, transparent: true, opacity: 0.12, vertexColors: true,
+      size: 0.5, transparent: true, opacity: 0.14, vertexColors: true,
       blending: THREE.AdditiveBlending, depthWrite: false
     })));
   }
 
   private createStarClusters() {
-    const clusterCount = 2500;
+    const clusterCount = 3500;
     const clusterGeo = new THREE.IcosahedronGeometry(0.18, 0);
     const clusterMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.85,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
@@ -2865,15 +3089,19 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     const dummy = new THREE.Object3D();
     for (let i = 0; i < clusterCount; i++) {
-      const radius = 200 + Math.random() * 1200;
+      const radius = 180 + Math.random() * 1400;
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.acos(THREE.MathUtils.randFloatSpread(2));
       dummy.position.setFromSphericalCoords(radius, phi, theta);
-      const scale = 0.6 + Math.random() * 2.2;
+      const scale = 0.5 + Math.random() * 2.5;
       dummy.scale.setScalar(scale);
       dummy.updateMatrix();
       this.starClusters.setMatrixAt(i, dummy.matrix);
-      this.starClusters.setColorAt(i, new THREE.Color().setHSL(0.08 + Math.random() * 0.14, 0.4, 0.75));
+      // Wider spectral range: blue-white to warm gold to faint rose
+      const hue = Math.random() < 0.7 ? 0.06 + Math.random() * 0.16 : 0.55 + Math.random() * 0.12;
+      const sat = 0.2 + Math.random() * 0.4;
+      const lum = 0.65 + Math.random() * 0.25;
+      this.starClusters.setColorAt(i, new THREE.Color().setHSL(hue, sat, lum));
     }
 
     this.starClusters.instanceMatrix.needsUpdate = true;
@@ -3182,6 +3410,36 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.ngZone.run(() => this.telemetry.emit(null));
   }
 
+  private createStarman() {
+    this.starmanGroup = new THREE.Group();
+    const loader = new GLTFLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      loader.load('2008_tesla_roadster.glb', (gltf) => {
+        const model = gltf.scene;
+        // Scale to a small car-sized object (~0.4 scene units long)
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z);
+        const scale = 0.4 / maxDim;
+        model.scale.setScalar(scale);
+        const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+        model.position.sub(center);
+        this.starmanGroup.add(model);
+        resolve();
+      }, undefined, () => {
+        // Fallback: simple red box if GLB fails
+        const fallback = new THREE.Mesh(
+          new THREE.BoxGeometry(0.35, 0.12, 0.15),
+          new THREE.MeshStandardMaterial({ color: 0xcc2222, roughness: 0.3, metalness: 0.7 })
+        );
+        this.starmanGroup.add(fallback);
+        resolve();
+      });
+    }));
+    this.starmanGroup.visible = false;
+    this.scene.add(this.starmanGroup);
+  }
+
   private updateFalcon9(time: number) {
     if (!this.falconLaunched || !this.falconGroup) return;
 
@@ -3256,9 +3514,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.targetCameraY = this.marsMesh.position.y + 0.5;
       this.targetCameraZ = this.marsMesh.position.z + 3;
       this.targetLookAt.copy(targetPosition);
-      // Heavy camera shake as it lands
-      this.targetCameraX += (Math.random() - 0.5) * thrust * 0.05;
-      this.targetCameraY += (Math.random() - 0.5) * thrust * 0.05;
+      // Gentle landing vibration — smooth sine-based, not random jitter
+      const landT = (time - this.falconLaunchTime) * 12;
+      this.targetCameraX += Math.sin(landT) * thrust * 0.008;
+      this.targetCameraY += Math.cos(landT * 1.3) * thrust * 0.005;
     }
 
     // 4. Emit Telemetry to Angular UI
@@ -3299,40 +3558,108 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Saturn's iconic rings (C ring inner to F ring outer)
     // Real: C ring at 1.24 Rs, A ring outer at 2.27 Rs → 10.4 to 19.1 scene units
     const innerR = 10.4, outerR = 19.1;
-    const satRingGeo = new THREE.RingGeometry(innerR, outerR, 128, 4);
-    // Create ring texture procedurally
+    const satRingGeo = new THREE.RingGeometry(innerR, outerR, 256, 8);
+    // High-res procedural ring texture with Cassini division and fine structure
     const ringCanvas = document.createElement('canvas');
-    ringCanvas.width = 512; ringCanvas.height = 64;
+    ringCanvas.width = 1024; ringCanvas.height = 1;
     const rCtx = ringCanvas.getContext('2d')!;
-    // Cassini division and ring bands
-    for (let x = 0; x < 512; x++) {
-      const t = x / 512;
+    for (let x = 0; x < 1024; x++) {
+      const t = x / 1024;
       let opacity = 0;
       let r = 210, g = 190, b = 150;
-      if (t < 0.25) { // C ring (faint)
-        opacity = 0.15 + Math.sin(t * 80) * 0.05;
-        r = 160; g = 140; b = 110;
-      } else if (t < 0.55) { // B ring (bright)
-        opacity = 0.6 + Math.sin(t * 120) * 0.1;
-      } else if (t < 0.62) { // Cassini division (gap)
-        opacity = 0.04;
-      } else if (t < 0.85) { // A ring
-        opacity = 0.45 + Math.sin(t * 100) * 0.08;
-        r = 200; g = 180; b = 140;
-      } else { // F ring (thin, faint)
-        opacity = t < 0.87 ? 0.2 : 0.05;
+      // Fine micro-structure using high-frequency noise
+      const micro = 0.92 + 0.08 * Math.sin(t * 400 + Math.sin(t * 150) * 2);
+      if (t < 0.22) { // C ring (inner, faint, brownish)
+        opacity = (0.12 + Math.sin(t * 120) * 0.04) * micro;
+        r = 150; g = 130; b = 100;
+      } else if (t < 0.28) { // C-B transition
+        opacity = (0.2 + (t - 0.22) / 0.06 * 0.4) * micro;
+        r = 180; g = 165; b = 130;
+      } else if (t < 0.54) { // B ring (brightest, most opaque)
+        opacity = (0.65 + Math.sin(t * 200) * 0.08 + Math.sin(t * 50) * 0.05) * micro;
+        r = 215; g = 195; b = 155;
+      } else if (t < 0.60) { // Cassini Division (prominent gap)
+        opacity = 0.03 + Math.sin(t * 300) * 0.01;
+        r = 80; g = 70; b = 55;
+      } else if (t < 0.83) { // A ring (medium opacity, warm)
+        opacity = (0.40 + Math.sin(t * 160) * 0.06 + Math.sin(t * 80) * 0.04) * micro;
+        r = 200; g = 182; b = 145;
+        // Encke Gap at ~0.74
+        if (t > 0.73 && t < 0.75) opacity *= 0.15;
+      } else if (t < 0.86) { // Roche Division
+        opacity = 0.02;
+      } else if (t < 0.90) { // F ring (thin, bright)
+        const fCenter = 0.88;
+        const fDist = Math.abs(t - fCenter);
+        opacity = Math.max(0, 0.35 - fDist * 15) * micro;
+        r = 220; g = 200; b = 165;
+      } else { // Beyond F ring
+        opacity = 0.01;
       }
-      rCtx.fillStyle = `rgba(${r},${g},${b},${opacity})`;
-      rCtx.fillRect(x, 0, 1, 64);
+      rCtx.fillStyle = `rgba(${r},${g},${b},${Math.min(opacity, 1)})`;
+      rCtx.fillRect(x, 0, 1, 1);
     }
     const ringTexture = new THREE.CanvasTexture(ringCanvas);
     ringTexture.wrapS = THREE.ClampToEdgeWrapping;
-    const satRingMat = new THREE.MeshBasicMaterial({
-      map: ringTexture,
+    ringTexture.minFilter = THREE.LinearFilter;
+    ringTexture.magFilter = THREE.LinearFilter;
+    // Custom lit ring shader — scatters sunlight with forward/back-scatter
+    const satRingMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uRingTex: { value: ringTexture },
+        uSunDir: { value: new THREE.Vector3(-0.8, 0.2, 0.56).normalize() },
+        uPlanetPos: { value: new THREE.Vector3(0, 0, 0) },
+        uPlanetRadius: { value: 8.4 },
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        void main() {
+          vUv = uv;
+          vec4 worldPos = modelMatrix * vec4(position, 1.0);
+          vWorldPos = worldPos.xyz;
+          vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uRingTex;
+        uniform vec3 uSunDir;
+        uniform vec3 uPlanetPos;
+        uniform float uPlanetRadius;
+        varying vec2 vUv;
+        varying vec3 vWorldPos;
+        varying vec3 vWorldNormal;
+        void main() {
+          vec4 texel = texture2D(uRingTex, vUv);
+          if (texel.a < 0.01) discard;
+
+          // Ring-plane normal for lighting
+          vec3 N = normalize(vWorldNormal);
+          float NdotL = dot(N, uSunDir);
+
+          // Forward scatter (viewing through rings toward sun) + back scatter
+          float scatter = 0.4 + 0.35 * abs(NdotL) + 0.25 * pow(max(NdotL, 0.0), 2.0);
+
+          // Planet shadow on rings
+          vec3 toSun = uSunDir;
+          vec3 ringToPlanet = uPlanetPos - vWorldPos;
+          float projDist = dot(ringToPlanet, toSun);
+          float shadow = 1.0;
+          if (projDist > 0.0) {
+            vec3 closestPoint = vWorldPos + toSun * projDist;
+            float distFromAxis = length(closestPoint - uPlanetPos);
+            shadow = smoothstep(uPlanetRadius * 0.85, uPlanetRadius * 1.05, distFromAxis);
+          }
+
+          vec3 lit = texel.rgb * scatter * shadow;
+          gl_FragColor = vec4(lit, texel.a * shadow);
+        }
+      `,
       transparent: true,
       side: THREE.DoubleSide,
       depthWrite: false,
-      blending: THREE.NormalBlending
     });
     // Fix UVs to map radially
     const ringPos = satRingGeo.attributes['position'];
@@ -3343,6 +3670,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const dist = rv3.length();
       ringUv.setXY(i, (dist - innerR) / (outerR - innerR), 0.5);
     }
+    satRingGeo.computeVertexNormals();
     const satRing = new THREE.Mesh(satRingGeo, satRingMat);
     satRing.rotation.x = Math.PI / 2 - 0.47; // Saturn tilt ~26.7°
     this.saturnGroup.add(satRing);
@@ -4965,7 +5293,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateComet();
     this.updateDeathStar(time);
     this.updateLightsaberDuel(time);
-    this.updateHyperspace(deltaTime);
+    this.updateHyperspace(deltaTime, time);
 
     // Rotate Saturn slowly
     if (this.saturnGroup) {
@@ -4979,6 +5307,28 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Rotate Mars
     if (this.marsMesh) {
       this.marsMesh.rotation.y += 0.003;
+    }
+
+    // Starman — Tesla Roadster in a lazy heliocentric orbit, tumbling in zero-G
+    if (this.starmanGroup) {
+      // Show only when Earth is visible (tour is active in inner solar system)
+      const earthVisible = this.earthMesh?.visible ?? false;
+      this.starmanGroup.visible = earthVisible;
+      if (earthVisible && this.earthMesh) {
+        // Orbit between Earth and Mars — radius ~6 units from Earth's position
+        this.starmanOrbitAngle += 0.0004;
+        const ep = this.earthMesh.position;
+        const orbitR = 6;
+        this.starmanGroup.position.set(
+          ep.x + orbitR * Math.cos(this.starmanOrbitAngle),
+          ep.y + 0.8 * Math.sin(this.starmanOrbitAngle * 0.7),
+          ep.z + orbitR * Math.sin(this.starmanOrbitAngle)
+        );
+        // Slow tumble — weightless drift
+        this.starmanGroup.rotation.x += 0.003;
+        this.starmanGroup.rotation.z += 0.001;
+        this.starmanGroup.rotation.y += 0.002;
+      }
     }
     // Rotate Venus (retrograde, very slow)
     if (this.venusMesh) {

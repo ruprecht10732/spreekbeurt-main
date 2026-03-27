@@ -35,15 +35,14 @@ export class PostProcessManager {
 
     this.renderPass = new RenderPass(scene, camera);
 
-    // Standard BloomEffect with high luminance threshold — only catches HDR-bright objects
-    // (Sun, lightsabers, exhaust, superlaser) whose emissive/color exceeds 1.0 under ACES tonemapping
+    // Bloom tuned for cinematic space — picks up bright star spikes and hero stars
     this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
       intensity: 1.6,
-      luminanceThreshold: 1.0,
-      luminanceSmoothing: 0.15,
+      luminanceThreshold: 0.78,
+      luminanceSmoothing: 0.18,
       mipmapBlur: true,
-      radius: 0.74,
+      radius: 0.92,
     });
 
     this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {

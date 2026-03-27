@@ -71,6 +71,35 @@ import { animate, stagger, cubicBezier } from 'motion';
       </div>
     }
 
+    <!-- Apollo 11 Nav Display (Only visible during Moon tour stop) -->
+    @if (tourMode() && tourCurrentPlanet() === 'maan') {
+      <div class="fixed top-8 right-8 z-[25] pointer-events-none animate-fade-in">
+        <div class="bg-black/70 border border-amber-500/30 backdrop-blur-md p-5 rounded-sm font-mono min-w-[220px]">
+          <div class="text-[10px] text-amber-400/60 tracking-[0.3em] mb-3">NAVIGATION • APOLLO 11</div>
+          <div class="border-t border-amber-500/20 pt-3 space-y-3">
+            <div>
+              <div class="text-[9px] text-amber-400/50 tracking-widest">LANDING SITE</div>
+              <div class="text-amber-400/90 text-sm mt-0.5">TRANQUILITY BASE</div>
+            </div>
+            <div class="flex gap-6">
+              <div>
+                <div class="text-[9px] text-amber-400/50 tracking-widest">LAT</div>
+                <div class="text-amber-400 text-lg tabular-nums">0.67416°N</div>
+              </div>
+              <div>
+                <div class="text-[9px] text-amber-400/50 tracking-widest">LON</div>
+                <div class="text-amber-400 text-lg tabular-nums">23.47314°E</div>
+              </div>
+            </div>
+            <div class="border-t border-amber-500/15 pt-2">
+              <div class="text-[9px] text-amber-400/50 tracking-widest">MARE TRANQUILLITATIS</div>
+              <div class="text-amber-400/70 text-[11px] mt-1">20 JULI 1969 • 20:17 UTC</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    }
+
     <div class="relative z-10 w-full h-screen overflow-hidden flex flex-col items-center justify-center pointer-events-none">
       
       <!-- Star Wars Crawl for Title Slide -->
@@ -658,6 +687,9 @@ export class App implements AfterViewInit, OnDestroy {
   private bgMusicVolumeRafId: number | null = null;
   private isBrowser: boolean;
   private platformId = inject(PLATFORM_ID);
+  private audioCtx: AudioContext | null = null;
+  private falconAudioPlaying = false;
+  private moonAudioPlayed = false;
 
   currentSlide = computed(() => this.slides[this.currentIndex()]);
   totalSlides = computed(() => this.slides.length);
@@ -757,6 +789,28 @@ export class App implements AfterViewInit, OnDestroy {
 
   onTourPlanet(planetName: string) {
     this.tourCurrentPlanet.set(planetName);
+    // Audio Easter eggs
+    if (planetName === 'maan' && !this.moonAudioPlayed && !this.isMuted()) {
+      this.moonAudioPlayed = true;
+      this.fadeBgMusicTo(0.08);
+      // "Contact light" — first words spoken on the Moon, after 1s delay
+      setTimeout(() => this.playRadioVoice('Contact light.', 0.5), 1000);
+      // "One small step for a man" — the restored "a" easter egg, after 4s
+      setTimeout(() => this.playRadioVoice('That\'s one small step for a man, one giant leap for mankind.', 0.6), 4000);
+      // Restore music after the quotes
+      setTimeout(() => this.fadeBgMusicTo(0.3), 12000);
+    }
+    if (planetName !== 'maan') {
+      this.moonAudioPlayed = false;
+    }
+    // Falcon launch rumble when arriving at Earth (Falcon launches 1.5s after)
+    if (planetName === 'aarde' && !this.falconAudioPlaying && !this.isMuted()) {
+      this.falconAudioPlaying = true;
+      setTimeout(() => {
+        this.playRocketRumble(16);
+        setTimeout(() => { this.falconAudioPlaying = false; }, 18000);
+      }, 1500);
+    }
   }
 
   // Planet facts for the tour — each planet has 4 stat cards (value + label + sub)
@@ -799,6 +853,13 @@ export class App implements AfterViewInit, OnDestroy {
         { value: '1', label: 'MAAN', sub: 'Luna, onze trouwe maan' },
         { value: '24u', label: 'EEN DAG', sub: 'aardse dag' },
         { value: '🚀', label: 'FALCON 9', sub: 'nu op weg naar Mars!' },
+      ]},
+    'maan': { title: 'De Maan', icon: '🌙', color: 'rgba(200,200,190,0.90)',
+      stats: [
+        { value: '0.674°N', label: 'BREEDTEGRAAD', sub: 'Tranquility Base' },
+        { value: '23.473°E', label: 'LENGTEGRAAD', sub: 'Mare Tranquillitatis' },
+        { value: '1969', label: 'APOLLO 11', sub: '20 juli — maanlanding' },
+        { value: '∅ wind', label: 'VOETSPOREN', sub: 'voor altijd in het stof' },
       ]},
     'mars': { title: 'Mars', icon: '🔴', color: 'rgba(230,100,60,0.92)',
       stats: [
@@ -1075,6 +1136,116 @@ export class App implements AfterViewInit, OnDestroy {
       this.bgMusicVolumeRafId = requestAnimationFrame(step);
     };
     this.bgMusicVolumeRafId = requestAnimationFrame(step);
+  }
+
+  /** Play a voice line through radio static (Web Audio + Speech Synthesis) */
+  private playRadioVoice(text: string, volume: number) {
+    if (!this.isBrowser) return;
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    const ctx = this.audioCtx;
+
+    // Radio static noise bed
+    const noiseDuration = text.length * 0.08 + 2;
+    const sampleRate = ctx.sampleRate;
+    const noiseBuffer = ctx.createBuffer(1, sampleRate * noiseDuration, sampleRate);
+    const noiseData = noiseBuffer.getChannelData(0);
+    for (let i = 0; i < noiseData.length; i++) {
+      noiseData[i] = (Math.random() * 2 - 1) * 0.15;
+    }
+    const noiseSource = ctx.createBufferSource();
+    noiseSource.buffer = noiseBuffer;
+
+    // Bandpass filter to make it sound like radio static
+    const bandpass = ctx.createBiquadFilter();
+    bandpass.type = 'bandpass';
+    bandpass.frequency.value = 2000;
+    bandpass.Q.value = 0.7;
+
+    const noiseGain = ctx.createGain();
+    noiseGain.gain.value = volume * 0.3;
+
+    noiseSource.connect(bandpass);
+    bandpass.connect(noiseGain);
+    noiseGain.connect(ctx.destination);
+    noiseSource.start();
+    noiseSource.stop(ctx.currentTime + noiseDuration);
+
+    // Fade the static out at the end
+    noiseGain.gain.setValueAtTime(volume * 0.3, ctx.currentTime + noiseDuration - 0.8);
+    noiseGain.gain.linearRampToValueAtTime(0, ctx.currentTime + noiseDuration);
+
+    // Speech synthesis for the voice line
+    if ('speechSynthesis' in window) {
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.rate = 0.85;
+      utter.pitch = 0.9;
+      utter.volume = volume;
+      // Prefer an English voice
+      const voices = speechSynthesis.getVoices();
+      const enVoice = voices.find(v => v.lang.startsWith('en'));
+      if (enVoice) utter.voice = enVoice;
+      speechSynthesis.speak(utter);
+    }
+  }
+
+  /** Procedural rocket launch rumble using Web Audio API */
+  private playRocketRumble(durationSec: number) {
+    if (!this.isBrowser) return;
+    if (!this.audioCtx) this.audioCtx = new AudioContext();
+    const ctx = this.audioCtx;
+
+    // Low-frequency rumble from filtered noise
+    const sampleRate = ctx.sampleRate;
+    const buf = ctx.createBuffer(1, sampleRate * durationSec, sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) {
+      data[i] = (Math.random() * 2 - 1);
+    }
+    const source = ctx.createBufferSource();
+    source.buffer = buf;
+
+    // Low-pass filter for deep rumble
+    const lowpass = ctx.createBiquadFilter();
+    lowpass.type = 'lowpass';
+    lowpass.frequency.value = 120;
+    lowpass.Q.value = 1.5;
+
+    // Volume envelope: ramp up, sustain, fade out
+    const gain = ctx.createGain();
+    gain.gain.setValueAtTime(0, ctx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.25, ctx.currentTime + 2);
+    gain.gain.setValueAtTime(0.25, ctx.currentTime + durationSec - 4);
+    gain.gain.linearRampToValueAtTime(0, ctx.currentTime + durationSec);
+
+    // Add a mid-frequency crackle layer
+    const midBuf = ctx.createBuffer(1, sampleRate * durationSec, sampleRate);
+    const midData = midBuf.getChannelData(0);
+    for (let i = 0; i < midData.length; i++) {
+      midData[i] = (Math.random() * 2 - 1) * (Math.random() > 0.7 ? 1 : 0.3);
+    }
+    const midSource = ctx.createBufferSource();
+    midSource.buffer = midBuf;
+    const midFilter = ctx.createBiquadFilter();
+    midFilter.type = 'bandpass';
+    midFilter.frequency.value = 400;
+    midFilter.Q.value = 2;
+    const midGain = ctx.createGain();
+    midGain.gain.setValueAtTime(0, ctx.currentTime);
+    midGain.gain.linearRampToValueAtTime(0.1, ctx.currentTime + 1.5);
+    midGain.gain.setValueAtTime(0.1, ctx.currentTime + durationSec - 4);
+    midGain.gain.linearRampToValueAtTime(0, ctx.currentTime + durationSec);
+
+    source.connect(lowpass);
+    lowpass.connect(gain);
+    gain.connect(ctx.destination);
+    source.start();
+    source.stop(ctx.currentTime + durationSec);
+
+    midSource.connect(midFilter);
+    midFilter.connect(midGain);
+    midGain.connect(ctx.destination);
+    midSource.start();
+    midSource.stop(ctx.currentTime + durationSec);
   }
 
   private meteorEdgeX(W: number) { return Math.random() > 0.5 ? -20 : W + 20; }

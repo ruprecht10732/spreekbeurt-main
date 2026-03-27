@@ -884,7 +884,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFShadowMap;
-    this.renderer.toneMappingExposure = 0.88;
+    this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -1487,8 +1487,44 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       terrainNormalTex.minFilter = THREE.LinearFilter;
       terrainNormalTex.magFilter = THREE.LinearFilter;
 
+      // Procedural lunar regolith diffuse map — realistic grey variations
+      const regolithCanvas = document.createElement('canvas');
+      regolithCanvas.width = 512; regolithCanvas.height = 512;
+      const rCtx = regolithCanvas.getContext('2d')!;
+      // Base regolith grey
+      rCtx.fillStyle = '#8a8478';
+      rCtx.fillRect(0, 0, 512, 512);
+      // Add grain, micro-craters, and color variation
+      const rImg = rCtx.getImageData(0, 0, 512, 512);
+      for (let py = 0; py < 512; py++) {
+        for (let px = 0; px < 512; px++) {
+          const idx = (py * 512 + px) * 4;
+          // Fine grain noise
+          const grain = (Math.random() - 0.5) * 30;
+          // Larger variation (gentle patches)
+          const patch = Math.sin(px * 0.03 + py * 0.02) * 8 + Math.cos(px * 0.07 - py * 0.05) * 6;
+          // Tiny micro-crater darkening
+          const cx1 = px - 180, cy1 = py - 220;
+          const crater1 = Math.hypot(cx1, cy1) < 12 ? -25 : 0;
+          const cx2 = px - 350, cy2 = py - 100;
+          const crater2 = Math.hypot(cx2, cy2) < 8 ? -20 : 0;
+          const cx3 = px - 90, cy3 = py - 400;
+          const crater3 = Math.hypot(cx3, cy3) < 15 ? -30 : 0;
+          for (let c = 0; c < 3; c++) {
+            rImg.data[idx + c] = Math.max(40, Math.min(200,
+              rImg.data[idx + c] + grain + patch + crater1 + crater2 + crater3));
+          }
+        }
+      }
+      rCtx.putImageData(rImg, 0, 0);
+      const regolithTex = new THREE.CanvasTexture(regolithCanvas);
+      regolithTex.wrapS = THREE.RepeatWrapping;
+      regolithTex.wrapT = THREE.RepeatWrapping;
+      regolithTex.generateMipmaps = false;
+      regolithTex.minFilter = THREE.LinearFilter;
+
       const terrainMat = new THREE.MeshStandardMaterial({
-        color: 0x8a8478,
+        map: regolithTex,
         roughness: 0.95,
         metalness: 0,
         normalMap: terrainNormalTex,
@@ -1660,25 +1696,192 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       alsep.position.set(-0.03, 0, -0.02);
       this.tranquilityGroup.add(alsep);
 
-      // Fallen Apollo 11 flag — bleached white, lying on the surface
+      // ── Standing American Flag ─────────────────────────────────────
+      const flagGroup = new THREE.Group();
       const flagPole = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.0005, 0.0005, 0.018, 4),
+        new THREE.CylinderGeometry(0.0005, 0.0005, 0.022, 4),
         new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 })
       );
-      flagPole.rotation.z = Math.PI / 2 - 0.15;
-      flagPole.position.set(-0.02, 0.002, 0.015);
+      flagPole.position.y = 0.011;
       flagPole.castShadow = true;
-      this.tranquilityGroup.add(flagPole);
+      flagGroup.add(flagPole);
+      // Horizontal crossbar
+      const crossbar = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.0003, 0.0003, 0.013, 3),
+        new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 })
+      );
+      crossbar.rotation.z = Math.PI / 2;
+      crossbar.position.set(-0.0065, 0.0205, 0);
+      flagGroup.add(crossbar);
+      // US Flag texture via Canvas
+      const flagCanvas = document.createElement('canvas');
+      flagCanvas.width = 256; flagCanvas.height = 160;
+      const fCtx = flagCanvas.getContext('2d')!;
+      // Red and white stripes
+      const stripeH = 160 / 13;
+      for (let s = 0; s < 13; s++) {
+        fCtx.fillStyle = s % 2 === 0 ? '#BF0A30' : '#FFFFFF';
+        fCtx.fillRect(0, s * stripeH, 256, stripeH);
+      }
+      // Blue canton
+      const cantonW = 102, cantonH = Math.round(stripeH * 7);
+      fCtx.fillStyle = '#002868';
+      fCtx.fillRect(0, 0, cantonW, cantonH);
+      // Stars (simplified 5×4 + 4×3 offset grid → 50 stars approximation)
+      fCtx.fillStyle = '#FFFFFF';
+      const starRows = [6, 5, 6, 5, 6, 5, 6, 5, 6];
+      const rowSpacing = cantonH / 10;
+      for (let row = 0; row < starRows.length; row++) {
+        const cols = starRows[row];
+        const colSpacing = cantonW / (cols + 0.5);
+        const offsetX = cols === 5 ? colSpacing * 0.75 : colSpacing * 0.5;
+        for (let col = 0; col < cols; col++) {
+          const sx = offsetX + col * colSpacing;
+          const sy = rowSpacing * (row + 0.7);
+          fCtx.beginPath();
+          for (let p = 0; p < 5; p++) {
+            const a = -Math.PI / 2 + (p * 4 * Math.PI) / 5;
+            const r = 2.8;
+            if (p === 0) fCtx.moveTo(sx + r * Math.cos(a), sy + r * Math.sin(a));
+            else fCtx.lineTo(sx + r * Math.cos(a), sy + r * Math.sin(a));
+          }
+          fCtx.closePath();
+          fCtx.fill();
+        }
+      }
+      const flagTex = new THREE.CanvasTexture(flagCanvas);
+      flagTex.generateMipmaps = false;
+      flagTex.minFilter = THREE.LinearFilter;
       const flagCloth = new THREE.Mesh(
-        new THREE.PlaneGeometry(0.012, 0.007),
+        new THREE.PlaneGeometry(0.013, 0.008),
         new THREE.MeshStandardMaterial({
-          color: 0xeeeeee, roughness: 0.9, metalness: 0, side: THREE.DoubleSide,
+          map: flagTex, roughness: 0.85, metalness: 0, side: THREE.DoubleSide,
+          emissive: 0xffffff, emissiveIntensity: 0.08,
         })
       );
-      flagCloth.rotation.x = -Math.PI / 2 + 0.08;
-      flagCloth.rotation.z = 0.1;
-      flagCloth.position.set(-0.028, 0.001, 0.015);
-      this.tranquilityGroup.add(flagCloth);
+      flagCloth.position.set(-0.0065, 0.017, 0);
+      flagGroup.add(flagCloth);
+      flagGroup.position.set(-0.02, 0, 0.015);
+      this.tranquilityGroup.add(flagGroup);
+
+      // ── Harsh lunar sunlight for the landing site ───────────────────
+      const lunarSun = new THREE.DirectionalLight(0xfff8e8, 3);
+      lunarSun.position.set(0.04, 0.06, 0.02);
+      lunarSun.castShadow = true;
+      lunarSun.shadow.camera.top = 0.05;
+      lunarSun.shadow.camera.bottom = -0.05;
+      lunarSun.shadow.camera.left = -0.05;
+      lunarSun.shadow.camera.right = 0.05;
+      lunarSun.shadow.mapSize.width = 1024;
+      lunarSun.shadow.mapSize.height = 1024;
+      lunarSun.shadow.bias = -0.0001;
+      this.tranquilityGroup.add(lunarSun);
+      this.tranquilityGroup.add(lunarSun.target);
+      lunarSun.target.position.set(0, 0, 0);
+
+      // ── Apollo 11 Plaque on LM leg — "Here men from the planet Earth…" ──
+      const plaqueCanvas = document.createElement('canvas');
+      plaqueCanvas.width = 256; plaqueCanvas.height = 128;
+      const pCtx = plaqueCanvas.getContext('2d')!;
+      pCtx.fillStyle = '#888888';
+      pCtx.fillRect(0, 0, 256, 128);
+      pCtx.fillStyle = '#222222';
+      pCtx.font = 'bold 11px serif';
+      pCtx.textAlign = 'center';
+      pCtx.fillText('HERE MEN FROM THE PLANET EARTH', 128, 25);
+      pCtx.fillText('FIRST SET FOOT UPON THE MOON', 128, 42);
+      pCtx.fillText('JULY 1969, A.D.', 128, 59);
+      pCtx.fillText('WE CAME IN PEACE FOR ALL MANKIND', 128, 76);
+      pCtx.font = '9px serif';
+      pCtx.fillText('Neil A. Armstrong · Michael Collins · Edwin E. Aldrin Jr.', 128, 100);
+      pCtx.fillText('Richard Nixon, President', 128, 116);
+      const plaqueTex = new THREE.CanvasTexture(plaqueCanvas);
+      plaqueTex.generateMipmaps = false;
+      plaqueTex.minFilter = THREE.LinearFilter;
+      const plaqueMesh = new THREE.Mesh(
+        new THREE.PlaneGeometry(0.008, 0.004),
+        new THREE.MeshStandardMaterial({
+          map: plaqueTex, roughness: 0.3, metalness: 0.7,
+          emissive: 0xffffff, emissiveIntensity: 0.1,
+        })
+      );
+      plaqueMesh.position.set(0.018, 0.005, 0.002);
+      plaqueMesh.rotation.y = -0.3;
+      this.tranquilityGroup.add(plaqueMesh);
+
+      // ── Earthrise — small Earth visible above the lunar horizon ─────
+      const earthriseGeo = new THREE.SphereGeometry(0.003, 24, 24);
+      const earthriseMat = new THREE.MeshStandardMaterial({
+        color: 0x4488ff, roughness: 0.6, metalness: 0.1,
+        emissive: 0x2244aa, emissiveIntensity: 0.3,
+      });
+      const earthriseMesh = new THREE.Mesh(earthriseGeo, earthriseMat);
+      earthriseMesh.position.set(-0.03, 0.035, -0.025);
+      this.tranquilityGroup.add(earthriseMesh);
+      // Load the Earthrise photo onto the sphere
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        textureLoader.load('earthrise.webp', (tex) => {
+          tex.generateMipmaps = false;
+          tex.minFilter = THREE.LinearFilter;
+          earthriseMat.map = tex;
+          earthriseMat.color.setHex(0xffffff);
+          earthriseMat.needsUpdate = true;
+          resolve();
+        }, undefined, () => {
+          // Fallback — keep the blue sphere
+          resolve();
+        });
+      }));
+      // Earthrise glow halo
+      const earthGlowMat = new THREE.ShaderMaterial({
+        transparent: true,
+        depthWrite: false,
+        uniforms: { glowColor: { value: new THREE.Color(0x88bbff) } },
+        vertexShader: `varying vec3 vNormal;void main(){vNormal=normalize(normalMatrix*normal);gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0);}`,
+        fragmentShader: `uniform vec3 glowColor;varying vec3 vNormal;void main(){float intensity=pow(0.65-dot(vNormal,vec3(0,0,1.0)),2.5);gl_FragColor=vec4(glowColor,intensity*0.4);}`,
+        side: THREE.BackSide,
+      });
+      const earthGlow = new THREE.Mesh(new THREE.SphereGeometry(0.004, 16, 16), earthGlowMat);
+      earthGlow.position.copy(earthriseMesh.position);
+      this.tranquilityGroup.add(earthGlow);
+
+      // ── Real NASA bootprint texture ──────────────────────────────────
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        textureLoader.load('bootprint_apollo.webp', (tex) => {
+          tex.generateMipmaps = false;
+          tex.minFilter = THREE.LinearFilter;
+          bootMat.map = tex;
+          bootMat.color.setHex(0xffffff);
+          bootMat.needsUpdate = true;
+          resolve();
+        }, undefined, () => resolve());
+      }));
+
+      // ── Iconic Aldrin photo billboard near the LM ───────────────────
+      const photoGeo = new THREE.PlaneGeometry(0.016, 0.016);
+      const photoMat = new THREE.MeshStandardMaterial({
+        roughness: 0.8, metalness: 0, side: THREE.DoubleSide,
+        transparent: true, opacity: 0,
+        emissive: 0xffffff, emissiveIntensity: 0.12,
+      });
+      const photoBillboard = new THREE.Mesh(photoGeo, photoMat);
+      photoBillboard.position.set(0.03, 0.012, -0.015);
+      photoBillboard.rotation.y = 0.4;
+      this.tranquilityGroup.add(photoBillboard);
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        textureLoader.load('aldrin_moon.webp', (tex) => {
+          tex.generateMipmaps = false;
+          tex.minFilter = THREE.LinearFilter;
+          photoMat.map = tex;
+          photoMat.opacity = 1;
+          photoMat.needsUpdate = true;
+          resolve();
+        }, undefined, () => {
+          // Hide billboard if image fails
+          photoBillboard.visible = false;
+          resolve();
+        });
+      }));
 
       // ── Lunar Dust Particle System ──────────────────────────────────
       const lunarDustCount = 200;
@@ -3066,9 +3269,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       fc.fillRect(0, i * (20 / 13), 32, 20 / 13);
     }
     fc.fillStyle = '#002868'; fc.fillRect(0, 0, 12, 10);
+    const flagTex = new THREE.CanvasTexture(flagC);
+    flagTex.generateMipmaps = false;
+    flagTex.minFilter = THREE.LinearFilter;
     const flagPatch = new THREE.Mesh(
       new THREE.PlaneGeometry(0.025, 0.016),
-      new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(flagC), roughness: 0.8 }),
+      new THREE.MeshStandardMaterial({ map: flagTex, roughness: 0.8 }),
     );
     flagPatch.position.set(-0.074, 0.02, 0.04);
     flagPatch.rotation.set(0, -0.6, 0.8);
@@ -3158,6 +3364,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     pc.fillText('"Ad astra per aspera \u2014 through hardships to the stars"', 256, 310);
 
     const plaqueTex = new THREE.CanvasTexture(plaqueCanvas);
+    plaqueTex.generateMipmaps = false;
+    plaqueTex.minFilter = THREE.LinearFilter;
     const plaque = new THREE.Mesh(
       new THREE.PlaneGeometry(1.2, 0.8),
       new THREE.MeshStandardMaterial({ map: plaqueTex, roughness: 0.3, metalness: 0.7 }),
@@ -3282,9 +3490,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     nc.textAlign = 'center';
     nc.textBaseline = 'middle';
     nc.fillText('Columbia', 128, 32);
+    const colNameTex = new THREE.CanvasTexture(nameC);
+    colNameTex.generateMipmaps = false;
+    colNameTex.minFilter = THREE.LinearFilter;
     const nameLabel = new THREE.Mesh(
       new THREE.PlaneGeometry(1.5, 0.3),
-      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(nameC), transparent: true, depthWrite: false }),
+      new THREE.MeshBasicMaterial({ map: colNameTex, transparent: true, depthWrite: false }),
     );
     nameLabel.position.set(0.5, 0.55, 0.56);
     nameLabel.rotation.y = Math.PI / 2;
@@ -3429,6 +3640,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Position near the blackhole→jupiter-einde leg of the tour
     this.columbiaGroup.position.set(100, 30, -80);
     this.columbiaGroup.visible = false;
+
+    // Dedicated scene lighting so the shuttle is clearly visible
+    const columbiaKeyLight = new THREE.DirectionalLight(0xfff8e8, 2);
+    columbiaKeyLight.position.set(5, 3, 4);
+    this.columbiaGroup.add(columbiaKeyLight);
+    const columbiaFillLight = new THREE.PointLight(0x88aacc, 1, 30);
+    columbiaFillLight.position.set(-3, -1, -2);
+    this.columbiaGroup.add(columbiaFillLight);
+
     this.scene.add(this.columbiaGroup);
   }
 
@@ -4968,6 +5188,20 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         model.scale.setScalar(scale);
         const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
         model.position.sub(center);
+
+        // Boost material visibility so Tesla is visible in deep space
+        model.traverse((child) => {
+          if ((child as THREE.Mesh).isMesh) {
+            const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
+            if (mat.isMeshStandardMaterial) {
+              mat.emissive = mat.emissive ?? new THREE.Color(0x000000);
+              mat.emissiveIntensity = 0.15;
+              mat.emissive.copy(mat.color).multiplyScalar(0.3);
+              mat.needsUpdate = true;
+            }
+          }
+        });
+
         this.starmanGroup.add(model);
         resolve();
       }, undefined, () => {
@@ -4980,6 +5214,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         resolve();
       });
     }));
+
+    // Dedicated key+fill lights so the Tesla is visible against black space
+    const keyLight = new THREE.PointLight(0xfff5e0, 2, 5, 1.5);
+    keyLight.position.set(0.8, 0.6, 0.4);
+    this.starmanGroup.add(keyLight);
+    const fillLight = new THREE.PointLight(0x4488cc, 0.5, 4, 1.5);
+    fillLight.position.set(-0.5, -0.2, -0.6);
+    this.starmanGroup.add(fillLight);
+
     this.starmanGroup.visible = false;
     this.scene.add(this.starmanGroup);
   }

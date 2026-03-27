@@ -36,7 +36,7 @@ const fragmentShader = /* glsl */ `
     // ── Very fine film grain — only visible on mid-darks, invisible on stars ──
     float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
     float grainMask = smoothstep(0.45, 0.05, lum);     // vanishes on bright pixels
-    float grain = (random(uv * 800.0 + fract(uTime * 3.7)) - 0.5) * 0.025;
+    float grain = (random(uv * 800.0 + fract(uTime * 3.7)) - 0.5) * 0.008;
     color += grain * grainMask;
 
     // Apply vignette

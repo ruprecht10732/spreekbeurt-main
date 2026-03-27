@@ -169,9 +169,9 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     flareVisible: false,
   },
   maan: {
-    offset: { x: 0.012, y: 0.005, z: 0.01 },
-    lookOffset: { x: 0.001, y: 0.004, z: 0 },
-    drift: { x: -0.0008, y: -0.0002, z: -0.001 },
+    offset: { x: 0.02, y: 0.012, z: 0.018 },
+    lookOffset: { x: -0.002, y: 0.006, z: 0 },
+    drift: { x: -0.0005, y: -0.0001, z: -0.0006 },
     mouseParallax: { x: 0.0002, y: 0.0002, z: 0 },
     lerp: 0.04,
     flareVisible: false,
@@ -377,7 +377,7 @@ export const THEATRE_CAMERA_PROJECT_STATE = {
       },
       sequence: {
         type: 'PositionalSequence',
-        length: 60,
+        length: 66,
         subUnitsPerUnit: 30,
         tracksByObject: {
           'jupiter-camera': {

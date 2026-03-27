@@ -58,17 +58,17 @@ export class PostProcessManager {
     }) : null;
 
     const chromaticAberration = new ChromaticAberrationEffect({
-      offset: new THREE.Vector2(0.00015, 0.00015),
+      offset: new THREE.Vector2(0.00006, 0.00006),
       radialModulation: true,
-      modulationOffset: 0.4,
+      modulationOffset: 0.5,
     });
     this.chromaticAberrationEffect = chromaticAberration;
 
     // Cinematic Depth of Field — gentle bokeh on extreme foreground/background
     this.dofEffect = new DepthOfFieldEffect(camera, {
       focusDistance: 0,
-      focalLength: 0.008,
-      bokehScale: 1.8,
+      focalLength: 0.025,
+      bokehScale: 1.2,
     });
 
     // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)

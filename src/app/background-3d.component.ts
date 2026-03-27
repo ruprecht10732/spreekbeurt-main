@@ -260,6 +260,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private asbjornMeteorRocks!: THREE.InstancedMesh;
   private asbjornMeteorGlow!: THREE.Points;
   private asbjornMeteorCount = 0;
+  private asbjornStormGroup!: THREE.Group;
 
   // Subtle cross constellation (tribute)
   private crossConstellation!: THREE.Points;
@@ -883,7 +884,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.toneMappingExposure = 1.0;
     container.appendChild(this.renderer.domElement);
 
@@ -935,6 +936,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.textureLoader = new THREE.TextureLoader(loadingManager);
     this.loadPromises.push(new Promise<void>((resolve) => {
       this.textureLoader.load('8k_stars_milky_way.webp', (tex) => {
+        tex.generateMipmaps = false;
+        tex.minFilter = THREE.LinearFilter;
         skyMat.map = tex;
         skyMat.color.setHex(0x18182a); // deep space with visible Milky Way band
         skyMat.needsUpdate = true;
@@ -1764,20 +1767,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       flagGroup.position.set(-0.02, 0, 0.015);
       this.tranquilityGroup.add(flagGroup);
 
-      // ── Harsh lunar sunlight for the landing site ───────────────────
-      const lunarSun = new THREE.DirectionalLight(0xfff8e8, 3);
+      // ── Lunar landing site illumination ───────────────────────────
+      const lunarSun = new THREE.PointLight(0xfff8e8, 1.5, 0.15);
       lunarSun.position.set(0.04, 0.06, 0.02);
-      lunarSun.castShadow = true;
-      lunarSun.shadow.camera.top = 0.05;
-      lunarSun.shadow.camera.bottom = -0.05;
-      lunarSun.shadow.camera.left = -0.05;
-      lunarSun.shadow.camera.right = 0.05;
-      lunarSun.shadow.mapSize.width = 1024;
-      lunarSun.shadow.mapSize.height = 1024;
-      lunarSun.shadow.bias = -0.0001;
       this.tranquilityGroup.add(lunarSun);
-      this.tranquilityGroup.add(lunarSun.target);
-      lunarSun.target.position.set(0, 0, 0);
 
       // ── Apollo 11 Plaque on LM leg — "Here men from the planet Earth…" ──
       const plaqueCanvas = document.createElement('canvas');
@@ -3182,6 +3175,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.crossConstellation = new THREE.Points(geo, mat);
     this.crossConstellation.position.set(200, 160, -300);
     this.crossConstellation.scale.setScalar(2.5);
+    this.crossConstellation.visible = false;
     this.scene.add(this.crossConstellation);
   }
 
@@ -3641,13 +3635,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.columbiaGroup.position.set(100, 30, -80);
     this.columbiaGroup.visible = false;
 
-    // Dedicated scene lighting so the shuttle is clearly visible
-    const columbiaKeyLight = new THREE.DirectionalLight(0xfff8e8, 2);
+    // Dedicated lighting so the shuttle is visible
+    const columbiaKeyLight = new THREE.PointLight(0xfff8e8, 3, 40, 1);
     columbiaKeyLight.position.set(5, 3, 4);
     this.columbiaGroup.add(columbiaKeyLight);
-    const columbiaFillLight = new THREE.PointLight(0x88aacc, 1, 30);
-    columbiaFillLight.position.set(-3, -1, -2);
-    this.columbiaGroup.add(columbiaFillLight);
 
     this.scene.add(this.columbiaGroup);
   }
@@ -4016,6 +4007,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const jp = this.jupiterGroup.position;
     this.lightsaberGroup.position.set(jp.x + 28, jp.y + 3, jp.z + 10);
     this.lightsaberGroup.scale.setScalar(1.8);
+    this.lightsaberGroup.visible = false;
     this.scene.add(this.lightsaberGroup);
   }
 
@@ -4846,6 +4838,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       { object: this.starClusters, radius: 1500 },
       { object: this.deathStarGroup, radius: 12 },
       { object: this.lightsaberGroup, radius: 6 },
+      { object: this.asbjornStormGroup, radius: 30 },
+      { object: this.crossConstellation, radius: 20 },
     );
   }
 
@@ -4857,6 +4851,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (!target.object) continue;
       // Don't override visibility of destroyed Pluto
       if (target.object === this.plutoMesh && this.plutoDestroyed) continue;
+      // Easter-egg objects only visible when tour is active
+      if (!this.tourActive && (
+        target.object === this.lightsaberGroup ||
+        target.object === this.asbjornStormGroup ||
+        target.object === this.crossConstellation ||
+        target.object === this.deathStarGroup
+      )) {
+        target.object.visible = false;
+        continue;
+      }
       this.tempSphere.set(target.object.position, target.radius);
       target.object.visible = this.frustum.intersectsSphere(this.tempSphere);
     }
@@ -5195,8 +5199,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
             const mat = (child as THREE.Mesh).material as THREE.MeshStandardMaterial;
             if (mat.isMeshStandardMaterial) {
               mat.emissive = mat.emissive ?? new THREE.Color(0x000000);
-              mat.emissiveIntensity = 0.15;
-              mat.emissive.copy(mat.color).multiplyScalar(0.3);
+              mat.emissiveIntensity = 0.08;
+              mat.emissive.copy(mat.color).multiplyScalar(0.15);
               mat.needsUpdate = true;
             }
           }
@@ -6266,6 +6270,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       tCtx.stroke();
     }
     const rockTex = new THREE.CanvasTexture(texCanvas);
+    rockTex.generateMipmaps = false;
+    rockTex.minFilter = THREE.LinearFilter;
 
     // InstancedMesh rocks — irregularly shaped meteorites
     const rockGeo = new THREE.IcosahedronGeometry(0.35, 1);
@@ -6332,13 +6338,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Group into a container, place far off to the upper-right of the scene
     // visible as a subtle background feature — like a distant meteorite cloud
-    const stormGroup = new THREE.Group();
-    stormGroup.add(this.asbjornMeteorRocks);
-    stormGroup.add(this.asbjornMeteorGlow);
-    stormGroup.position.set(80, 55, -120);
-    stormGroup.rotation.set(0.15, -0.3, 0.08);
-    stormGroup.scale.setScalar(0.7);
-    this.scene.add(stormGroup);
+    this.asbjornStormGroup = new THREE.Group();
+    this.asbjornStormGroup.add(this.asbjornMeteorRocks);
+    this.asbjornStormGroup.add(this.asbjornMeteorGlow);
+    this.asbjornStormGroup.position.set(80, 55, -120);
+    this.asbjornStormGroup.rotation.set(0.15, -0.3, 0.08);
+    this.asbjornStormGroup.scale.setScalar(0.7);
+    this.asbjornStormGroup.visible = false;
+    this.scene.add(this.asbjornStormGroup);
   }
 
   private updateAsbjornMeteorStorm(time: number) {

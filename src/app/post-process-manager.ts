@@ -58,9 +58,9 @@ export class PostProcessManager {
     }) : null;
 
     const chromaticAberration = new ChromaticAberrationEffect({
-      offset: new THREE.Vector2(0.00006, 0.00006),
+      offset: new THREE.Vector2(0.00003, 0.00003),
       radialModulation: true,
-      modulationOffset: 0.5,
+      modulationOffset: 0.6,
     });
     this.chromaticAberrationEffect = chromaticAberration;
 

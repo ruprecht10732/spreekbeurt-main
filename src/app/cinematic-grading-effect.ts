@@ -23,15 +23,18 @@ const fragmentShader = /* glsl */ `
 
     vec3 color = inputColor.rgb;
 
-    // ── Lift / Gamma / Gain — cool shadows, neutral mids, warm highlights ──
-    vec3 lift  = vec3(0.015, 0.02, 0.035);   // blue-ish shadow lift
-    vec3 gamma = vec3(0.98, 0.98, 1.0);      // near-neutral midtones
-    vec3 gain  = vec3(1.04, 1.01, 0.97);     // warm highlight push
+    // ── Lift / Gamma / Gain — subtle cool shadows, neutral mids, warm highlights ──
+    vec3 lift  = vec3(0.008, 0.012, 0.02);    // gentle blue-ish shadow lift
+    vec3 gamma = vec3(0.99, 0.99, 1.0);       // near-neutral midtones
+    vec3 gain  = vec3(1.02, 1.005, 0.985);    // subtle warm highlight push
     color = liftGammaGain(color, lift, gamma, gain);
 
     // ── Subtle contrast S-curve — opens shadows, rolls highlights ──
-    color = color * color * (3.0 - 2.0 * color);      // Hermite S
-    color = mix(inputColor.rgb, color, 0.18);          // dial back to 18 %
+    // Clamp to [0,1] before Hermite S-curve: it produces negatives for x > 1.5
+    // which inverts bright HDR pixels after bloom / god-rays
+    vec3 sc = clamp(color, 0.0, 1.0);
+    sc = sc * sc * (3.0 - 2.0 * sc);                  // Hermite S (safe in [0,1])
+    color = mix(color, sc, 0.12);                      // dial back to 12 %
 
     // ── Very fine film grain — only visible on mid-darks, invisible on stars ──
     float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));

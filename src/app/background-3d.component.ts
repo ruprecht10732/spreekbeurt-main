@@ -875,17 +875,19 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
-      antialias: false, // Disabled hardware AA to prevent smudging; Post-Processing SMAA handles this perfectly
+      antialias: false,
       alpha: true,
       powerPreference: 'high-performance',
       logarithmicDepthBuffer: true,
     });
-    this.renderer.outputColorSpace = THREE.SRGBColorSpace; // CRITICAL: Fixes the washed-out gray look
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(window.devicePixelRatio);
+    // Limit pixel ratio so high-res monitors don't freeze without a dedicated GPU
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFShadowMap; // PCFSoftShadowMap is deprecated, use PCF
+    // BasicShadowMap is extremely fast and fixes the "LINEAR depth" warning on CPU
+    this.renderer.shadowMap.type = THREE.BasicShadowMap;
     this.renderer.toneMappingExposure = 1.3;
     container.appendChild(this.renderer.domElement);
 
@@ -924,6 +926,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(new THREE.Mesh(skyGeo, skyMat));
     // Shared loading manager for progress tracking
     const loadingManager = new THREE.LoadingManager();
+
+    // Prevent the browser from choking trying to create mipmaps for large textures on CPU
+    THREE.Texture.prototype.generateMipmaps = false;
+    THREE.Texture.prototype.minFilter = THREE.LinearFilter;
+
     loadingManager.onProgress = (_url, itemsLoaded, itemsTotal) => {
       const pct = (itemsLoaded / itemsTotal) * 100;
       this.ngZone.run(() => this.loadProgress.emit(pct));
@@ -997,7 +1004,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       return starColorPalette[4];
     };
 
-    const STAR_COUNT = 150000;
+    // Reduced from 150,000 for CPU performance
+    const STAR_COUNT = 15000;
     for (let i = 0; i < STAR_COUNT; i++) {
       // Spherical distribution
       const r = 80 + Math.pow(Math.random(), 0.5) * 1920;
@@ -2106,11 +2114,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.sunLight.shadow.camera.bottom = -18;
     this.sunLight.shadow.camera.left = -18;
     this.sunLight.shadow.camera.right = 18;
-    this.sunLight.shadow.bias = -0.0001; // Tighter bias for crisp edges
-    this.sunLight.shadow.normalBias = 0.02; // Prevents shadow acne on curved planets
-    this.sunLight.shadow.radius = 1.5; // Softens the shadow edges to replace PCFSoftShadowMap
-    this.sunLight.shadow.mapSize.width = 4096;
-    this.sunLight.shadow.mapSize.height = 4096;
+    this.sunLight.shadow.bias = -0.001;
+    // Reduced from 4096 to 1024 — avoids crushing a software renderer
+    this.sunLight.shadow.mapSize.width = 1024;
+    this.sunLight.shadow.mapSize.height = 1024;
     this.scene.add(this.sunLight);
 
     // Earthshine — faint blue fill from Earth's reflected light onto the Moon
@@ -2453,10 +2460,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.currentLookAt.lerp(this.targetLookAt, effectiveLerp);
     this.controls.target.copy(this.currentLookAt);
     this.controls.update();
-
-    // Dynamically pull focus on the current target for cinematic Bokeh
-    const distanceToTarget = this.camera.position.distanceTo(this.controls.target);
-    this.postProcessManager?.setDofFocusDistance(distanceToTarget, this.camera);
   }
 
   private updateCameraDrift(): CameraBreathing {
@@ -4543,7 +4546,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createMilkyWayBand() {
     // Milky Way band — dense galactic-plane stars with varied depth and color
-    const bandCount = 55000;
+    // Reduced from 55,000 for CPU performance
+    const bandCount = 8000;
     const bandGeo = new THREE.BufferGeometry();
     const bandPos = new Float32Array(bandCount * 3);
     const bandColors = new Float32Array(bandCount * 3);

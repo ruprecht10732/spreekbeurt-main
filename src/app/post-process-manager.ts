@@ -2,15 +2,9 @@ import * as THREE from 'three';
 import {
   BlendFunction,
   BloomEffect,
-  ChromaticAberrationEffect,
-  DepthOfFieldEffect,
   EffectComposer,
   EffectPass,
-  GodRaysEffect,
-  KernelSize,
   RenderPass,
-  SMAAEffect,
-  SMAAPreset,
 } from 'postprocessing';
 import { CinematicGradingEffect } from './cinematic-grading-effect';
 
@@ -19,9 +13,6 @@ export class PostProcessManager {
   private readonly bloomEffect: BloomEffect;
   private readonly renderPass: RenderPass;
   private readonly effectPass: EffectPass;
-  private readonly godRaysEffect: GodRaysEffect | null;
-  private readonly chromaticAberrationEffect: ChromaticAberrationEffect;
-  private readonly dofEffect: DepthOfFieldEffect;
 
   constructor(
     renderer: THREE.WebGLRenderer,
@@ -31,65 +22,30 @@ export class PostProcessManager {
   ) {
     this.composer = new EffectComposer(renderer, {
       frameBufferType: THREE.HalfFloatType,
+      // Hardware multisampling is natively sharp and extremely fast compared to SMAA
+      multisampling: Math.min(4, renderer.capabilities.maxSamples)
     });
 
     this.renderPass = new RenderPass(scene, camera);
 
-    // Bloom tuned for cinematic space — catches atmospheric glows, star PSFs, and hero lights
+    // Optimized Bloom for CPU
     this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
       intensity: 1.0,
       luminanceThreshold: 0.85,
       luminanceSmoothing: 0.08,
-      mipmapBlur: true,
+      mipmapBlur: false, // Saves huge CPU overhead
       radius: 0.5,
+      resolutionScale: 0.5 // Computes bloom at half-resolution to save framerate
     });
 
-    this.godRaysEffect = lightSource ? new GodRaysEffect(camera, lightSource, {
-      blendFunction: BlendFunction.SCREEN,
-      samples: 60,
-      density: 0.86,
-      decay: 0.94,
-      weight: 0.28,
-      exposure: 0.15,
-      clampMax: 1,
-      kernelSize: KernelSize.VERY_LARGE,
-      blur: true,
-    }) : null;
-
-    const chromaticAberration = new ChromaticAberrationEffect({
-      offset: new THREE.Vector2(0.00003, 0.00003),
-      radialModulation: true,
-      modulationOffset: 0.6,
-    });
-    this.chromaticAberrationEffect = chromaticAberration;
-
-    // Cinematic Depth of Field — anamorphic macro bokeh
-    this.dofEffect = new DepthOfFieldEffect(camera, {
-      focusDistance: 0,
-      focalLength: 0.045, // Tighter cinematic lens
-      bokehScale: 3.0,    // Large, beautiful out-of-focus blur
-    });
-
-    // SMAA — image-space anti-aliasing (compatible with logarithmic depth buffer)
-    const smaaEffect = new SMAAEffect({ preset: SMAAPreset.ULTRA });
-
-    // Cinematic grading (vignette + film grain + color grading) merged into single effect
+    // Cinematic grading (vignette + film grain + color grading)
     const gradingEffect = new CinematicGradingEffect();
 
-    // Main effect pass — all non-convolution effects merged together
-    const effects: Array<InstanceType<typeof BloomEffect> | InstanceType<typeof GodRaysEffect> | InstanceType<typeof DepthOfFieldEffect> | InstanceType<typeof SMAAEffect> | CinematicGradingEffect> = [];
-    if (this.godRaysEffect) effects.push(this.godRaysEffect);
-    effects.push(this.bloomEffect, this.dofEffect, smaaEffect, gradingEffect);
-
-    this.effectPass = new EffectPass(camera, ...effects);
-
-    // ChromaticAberration is a convolution effect — needs its own pass
-    const chromaticPass = new EffectPass(camera, chromaticAberration);
+    this.effectPass = new EffectPass(camera, this.bloomEffect, gradingEffect);
 
     this.composer.addPass(this.renderPass);
     this.composer.addPass(this.effectPass);
-    this.composer.addPass(chromaticPass);
   }
 
   setBloomIntensity(intensity: number): void {
@@ -101,13 +57,11 @@ export class PostProcessManager {
   }
 
   setDofFocusDistance(worldDistance: number, camera: THREE.PerspectiveCamera): void {
-    // Correctly map 3D world distance to the shader's normalized depth buffer [0.0, 1.0]
-    const normalizedFocus = (worldDistance - camera.near) / (camera.far - camera.near);
-    this.dofEffect.cocMaterial.uniforms['focusDistance'].value = normalizedFocus;
+    // Removed DepthOfField to save CPU - No-op
   }
 
   setChromaticAberrationOffset(x: number, y: number): void {
-    this.chromaticAberrationEffect.offset = new THREE.Vector2(x, y);
+    // Removed ChromaticAberration to save CPU - No-op
   }
 
   render(deltaTime: number): void {

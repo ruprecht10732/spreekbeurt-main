@@ -2428,12 +2428,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (!plutoPos) return;
 
       if (flyElapsed < flyDuration) {
-        // Fly Death Star toward Pluto — approach from above-right
+        // Fly Death Star toward Pluto — approach from the far side so camera sees the action
         const t = flyElapsed / flyDuration;
         const ease = t * t * (3 - 2 * t); // smoothstep
-        const targetX = plutoPos.x + 4;
+        const targetX = plutoPos.x - 6;
         const targetY = plutoPos.y + 3;
-        const targetZ = plutoPos.z + 4;
+        const targetZ = plutoPos.z - 6;
         const jp = this.jupiterGroup.position;
         const startX = jp.x + 45;
         const startY = jp.y + 12;
@@ -5978,10 +5978,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         // Orbit between Earth and Mars — radius ~4 units from Earth's position
         this.starmanOrbitAngle += 0.0006;
         const ep = this.earthMesh.position;
-        const orbitR = 4;
+        const orbitR = 1.5;
         this.starmanGroup.position.set(
           ep.x + orbitR * Math.cos(this.starmanOrbitAngle),
-          ep.y + 1.0 * Math.sin(this.starmanOrbitAngle * 0.7),
+          ep.y + 0.4 * Math.sin(this.starmanOrbitAngle * 0.7),
           ep.z + orbitR * Math.sin(this.starmanOrbitAngle)
         );
         // Slow tumble — weightless drift

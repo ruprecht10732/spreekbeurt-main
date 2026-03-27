@@ -36,6 +36,7 @@ export const THEATRE_TOUR_SEQUENCE_POSITIONS = {
   neptunus: 52,
   pluto: 56,
   blackhole: 60,
+  columbia: 62,
   'jupiter-einde': 64,
 } as const;
 
@@ -168,10 +169,10 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     flareVisible: false,
   },
   maan: {
-    offset: { x: 0.035, y: 0.016, z: 0.025 },
-    lookOffset: { x: 0.005, y: 0.012, z: 0 },
-    drift: { x: -0.003, y: -0.0008, z: -0.004 },
-    mouseParallax: { x: 0.0006, y: 0.0006, z: 0 },
+    offset: { x: 0.012, y: 0.005, z: 0.01 },
+    lookOffset: { x: 0.001, y: 0.004, z: 0 },
+    drift: { x: -0.0008, y: -0.0002, z: -0.001 },
+    mouseParallax: { x: 0.0002, y: 0.0002, z: 0 },
     lerp: 0.04,
     flareVisible: false,
   },
@@ -216,11 +217,11 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     flareVisible: false,
   },
   pluto: {
-    offset: { x: 4, y: 1.5, z: 4 },
-    lookOffset: { x: 0, y: 0, z: 0 },
+    offset: { x: 8, y: 3, z: 8 },
+    lookOffset: { x: 0, y: 1, z: 0 },
     drift: { x: 0.0006, y: 0.0003, z: -0.0004 },
-    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
-    lerp: 0.03,
+    mouseParallax: { x: 0.4, y: 0.4, z: 0 },
+    lerp: 0.028,
     flareVisible: false,
   },
   blackhole: {
@@ -229,6 +230,14 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     drift: { x: 0.002, y: 0.0008, z: -0.0015 },
     mouseParallax: { x: 0.8, y: 0.8, z: 0 },
     lerp: 0.018,
+    flareVisible: false,
+  },
+  columbia: {
+    offset: { x: 10, y: 3, z: 8 },
+    lookOffset: { x: 0, y: 1, z: 0 },
+    drift: { x: -0.001, y: 0.0005, z: -0.0008 },
+    mouseParallax: { x: 0.3, y: 0.3, z: 0 },
+    lerp: 0.02,
     flareVisible: false,
   },
   'jupiter-einde': {

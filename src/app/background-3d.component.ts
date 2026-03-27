@@ -261,6 +261,27 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private asbjornMeteorGlow!: THREE.Points;
   private asbjornMeteorCount = 0;
 
+  // Subtle cross constellation (tribute)
+  private crossConstellation!: THREE.Points;
+
+  // Floating astronaut near Tesla Roadster
+  private astronautGroup!: THREE.Group;
+
+  // Columbia memorial sequence
+  private columbiaGroup!: THREE.Group;
+  private columbiaShuttleMesh!: THREE.Group;
+  private columbiaDebris!: THREE.InstancedMesh;
+  private columbiaDebrisVelocities!: Float32Array;
+  private columbiaTrails!: THREE.Points;
+  private columbiaFlashLight!: THREE.PointLight;
+  private columbiaMemorialStars!: THREE.Points;
+  private columbiaSequenceActive = false;
+  private columbiaSequenceTime = 0;
+  private columbiaBreakupDone = false;
+
+  // Fallen astronaut memorial
+  private fallenAstronautGroup!: THREE.Group;
+
   // Gargantua Black Hole
   private blackHoleGroup!: THREE.Group;
   private accretionDisk!: THREE.Mesh;
@@ -405,6 +426,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (this.blackHoleGroup) {
       this.tourStops.push({ name: 'blackhole' });
     }
+    if (this.columbiaGroup) {
+      this.tourStops.push({ name: 'columbia' });
+    }
     this.tourStops.push({ name: 'jupiter-einde' });
 
     this.tourActive = true;
@@ -463,6 +487,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     if (stopName === 'maan' && this.lunarDust && !this.lunarDustActive) {
       this.activateLunarDust();
+    }
+
+    // Columbia memorial — activate cinematic sequence
+    if (stopName === 'columbia' && this.columbiaGroup) {
+      this.columbiaGroup.visible = true;
+      this.columbiaSequenceActive = true;
+      this.columbiaSequenceTime = 0;
+      this.columbiaBreakupDone = false;
+      if (this.columbiaShuttleMesh) this.columbiaShuttleMesh.visible = true;
+      if (this.columbiaDebris) this.columbiaDebris.visible = false;
+      if (this.columbiaFlashLight) this.columbiaFlashLight.intensity = 0;
+      if (this.fallenAstronautGroup) this.fallenAstronautGroup.visible = true;
     }
   }
 
@@ -1365,9 +1401,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPosition);
           float fresnel = 1.0 - dot(viewDir, vNormal);
-          fresnel = pow(fresnel, 3.0);
+          fresnel = pow(fresnel, 4.0);
           vec3 color = mix(vec3(0.3, 0.6, 1.0), vec3(0.6, 0.85, 1.0), fresnel);
-          gl_FragColor = vec4(color, fresnel * 0.7);
+          gl_FragColor = vec4(color, fresnel * 0.3);
         }
       `,
       transparent: true,
@@ -1375,7 +1411,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
-    const earthAtmo = new THREE.Mesh(new THREE.SphereGeometry(1.08, 32, 32), earthAtmoMat);
+    const earthAtmo = new THREE.Mesh(new THREE.SphereGeometry(1.02, 32, 32), earthAtmoMat);
     this.earthMesh.add(earthAtmo);
 
       // ─── Earth's Moon (Luna) ─────────────────────────────────────────────
@@ -2029,6 +2065,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Distance beam between Earth and Jupiter
     this.createDistanceBeam();
 
+    // Subtle cross constellation tribute in deep sky
+    this.createCrossConstellation();
+
+    // Floating astronaut near Tesla Roadster
+    this.createFloatingAstronaut();
+
+    // Fallen astronaut memorial plaque
+    this.createFallenAstronautMemorial();
+
+    // Columbia memorial sequence (before jupiter-einde)
+    this.createColumbiaMemorial();
+
     await this.initializeTheatreCamera();
     this.updateCameraForSlide(this.slideId);
 
@@ -2176,6 +2224,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         return this.plutoMesh?.position ?? this.getSlideCameraAnchor();
       case 'blackhole':
         return this.blackHoleGroup?.position ?? this.getSlideCameraAnchor();
+      case 'columbia':
+        return this.columbiaGroup?.position ?? this.getSlideCameraAnchor();
       case 'jupiter':
       case 'jupiter-einde':
       default:
@@ -2810,9 +2860,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       for (let x = 0; x < canvas.width; x += 3) {
         const idx = (y * canvas.width + x) * 4;
         if (imgData[idx] > 128) {
-          const px = (x - canvas.width / 2) * 0.06;
-          const py = -(y - canvas.height / 2) * 0.06;
-          const pz = (Math.random() - 0.5) * 0.6;
+          const px = (x - canvas.width / 2) * 0.018;
+          const py = -(y - canvas.height / 2) * 0.018;
+          const pz = (Math.random() - 0.5) * 0.3;
           starPositions.push(px, py, pz);
           const isGold = Math.random() > 0.4;
           const color = new THREE.Color(isGold ? 0xffe81f : 0xaaccff);
@@ -2857,14 +2907,529 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     this.julianaStars = new THREE.Points(starGeo, starMat);
     this.julianaStars.position.copy(this.plutoMesh.position);
-    this.julianaStars.position.y += 2;
+    this.julianaStars.position.y += 3;
     // Face toward the camera approach direction (pluto tour offset is roughly +x,+y,+z)
     this.julianaStars.lookAt(
-      this.plutoMesh.position.x + 4,
-      this.plutoMesh.position.y + 3.5,
-      this.plutoMesh.position.z + 4,
+      this.plutoMesh.position.x + 8,
+      this.plutoMesh.position.y + 6,
+      this.plutoMesh.position.z + 8,
     );
     this.scene.add(this.julianaStars);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SUBTLE CROSS CONSTELLATION — distant golden cross in the deep star field
+  // ═══════════════════════════════════════════════════════════════════════════
+  private createCrossConstellation() {
+    const positions: number[] = [];
+    const colors: number[] = [];
+    const sizes: number[] = [];
+
+    // Cross: vertical beam (7 points) + horizontal beam (5 points)
+    const crossPts: [number, number][] = [
+      [0, -3], [0, -2], [0, -1], [0, 0], [0, 1], [0, 2], [0, 3],
+      [-2, 1], [-1, 1], [1, 1], [2, 1],
+    ];
+
+    for (const [cx, cy] of crossPts) {
+      const cluster = 3 + Math.floor(Math.random() * 3);
+      for (let j = 0; j < cluster; j++) {
+        positions.push(
+          cx * 1.2 + (Math.random() - 0.5) * 0.6,
+          cy * 1.2 + (Math.random() - 0.5) * 0.6,
+          (Math.random() - 0.5) * 0.4,
+        );
+        const w = 0.7 + Math.random() * 0.3;
+        colors.push(1.0, 0.92 * w, 0.6 * w);
+        sizes.push(1.0 + Math.random() * 2.0);
+      }
+    }
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+    geo.setAttribute('aSize', new THREE.Float32BufferAttribute(sizes, 1));
+
+    const mat = new THREE.ShaderMaterial({
+      vertexShader: `
+        attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vColor;
+        void main() {
+          vColor = color;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * (200.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vColor;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float glow = exp(-d * 5.0);
+          gl_FragColor = vec4(vColor, glow * 0.6);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    });
+
+    this.crossConstellation = new THREE.Points(geo, mat);
+    this.crossConstellation.position.set(200, 160, -300);
+    this.crossConstellation.scale.setScalar(2.5);
+    this.scene.add(this.crossConstellation);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FLOATING ASTRONAUT — EVA figure near the Tesla Roadster
+  // ═══════════════════════════════════════════════════════════════════════════
+  private createFloatingAstronaut() {
+    this.astronautGroup = new THREE.Group();
+    const suitMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.6, metalness: 0.1 });
+
+    // Torso
+    const torso = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.1, 2, 2, 2), suitMat);
+    this.astronautGroup.add(torso);
+
+    // Life-support backpack
+    const pack = new THREE.Mesh(
+      new THREE.BoxGeometry(0.1, 0.14, 0.06),
+      new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.7, metalness: 0.15 }),
+    );
+    pack.position.set(0, 0, -0.07);
+    this.astronautGroup.add(pack);
+
+    // Helmet
+    const helmet = new THREE.Mesh(new THREE.SphereGeometry(0.06, 16, 16), suitMat);
+    helmet.position.y = 0.13;
+    this.astronautGroup.add(helmet);
+
+    // Gold visor
+    const visor = new THREE.Mesh(
+      new THREE.SphereGeometry(0.055, 16, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+      new THREE.MeshStandardMaterial({ color: 0x112244, roughness: 0.1, metalness: 0.9 }),
+    );
+    visor.position.set(0, 0.135, 0.015);
+    visor.rotation.x = -0.2;
+    this.astronautGroup.add(visor);
+
+    // Arms — floating EVA pose
+    const armGeo = new THREE.CylinderGeometry(0.025, 0.022, 0.14, 8);
+    const leftArm = new THREE.Mesh(armGeo, suitMat);
+    leftArm.position.set(-0.09, 0.02, 0);
+    leftArm.rotation.set(-0.3, 0, 0.8);
+    this.astronautGroup.add(leftArm);
+    const rightArm = new THREE.Mesh(armGeo, suitMat);
+    rightArm.position.set(0.09, 0.02, 0);
+    rightArm.rotation.set(0.2, 0, -0.8);
+    this.astronautGroup.add(rightArm);
+
+    // Gloves
+    const gloveGeo = new THREE.SphereGeometry(0.018, 8, 8);
+    const gloveMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5 });
+    const lg = new THREE.Mesh(gloveGeo, gloveMat);
+    lg.position.set(-0.15, 0.07, -0.03);
+    this.astronautGroup.add(lg);
+    const rg = new THREE.Mesh(gloveGeo, gloveMat);
+    rg.position.set(0.15, 0.07, 0.02);
+    this.astronautGroup.add(rg);
+
+    // Legs — slightly splayed for zero-g
+    const legGeo = new THREE.CylinderGeometry(0.028, 0.024, 0.16, 8);
+    const leftLeg = new THREE.Mesh(legGeo, suitMat);
+    leftLeg.position.set(-0.04, -0.15, 0);
+    leftLeg.rotation.set(0.25, 0, 0.15);
+    this.astronautGroup.add(leftLeg);
+    const rightLeg = new THREE.Mesh(legGeo, suitMat);
+    rightLeg.position.set(0.04, -0.15, 0);
+    rightLeg.rotation.set(-0.15, 0, -0.1);
+    this.astronautGroup.add(rightLeg);
+
+    // Boots
+    const bootGeo = new THREE.BoxGeometry(0.035, 0.025, 0.05);
+    const bootMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.7 });
+    const lb = new THREE.Mesh(bootGeo, bootMat);
+    lb.position.set(-0.05, -0.24, 0.015);
+    this.astronautGroup.add(lb);
+    const rb = new THREE.Mesh(bootGeo, bootMat);
+    rb.position.set(0.03, -0.24, -0.01);
+    this.astronautGroup.add(rb);
+
+    // US flag patch on left arm
+    const flagC = document.createElement('canvas');
+    flagC.width = 32; flagC.height = 20;
+    const fc = flagC.getContext('2d')!;
+    for (let i = 0; i < 13; i++) {
+      fc.fillStyle = i % 2 === 0 ? '#BF0A30' : '#FFFFFF';
+      fc.fillRect(0, i * (20 / 13), 32, 20 / 13);
+    }
+    fc.fillStyle = '#002868'; fc.fillRect(0, 0, 12, 10);
+    const flagPatch = new THREE.Mesh(
+      new THREE.PlaneGeometry(0.025, 0.016),
+      new THREE.MeshStandardMaterial({ map: new THREE.CanvasTexture(flagC), roughness: 0.8 }),
+    );
+    flagPatch.position.set(-0.074, 0.02, 0.04);
+    flagPatch.rotation.set(0, -0.6, 0.8);
+    this.astronautGroup.add(flagPatch);
+
+    // Orange mission stripe
+    const stripe = new THREE.Mesh(
+      new THREE.BoxGeometry(0.13, 0.008, 0.105),
+      new THREE.MeshStandardMaterial({ color: 0xcc4400, roughness: 0.5 }),
+    );
+    stripe.position.set(0, -0.04, 0);
+    this.astronautGroup.add(stripe);
+
+    this.astronautGroup.scale.setScalar(0.6);
+    this.astronautGroup.visible = false;
+    this.scene.add(this.astronautGroup);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // FALLEN ASTRONAUT MEMORIAL — plaque + reclining figure, inspired by the
+  // real "Fallen Astronaut" sculpture left on the Moon by Apollo 15
+  // ═══════════════════════════════════════════════════════════════════════════
+  private createFallenAstronautMemorial() {
+    this.fallenAstronautGroup = new THREE.Group();
+
+    // Memorial plaque — brushed aluminum
+    const plaqueCanvas = document.createElement('canvas');
+    plaqueCanvas.width = 512; plaqueCanvas.height = 340;
+    const pc = plaqueCanvas.getContext('2d')!;
+
+    // Brushed-metal background
+    const grad = pc.createLinearGradient(0, 0, 512, 340);
+    grad.addColorStop(0, '#888888');
+    grad.addColorStop(0.5, '#aaaaaa');
+    grad.addColorStop(1, '#999999');
+    pc.fillStyle = grad;
+    pc.fillRect(0, 0, 512, 340);
+
+    // Brushed texture
+    pc.globalAlpha = 0.03;
+    for (let i = 0; i < 200; i++) {
+      pc.strokeStyle = Math.random() > 0.5 ? '#ffffff' : '#666666';
+      pc.beginPath();
+      pc.moveTo(0, Math.random() * 340);
+      pc.lineTo(512, Math.random() * 340);
+      pc.stroke();
+    }
+    pc.globalAlpha = 1.0;
+
+    // Border
+    pc.strokeStyle = '#666666';
+    pc.lineWidth = 3;
+    pc.strokeRect(10, 10, 492, 320);
+
+    // Title
+    pc.fillStyle = '#222222';
+    pc.font = 'bold 22px sans-serif';
+    pc.textAlign = 'center';
+    pc.fillText('IN MEMORY', 256, 45);
+
+    // Crew names
+    pc.font = '14px sans-serif';
+    const names = [
+      'STS-107 Columbia (2003)',
+      'Rick Husband \u2022 William McCool',
+      'Michael Anderson \u2022 David Brown',
+      'Kalpana Chawla \u2022 Laurel Clark',
+      'Ilan Ramon',
+      '',
+      'STS-51-L Challenger (1986)',
+      'Francis Scobee \u2022 Michael Smith',
+      'Judith Resnik \u2022 Ellison Onizuka',
+      'Ronald McNair \u2022 Gregory Jarvis',
+      'Christa McAuliffe',
+    ];
+    let ny = 75;
+    for (const n of names) {
+      pc.font = n.startsWith('STS') ? 'bold 14px sans-serif' : '13px sans-serif';
+      pc.fillStyle = n.startsWith('STS') ? '#333333' : '#444444';
+      pc.fillText(n, 256, ny);
+      ny += n === '' ? 10 : 18;
+    }
+
+    // Footer
+    pc.font = 'italic 11px sans-serif';
+    pc.fillStyle = '#555555';
+    pc.fillText('"Ad astra per aspera \u2014 through hardships to the stars"', 256, 310);
+
+    const plaqueTex = new THREE.CanvasTexture(plaqueCanvas);
+    const plaque = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.2, 0.8),
+      new THREE.MeshStandardMaterial({ map: plaqueTex, roughness: 0.3, metalness: 0.7 }),
+    );
+    this.fallenAstronautGroup.add(plaque);
+
+    // Reclining figure (inspired by the real "Fallen Astronaut" on the Moon)
+    const figMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.5, metalness: 0.3 });
+    const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.02, 0.08, 4, 8), figMat);
+    body.rotation.z = Math.PI / 2;
+    body.position.set(0, -0.36, 0.05);
+    this.fallenAstronautGroup.add(body);
+    const head = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 8), figMat);
+    head.position.set(-0.055, -0.36, 0.05);
+    this.fallenAstronautGroup.add(head);
+
+    // Warm reverence light
+    const memLight = new THREE.PointLight(0xffeedd, 0.5, 8);
+    memLight.position.set(0, 0, 2);
+    this.fallenAstronautGroup.add(memLight);
+
+    this.fallenAstronautGroup.position.set(50, 20, -60);
+    this.fallenAstronautGroup.lookAt(0, 0, 0);
+    this.fallenAstronautGroup.visible = false;
+    this.scene.add(this.fallenAstronautGroup);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // COLUMBIA STS-107 MEMORIAL — cinematic shuttle re-entry breakup sequence
+  // ═══════════════════════════════════════════════════════════════════════════
+  private createColumbiaMemorial() {
+    this.columbiaGroup = new THREE.Group();
+
+    // ─── Space Shuttle Orbiter (simplified but recognizable) ───────────
+    this.columbiaShuttleMesh = new THREE.Group();
+    const fuselageMat = new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4, metalness: 0.2 });
+
+    // Fuselage
+    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.6, 4.5, 16), fuselageMat);
+    fuselage.rotation.z = Math.PI / 2;
+    this.columbiaShuttleMesh.add(fuselage);
+
+    // Nose cone
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.5, 16), fuselageMat);
+    nose.rotation.z = -Math.PI / 2;
+    nose.position.x = 2.9;
+    this.columbiaShuttleMesh.add(nose);
+
+    // Cockpit windows
+    const windowMesh = new THREE.Mesh(
+      new THREE.BoxGeometry(0.5, 0.15, 0.5),
+      new THREE.MeshStandardMaterial({ color: 0x111122, roughness: 0.1, metalness: 0.8 }),
+    );
+    windowMesh.position.set(2.3, 0.45, 0);
+    this.columbiaShuttleMesh.add(windowMesh);
+
+    // Cargo bay
+    const bay = new THREE.Mesh(
+      new THREE.BoxGeometry(2.5, 0.05, 1.1),
+      new THREE.MeshStandardMaterial({ color: 0xe8e8e8, roughness: 0.5, metalness: 0.15 }),
+    );
+    bay.position.set(-0.2, 0.58, 0);
+    this.columbiaShuttleMesh.add(bay);
+
+    // Delta wings (left + right)
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, 0);
+    wingShape.lineTo(-2, 0);
+    wingShape.lineTo(-2.5, -2.2);
+    wingShape.lineTo(0.5, -0.3);
+    wingShape.closePath();
+    const wingGeo = new THREE.ExtrudeGeometry(wingShape, { depth: 0.08, bevelEnabled: false });
+    const wingMat = new THREE.MeshStandardMaterial({ color: 0xe0e0e0, roughness: 0.45, metalness: 0.2 });
+    const leftWing = new THREE.Mesh(wingGeo, wingMat);
+    leftWing.rotation.x = Math.PI / 2;
+    leftWing.position.set(-0.3, -0.15, 0.6);
+    this.columbiaShuttleMesh.add(leftWing);
+    const rightWing = new THREE.Mesh(wingGeo, wingMat);
+    rightWing.rotation.x = -Math.PI / 2;
+    rightWing.position.set(-0.3, -0.15, -0.68);
+    this.columbiaShuttleMesh.add(rightWing);
+
+    // Thermal protection tiles (black underside)
+    const tps = new THREE.Mesh(
+      new THREE.BoxGeometry(4.2, 0.05, 1.15),
+      new THREE.MeshStandardMaterial({ color: 0x222222, roughness: 0.9, metalness: 0.05 }),
+    );
+    tps.position.set(-0.1, -0.58, 0);
+    this.columbiaShuttleMesh.add(tps);
+
+    // Vertical tail
+    const tailShape = new THREE.Shape();
+    tailShape.moveTo(0, 0);
+    tailShape.lineTo(-1.2, 0);
+    tailShape.lineTo(-0.5, 1.8);
+    tailShape.lineTo(0.2, 0.8);
+    tailShape.closePath();
+    const tailGeo = new THREE.ExtrudeGeometry(tailShape, { depth: 0.06, bevelEnabled: false });
+    const tail = new THREE.Mesh(tailGeo, fuselageMat);
+    tail.position.set(-1.8, 0.55, -0.03);
+    this.columbiaShuttleMesh.add(tail);
+
+    // OMS engine pods
+    const omsGeo = new THREE.CylinderGeometry(0.2, 0.22, 0.8, 8);
+    const omsMat = new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5 });
+    const leftOms = new THREE.Mesh(omsGeo, omsMat);
+    leftOms.rotation.z = Math.PI / 2;
+    leftOms.position.set(-2.4, 0.1, 0.4);
+    this.columbiaShuttleMesh.add(leftOms);
+    const rightOms = new THREE.Mesh(omsGeo, omsMat);
+    rightOms.rotation.z = Math.PI / 2;
+    rightOms.position.set(-2.4, 0.1, -0.4);
+    this.columbiaShuttleMesh.add(rightOms);
+
+    // "Columbia" text
+    const nameC = document.createElement('canvas');
+    nameC.width = 256; nameC.height = 64;
+    const nc = nameC.getContext('2d')!;
+    nc.clearRect(0, 0, 256, 64);
+    nc.fillStyle = '#111111';
+    nc.font = 'bold 36px sans-serif';
+    nc.textAlign = 'center';
+    nc.textBaseline = 'middle';
+    nc.fillText('Columbia', 128, 32);
+    const nameLabel = new THREE.Mesh(
+      new THREE.PlaneGeometry(1.5, 0.3),
+      new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(nameC), transparent: true, depthWrite: false }),
+    );
+    nameLabel.position.set(0.5, 0.55, 0.56);
+    nameLabel.rotation.y = Math.PI / 2;
+    this.columbiaShuttleMesh.add(nameLabel);
+
+    this.columbiaShuttleMesh.scale.setScalar(0.8);
+    this.columbiaGroup.add(this.columbiaShuttleMesh);
+
+    // ─── Re-entry plasma trail ──────────────────────────────────────────
+    const trailCount = 300;
+    const tPos = new Float32Array(trailCount * 3);
+    const tSizes = new Float32Array(trailCount);
+    const tOffsets = new Float32Array(trailCount);
+    for (let i = 0; i < trailCount; i++) {
+      tPos[i * 3] = -i * 0.15 + (Math.random() - 0.5) * 0.3;
+      tPos[i * 3 + 1] = (Math.random() - 0.5) * 0.4;
+      tPos[i * 3 + 2] = (Math.random() - 0.5) * 0.4;
+      tSizes[i] = 2.0 + Math.random() * 4.0;
+      tOffsets[i] = Math.random();
+    }
+    const trailGeo = new THREE.BufferGeometry();
+    trailGeo.setAttribute('position', new THREE.Float32BufferAttribute(tPos, 3));
+    trailGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(tSizes, 1));
+    trailGeo.setAttribute('aOffset', new THREE.Float32BufferAttribute(tOffsets, 1));
+
+    this.columbiaTrails = new THREE.Points(trailGeo, new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 }, uIntensity: { value: 0 } },
+      vertexShader: `
+        attribute float aSize;
+        attribute float aOffset;
+        uniform float uTime;
+        varying float vAlpha;
+        varying float vHeat;
+        void main() {
+          vec3 pos = position;
+          pos.y += sin(uTime * 3.0 + aOffset * 20.0) * 0.15;
+          pos.x += sin(uTime * 2.0 + aOffset * 15.0) * 0.1;
+          float dist = length(position.x) / 40.0;
+          vAlpha = (1.0 - dist) * 0.8;
+          vHeat = 1.0 - dist * 0.7;
+          vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+          gl_PointSize = aSize * (150.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        uniform float uIntensity;
+        varying float vAlpha;
+        varying float vHeat;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float glow = exp(-d * 4.0);
+          vec3 col = mix(vec3(1.0, 0.3, 0.05), vec3(1.0, 0.95, 0.8), vHeat * glow);
+          gl_FragColor = vec4(col, glow * vAlpha * uIntensity);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }));
+    this.columbiaGroup.add(this.columbiaTrails);
+
+    // ─── Breakup debris (initially invisible) ──────────────────────────
+    const debrisCount = 250;
+    this.columbiaDebris = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(0.08, 0),
+      new THREE.MeshStandardMaterial({ color: 0x888888, roughness: 0.8 }),
+      debrisCount,
+    );
+    this.columbiaDebrisVelocities = new Float32Array(debrisCount * 3);
+
+    const dm = new THREE.Object3D();
+    for (let i = 0; i < debrisCount; i++) {
+      dm.position.set((Math.random() - 0.5) * 3, (Math.random() - 0.5), (Math.random() - 0.5));
+      const v = new THREE.Vector3(
+        (Math.random() - 0.5) * 2, Math.random() * 1.5 - 0.5, (Math.random() - 0.5) * 2,
+      ).normalize().multiplyScalar(0.3 + Math.random() * 1.5);
+      this.columbiaDebrisVelocities[i * 3] = v.x;
+      this.columbiaDebrisVelocities[i * 3 + 1] = v.y;
+      this.columbiaDebrisVelocities[i * 3 + 2] = v.z;
+      const s = 0.3 + Math.random() * 1.2;
+      dm.scale.set(s, s * (0.3 + Math.random() * 0.7), s);
+      dm.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+      dm.updateMatrix();
+      this.columbiaDebris.setMatrixAt(i, dm.matrix);
+      const c = Math.random();
+      this.columbiaDebris.setColorAt(i, new THREE.Color(c < 0.33 ? 0xeeeeee : c < 0.66 ? 0x222222 : 0x888899));
+    }
+    this.columbiaDebris.instanceColor!.needsUpdate = true;
+    this.columbiaDebris.visible = false;
+    this.columbiaGroup.add(this.columbiaDebris);
+
+    // Flash light for breakup moment
+    this.columbiaFlashLight = new THREE.PointLight(0xff8844, 0, 80);
+    this.columbiaGroup.add(this.columbiaFlashLight);
+
+    // ─── Seven memorial stars — one per crew member ─────────────────────
+    const mPos: number[] = [];
+    const mCol: number[] = [];
+    const mSz: number[] = [];
+    for (let i = 0; i < 7; i++) {
+      const a = (i / 6 - 0.5) * 1.8;
+      mPos.push(Math.sin(a) * 6, 4 + Math.cos(a) * 3, (Math.random() - 0.5) * 0.5);
+      mCol.push(0.9, 0.92, 1.0);
+      mSz.push(6 + Math.random() * 3);
+    }
+    const memGeo = new THREE.BufferGeometry();
+    memGeo.setAttribute('position', new THREE.Float32BufferAttribute(mPos, 3));
+    memGeo.setAttribute('color', new THREE.Float32BufferAttribute(mCol, 3));
+    memGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(mSz, 1));
+    this.columbiaMemorialStars = new THREE.Points(memGeo, new THREE.ShaderMaterial({
+      uniforms: { uOpacity: { value: 0 } },
+      vertexShader: `
+        attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vColor;
+        void main() {
+          vColor = color;
+          vec4 mv = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * (200.0 / -mv.z);
+          gl_Position = projectionMatrix * mv;
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying vec3 vColor;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float core = exp(-d * 3.0);
+          float halo = exp(-d * 8.0);
+          gl_FragColor = vec4(vColor, (core * 0.7 + halo * 0.3) * uOpacity);
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+    }));
+    this.columbiaGroup.add(this.columbiaMemorialStars);
+
+    // Position near the blackhole→jupiter-einde leg of the tour
+    this.columbiaGroup.position.set(100, 30, -80);
+    this.columbiaGroup.visible = false;
+    this.scene.add(this.columbiaGroup);
   }
 
   private createBlackHole() {
@@ -5051,13 +5616,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPosition);
           float fresnel = 1.0 - dot(viewDir, vNormal);
-          fresnel = pow(fresnel, 2.5);
+          fresnel = pow(fresnel, 3.5);
           vec3 col = mix(vec3(0.95, 0.85, 0.6), vec3(1.0, 0.92, 0.7), fresnel);
-          gl_FragColor = vec4(col, fresnel * 0.5);
+          gl_FragColor = vec4(col, fresnel * 0.2);
         }`,
       transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
-    this.venusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.93, 32, 32), venusAtmoMat));
+    this.venusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.9, 32, 32), venusAtmoMat));
   }
 
   private createMercurySystem() {
@@ -6702,6 +7267,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateDistanceBeam(time);
     this.updateImmersiveSceneEffects(deltaTime, time);
     this.updateSecondaryBodyAnimation(time);
+    this.updateColumbiaSequence(deltaTime);
     this.updateSimulationStep(time);
     this.updateSunAnimation(time);
     this.postProcessManager?.render(deltaTime);
@@ -6833,6 +7399,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.marsMesh.rotation.y += 0.003;
     }
     this.updateStarmanAnimation();
+    this.updateFloatingAstronaut();
     if (this.venusMesh) this.venusMesh.rotation.y -= 0.0003;
     if (this.mercuryMesh) this.mercuryMesh.rotation.y += 0.001;
     if (this.uranusMesh) this.uranusMesh.rotation.y += 0.0004;
@@ -6886,6 +7453,114 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.starmanGroup.rotation.x += 0.003;
     this.starmanGroup.rotation.z += 0.001;
     this.starmanGroup.rotation.y += 0.002;
+  }
+
+  private updateFloatingAstronaut() {
+    if (!this.astronautGroup || !this.starmanGroup?.visible) {
+      if (this.astronautGroup) this.astronautGroup.visible = false;
+      return;
+    }
+    this.astronautGroup.visible = this.starmanGroup.visible;
+    if (!this.astronautGroup.visible) return;
+
+    // Orbit near the Tesla at a slight offset — as if floating alongside
+    const offset = new THREE.Vector3(0.5, 0.3, -0.4);
+    this.astronautGroup.position.copy(this.starmanGroup.position).add(offset);
+
+    // Gentle tumble in zero-g
+    this.astronautGroup.rotation.x += 0.002;
+    this.astronautGroup.rotation.y += 0.003;
+    this.astronautGroup.rotation.z += 0.001;
+  }
+
+  private updateColumbiaSequence(deltaTime: number) {
+    if (!this.columbiaSequenceActive || !this.columbiaGroup) return;
+
+    this.columbiaSequenceTime += deltaTime;
+    const t = this.columbiaSequenceTime;
+
+    // ─── Phase 1 (0-4s): Shuttle flying with re-entry plasma trail ────
+    if (t < 4) {
+      if (this.columbiaShuttleMesh) {
+        this.columbiaShuttleMesh.visible = true;
+        // Shuttle moves forward
+        this.columbiaShuttleMesh.position.x = t * 1.5;
+        // Slight nose-up re-entry attitude
+        this.columbiaShuttleMesh.rotation.z = -0.15;
+        this.columbiaShuttleMesh.rotation.x = Math.sin(t * 0.5) * 0.02;
+      }
+      if (this.columbiaTrails) {
+        const mat = this.columbiaTrails.material as THREE.ShaderMaterial;
+        mat.uniforms['uTime'].value = t;
+        mat.uniforms['uIntensity'].value = Math.min(t / 1.5, 1.0);
+        this.columbiaTrails.position.x = (this.columbiaShuttleMesh?.position.x ?? 0) - 2;
+      }
+    }
+
+    // ─── Phase 2 (4-5s): Structural breakup — flash + shuttle disappears ─
+    if (t >= 4 && !this.columbiaBreakupDone) {
+      this.columbiaBreakupDone = true;
+
+      // Flash
+      if (this.columbiaFlashLight) {
+        this.columbiaFlashLight.intensity = 30;
+        this.columbiaFlashLight.position.copy(this.columbiaShuttleMesh?.position ?? new THREE.Vector3());
+      }
+
+      // Hide intact shuttle, show debris
+      if (this.columbiaShuttleMesh) this.columbiaShuttleMesh.visible = false;
+      if (this.columbiaDebris) {
+        this.columbiaDebris.visible = true;
+        this.columbiaDebris.position.copy(this.columbiaShuttleMesh?.position ?? new THREE.Vector3());
+      }
+    }
+
+    // ─── Phase 3 (4-10s): Debris scatters, flash fades ─────────────────
+    if (t >= 4 && t < 10) {
+      // Flash decay
+      if (this.columbiaFlashLight) {
+        this.columbiaFlashLight.intensity *= 0.92;
+      }
+
+      // Trail fades
+      if (this.columbiaTrails) {
+        const mat = this.columbiaTrails.material as THREE.ShaderMaterial;
+        mat.uniforms['uIntensity'].value = Math.max(0, 1.0 - (t - 4) / 3);
+      }
+
+      // Debris expansion
+      if (this.columbiaDebris) {
+        const count = this.columbiaDebris.count;
+        const dm = new THREE.Object3D();
+        const matrix = new THREE.Matrix4();
+        const dt = deltaTime;
+        for (let i = 0; i < count; i++) {
+          this.columbiaDebris.getMatrixAt(i, matrix);
+          dm.position.setFromMatrixPosition(matrix);
+          dm.position.x += this.columbiaDebrisVelocities[i * 3] * dt * 3;
+          dm.position.y += this.columbiaDebrisVelocities[i * 3 + 1] * dt * 3;
+          dm.position.z += this.columbiaDebrisVelocities[i * 3 + 2] * dt * 3;
+          dm.rotation.x += dt * (this.columbiaDebrisVelocities[i * 3] * 2);
+          dm.rotation.y += dt * (this.columbiaDebrisVelocities[i * 3 + 1] * 2);
+          dm.scale.setFromMatrixScale(matrix);
+          dm.updateMatrix();
+          this.columbiaDebris.setMatrixAt(i, dm.matrix);
+        }
+        this.columbiaDebris.instanceMatrix.needsUpdate = true;
+      }
+    }
+
+    // ─── Phase 4 (8-14s): Seven stars rise — one for each crew member ──
+    if (t >= 8) {
+      if (this.columbiaMemorialStars) {
+        const starOpacity = Math.min((t - 8) / 4, 1.0);
+        (this.columbiaMemorialStars.material as THREE.ShaderMaterial).uniforms['uOpacity'].value = starOpacity;
+      }
+      // Debris fades
+      if (this.columbiaDebris && t > 10) {
+        this.columbiaDebris.visible = false;
+      }
+    }
   }
 
   private updateSimulationStep(time: number) {

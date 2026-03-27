@@ -236,12 +236,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private plutoDestroyed = false;
   private deathStarPlutoAttackStarted = false;
   private deathStarPlutoFlyTime = 0;
-  private plutoExplosion: THREE.Points | null = null;
-  private plutoExplosionTime = 0;
+  private plutoExplosionTime = -1;
+  private plutoShockwave!: THREE.Mesh;
+  private plutoDebris!: THREE.InstancedMesh;
+  private plutoDebrisVelocities!: Float32Array;
+  private plutoFlashLight!: THREE.PointLight;
 
-  // JULIANASCHOOL text reveal after Pluto destruction
-  private julianaSchoolText: THREE.Points | null = null;
-  private julianaSchoolRevealTime = 0;
+  // JULIANASCHOOL star constellation after Pluto destruction
+  private julianaStars!: THREE.Points;
 
   // Lightsaber duel
   private lightsaberGroup!: THREE.Group;
@@ -1909,6 +1911,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Death Star with superlaser
     this.createDeathStar();
+    this.createPlutoExplosionVFX();
 
     // Lightsaber duel (Sith vs Jedi easter egg)
     this.createLightsaberDuel();
@@ -2438,78 +2441,89 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           this.superlaserFiring = true;
           this.superlaserTimer = time;
           this.superlaserBeam.visible = true;
-          // Point beam toward Pluto
           this.superlaserBeam.lookAt(
             plutoPos.x - this.deathStarGroup.position.x,
             plutoPos.y - this.deathStarGroup.position.y,
             plutoPos.z - this.deathStarGroup.position.z
           );
+          // Scale beam to reach Pluto
+          const dist = this.deathStarGroup.position.distanceTo(plutoPos);
+          this.superlaserBeam.scale.set(1, dist / 50, 1);
         }
         const chargeT = (flyElapsed - flyDuration) / 0.5;
         const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
         mat.uniforms['uOpacity'].value = chargeT * 0.9;
-        this.superlaserBeam.scale.set(chargeT, 1, chargeT);
       } else if (flyElapsed < flyDuration + 2.0) {
         // Full fire at Pluto
         const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
         mat.uniforms['uOpacity'].value = 0.7 + Math.random() * 0.3;
-        this.superlaserBeam.scale.set(1, 1, 1);
-      } else if (flyElapsed < flyDuration + 2.5) {
-        // Explosion! Hide Pluto, create debris
-        if (!this.plutoDestroyed) {
-          this.plutoDestroyed = true;
-          if (this.plutoMesh) this.plutoMesh.visible = false;
-          this.createPlutoExplosion(plutoPos);
-          this.plutoExplosionTime = time;
-          // Fade beam
-          const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
-          const t = (flyElapsed - (flyDuration + 2.0)) / 0.5;
-          mat.uniforms['uOpacity'].value = (1 - t) * 0.9;
-          this.superlaserBeam.scale.set(1 - t, 1, 1 - t);
-        }
-      }
-      return; // Skip normal firing logic during Pluto attack
-    }
-
-    // ─── Pluto explosion debris animation ──────────────────────────────
-    if (this.plutoExplosion) {
-      const explElapsed = time - this.plutoExplosionTime;
-      if (explElapsed < 6) {
-        const positions = this.plutoExplosion.geometry.getAttribute('position') as THREE.BufferAttribute;
-        const velocities = this.plutoExplosion.userData['velocities'] as Float32Array;
-        const count = positions.count;
-        for (let i = 0; i < count; i++) {
-          positions.setXYZ(i,
-            positions.getX(i) + velocities[i * 3] * 0.016,
-            positions.getY(i) + velocities[i * 3 + 1] * 0.016,
-            positions.getZ(i) + velocities[i * 3 + 2] * 0.016
-          );
-        }
-        positions.needsUpdate = true;
-        // Fade out over time
-        const mat = this.plutoExplosion.material as THREE.PointsMaterial;
-        mat.opacity = Math.max(0, 1 - explElapsed / 5);
-      } else {
-        this.scene.remove(this.plutoExplosion);
-        this.plutoExplosion.geometry.dispose();
-        (this.plutoExplosion.material as THREE.Material).dispose();
-        this.plutoExplosion = null;
-        // Reveal JULIANASCHOOL text
-        this.createJulianaSchoolText();
-      }
-      // Beam cleanup after explosion
-      if (this.superlaserFiring) {
+      } else if (!this.plutoDestroyed) {
+        // IMPACT — destroy Pluto
+        this.plutoDestroyed = true;
+        this.plutoExplosionTime = time;
+        if (this.plutoMesh) this.plutoMesh.visible = false;
         this.superlaserBeam.visible = false;
         this.superlaserFiring = false;
+        // Show debris
+        if (this.plutoDebris) this.plutoDebris.visible = true;
+        // Blinding bloom flash
+        this.postProcessManager?.setBloomIntensity(8);
+        if (this.plutoFlashLight) this.plutoFlashLight.intensity = 200;
+        // Kick off shockwave
+        if (this.plutoShockwave) {
+          (this.plutoShockwave.material as THREE.MeshBasicMaterial).opacity = 1;
+        }
       }
-      return;
+      if (!this.plutoDestroyed) return;
     }
 
-    // ─── JULIANASCHOOL text fade-in ────────────────────────────────────
-    if (this.julianaSchoolText) {
-      const revealElapsed = time - this.julianaSchoolRevealTime;
-      const mat = this.julianaSchoolText.material as THREE.PointsMaterial;
-      mat.opacity = Math.min(1, revealElapsed / 3); // 3-second fade in
+    // ─── Post-explosion aftermath ──────────────────────────────────────
+    if (this.plutoExplosionTime >= 0) {
+      const expTime = time - this.plutoExplosionTime;
+
+      // Fade out the blinding bloom flash over 1 second
+      if (expTime < 1) {
+        const bloom = Math.max(1.6, 8 - expTime * 6.4);
+        this.postProcessManager?.setBloomIntensity(bloom);
+        if (this.plutoFlashLight) {
+          this.plutoFlashLight.intensity = Math.max(0, 200 - expTime * 200);
+        }
+      }
+
+      // Expand & Fade Shockwave
+      if (this.plutoShockwave) {
+        this.plutoShockwave.scale.setScalar(1 + expTime * 20);
+        const shockMat = this.plutoShockwave.material as THREE.MeshBasicMaterial;
+        shockMat.opacity = Math.max(0, 1 - expTime * 1.5);
+      }
+
+      // Animate Debris flying outward and spinning
+      if (this.plutoDebris && this.plutoDebrisVelocities) {
+        const dummy = new THREE.Object3D();
+        const debrisCount = this.plutoDebris.count;
+        for (let i = 0; i < debrisCount; i++) {
+          this.plutoDebris.getMatrixAt(i, dummy.matrix);
+          dummy.position.setFromMatrixPosition(dummy.matrix);
+          dummy.position.x += this.plutoDebrisVelocities[i * 3] * 0.05;
+          dummy.position.y += this.plutoDebrisVelocities[i * 3 + 1] * 0.05;
+          dummy.position.z += this.plutoDebrisVelocities[i * 3 + 2] * 0.05;
+          dummy.rotation.setFromRotationMatrix(dummy.matrix);
+          dummy.rotation.x += 0.02;
+          dummy.rotation.y += 0.02;
+          dummy.updateMatrix();
+          this.plutoDebris.setMatrixAt(i, dummy.matrix);
+        }
+        this.plutoDebris.instanceMatrix.needsUpdate = true;
+      }
+
+      // Fade in the "JULIANASCHOOL" constellation after 3.5s
+      if (expTime > 3.5 && this.julianaStars) {
+        const starMat = this.julianaStars.material as THREE.ShaderMaterial;
+        const textFade = Math.min(1, (expTime - 3.5) * 0.5); // 2-second fade-in
+        starMat.uniforms['uOpacity'].value = textFade;
+      }
+
+      return; // Skip normal firing during/after Pluto sequence
     }
 
     // ─── Normal periodic superlaser firing (every ~30s, lasts 2s) ──────
@@ -2522,16 +2536,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const elapsed = time - this.superlaserTimer;
       const mat = this.superlaserBeam.material as THREE.ShaderMaterial;
       if (elapsed < 0.5) {
-        // Charge-up: scale grows, opacity rises
         const t = elapsed / 0.5;
         mat.uniforms['uOpacity'].value = t * 0.9;
         this.superlaserBeam.scale.set(t, 1, t);
       } else if (elapsed < 1.8) {
-        // Full fire: flicker
         mat.uniforms['uOpacity'].value = 0.7 + Math.random() * 0.3;
         this.superlaserBeam.scale.set(1, 1, 1);
       } else if (elapsed < 2.2) {
-        // Fade out
         const t = 1 - (elapsed - 1.8) / 0.4;
         mat.uniforms['uOpacity'].value = t * 0.9;
         this.superlaserBeam.scale.set(t, 1, t);
@@ -2543,119 +2554,124 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
   }
 
-  private createPlutoExplosion(center: THREE.Vector3) {
-    const count = 300;
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-    const velocities = new Float32Array(count * 3);
+  private createPlutoExplosionVFX() {
+    if (!this.plutoMesh) return;
 
-    for (let i = 0; i < count; i++) {
-      // Start from Pluto's center
-      positions[i * 3] = center.x + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 1] = center.y + (Math.random() - 0.5) * 0.3;
-      positions[i * 3 + 2] = center.z + (Math.random() - 0.5) * 0.3;
-
-      // Random outward velocity
-      const speed = 0.5 + Math.random() * 2;
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed;
-      velocities[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
-      velocities[i * 3 + 2] = Math.cos(phi) * speed;
-
-      // Mix of orange/white/yellow debris
-      const brightness = 0.5 + Math.random() * 0.5;
-      colors[i * 3] = brightness;
-      colors[i * 3 + 1] = brightness * (0.4 + Math.random() * 0.4);
-      colors[i * 3 + 2] = brightness * Math.random() * 0.3;
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 0.15,
-      vertexColors: true,
+    // 1. Shockwave Ring
+    const ringGeo = new THREE.RingGeometry(0.1, 0.5, 64);
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0x88ff88,
       transparent: true,
-      opacity: 1,
+      opacity: 0,
+      side: THREE.DoubleSide,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    this.plutoExplosion = new THREE.Points(geo, mat);
-    this.plutoExplosion.userData['velocities'] = velocities;
-    this.scene.add(this.plutoExplosion);
-  }
+    this.plutoShockwave = new THREE.Mesh(ringGeo, ringMat);
+    this.plutoShockwave.position.copy(this.plutoMesh.position);
+    this.plutoShockwave.lookAt(0, 0, 0);
+    this.scene.add(this.plutoShockwave);
 
-  private createJulianaSchoolText() {
-    const text = 'JULIANASCHOOL';
-    // Generate star points positioned to spell the text
+    // 2. Blinding Flash
+    this.plutoFlashLight = new THREE.PointLight(0xaaffaa, 0, 150);
+    this.plutoFlashLight.position.copy(this.plutoMesh.position);
+    this.scene.add(this.plutoFlashLight);
+
+    // 3. Shattered Debris — 400 spinning rock chunks
+    const debrisCount = 400;
+    const rockGeo = new THREE.IcosahedronGeometry(0.08, 0);
+    const rockMat = new THREE.MeshStandardMaterial({ color: 0xc4a882, roughness: 1 });
+    this.plutoDebris = new THREE.InstancedMesh(rockGeo, rockMat, debrisCount);
+    this.plutoDebrisVelocities = new Float32Array(debrisCount * 3);
+
+    const dummy = new THREE.Object3D();
+    for (let i = 0; i < debrisCount; i++) {
+      dummy.position.copy(this.plutoMesh.position);
+      const vDir = new THREE.Vector3(
+        Math.random() - 0.5,
+        Math.random() - 0.5,
+        Math.random() - 0.5
+      ).normalize().multiplyScalar(0.5 + Math.random() * 2.5);
+      this.plutoDebrisVelocities[i * 3] = vDir.x;
+      this.plutoDebrisVelocities[i * 3 + 1] = vDir.y;
+      this.plutoDebrisVelocities[i * 3 + 2] = vDir.z;
+      dummy.rotation.set(Math.random() * 6, Math.random() * 6, Math.random() * 6);
+      dummy.updateMatrix();
+      this.plutoDebris.setMatrixAt(i, dummy.matrix);
+    }
+    this.plutoDebris.visible = false;
+    this.scene.add(this.plutoDebris);
+
+    // 4. "JULIANASCHOOL" Constellation (Canvas to Particles)
     const canvas = document.createElement('canvas');
+    canvas.width = 1024; canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
-    canvas.width = 512;
-    canvas.height = 64;
-    ctx.clearRect(0, 0, 512, 64);
-    ctx.font = 'bold 48px Inter, Arial, sans-serif';
+    ctx.fillStyle = 'black';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 130px "Pathway Gothic One", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillStyle = '#ffffff';
-    ctx.fillText(text, 256, 32);
+    ctx.fillText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
 
-    // Sample pixel positions to create star particles
-    const imageData = ctx.getImageData(0, 0, 512, 64);
-    const points: [number, number][] = [];
-    for (let y = 0; y < 64; y += 2) {
-      for (let x = 0; x < 512; x += 2) {
-        if (imageData.data[(y * 512 + x) * 4 + 3] > 128) {
-          points.push([x, y]);
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const starPositions: number[] = [];
+    const starColors: number[] = [];
+    const starSizes: number[] = [];
+
+    for (let y = 0; y < canvas.height; y += 3) {
+      for (let x = 0; x < canvas.width; x += 3) {
+        const idx = (y * canvas.width + x) * 4;
+        if (imgData[idx] > 128) {
+          const px = (x - canvas.width / 2) * 0.08;
+          const py = -(y - canvas.height / 2) * 0.08;
+          const pz = (Math.random() - 0.5) * 2;
+          starPositions.push(px, py, pz);
+          const isGold = Math.random() > 0.5;
+          const color = new THREE.Color(isGold ? 0xffe81f : 0xaaccff);
+          starColors.push(color.r, color.g, color.b);
+          starSizes.push(Math.random() * 3 + 1);
         }
       }
     }
 
-    // Use every Nth point to keep particle count reasonable
-    const maxParticles = 600;
-    const step = Math.max(1, Math.floor(points.length / maxParticles));
-    const usedPoints: [number, number][] = [];
-    for (let i = 0; i < points.length; i += step) {
-      usedPoints.push(points[i]);
-    }
+    const starGeo = new THREE.BufferGeometry();
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
+    starGeo.setAttribute('color', new THREE.Float32BufferAttribute(starColors, 3));
+    starGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(starSizes, 1));
 
-    const count = usedPoints.length;
-    const positions = new Float32Array(count * 3);
-    const colors = new Float32Array(count * 3);
-
-    // Center: where Pluto was
-    const center = this.plutoMesh?.position ?? new THREE.Vector3(-240, -25, -220);
-    const textScale = 0.025; // Scale text to scene units
-    const textWidth = 512 * textScale;
-    const textHeight = 64 * textScale;
-
-    for (let i = 0; i < count; i++) {
-      const [px, py] = usedPoints[i];
-      positions[i * 3] = center.x + (px * textScale - textWidth / 2) + (Math.random() - 0.5) * 0.05;
-      positions[i * 3 + 1] = center.y + 2 + (-py * textScale + textHeight / 2) + (Math.random() - 0.5) * 0.05;
-      positions[i * 3 + 2] = center.z + (Math.random() - 0.5) * 0.1;
-
-      // Warm white / gold star colors
-      const brightness = 0.7 + Math.random() * 0.3;
-      colors[i * 3] = brightness;
-      colors[i * 3 + 1] = brightness * (0.85 + Math.random() * 0.15);
-      colors[i * 3 + 2] = brightness * (0.5 + Math.random() * 0.3);
-    }
-
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
-    const mat = new THREE.PointsMaterial({
-      size: 0.12,
-      vertexColors: true,
+    const starMat = new THREE.ShaderMaterial({
+      uniforms: { uOpacity: { value: 0 } },
+      vertexShader: `
+        attribute float aSize;
+        attribute vec3 color;
+        varying vec3 vColor;
+        void main() {
+          vColor = color;
+          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+          gl_PointSize = aSize * (150.0 / -mvPosition.z);
+          gl_Position = projectionMatrix * mvPosition;
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying vec3 vColor;
+        void main() {
+          float d = length(gl_PointCoord - vec2(0.5));
+          if (d > 0.5) discard;
+          float glow = exp(-d * 6.0);
+          gl_FragColor = vec4(vColor, glow * uOpacity);
+        }
+      `,
       transparent: true,
-      opacity: 0,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
     });
-    this.julianaSchoolText = new THREE.Points(geo, mat);
-    this.julianaSchoolRevealTime = (Date.now() - this.startTime) * 0.001;
-    this.scene.add(this.julianaSchoolText);
+
+    this.julianaStars = new THREE.Points(starGeo, starMat);
+    this.julianaStars.position.copy(this.plutoMesh.position);
+    this.julianaStars.lookAt(0, 0, 0);
+    this.scene.add(this.julianaStars);
   }
 
   private createLightsaberDuel() {

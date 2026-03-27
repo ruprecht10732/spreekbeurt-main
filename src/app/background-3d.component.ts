@@ -2105,8 +2105,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         return this.venusMesh?.position ?? this.getSlideCameraAnchor();
       case 'aarde':
         return this.earthMesh?.position ?? this.getSlideCameraAnchor();
-      case 'maan':
+      case 'maan': {
+        // Use Tranquility Base world position so camera tracks the landing site
+        if (this.tranquilityGroup) {
+          const wp = new THREE.Vector3();
+          this.tranquilityGroup.getWorldPosition(wp);
+          return wp;
+        }
         return this.moonMesh?.position ?? this.getSlideCameraAnchor();
+      }
       case 'mars':
         return this.marsMesh?.position ?? this.getSlideCameraAnchor();
       case 'starman':
@@ -3859,6 +3866,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     for (const target of this.frustumCullTargets) {
       if (!target.object) continue;
+      // Don't override visibility of destroyed Pluto
+      if (target.object === this.plutoMesh && this.plutoDestroyed) continue;
       this.tempSphere.set(target.object.position, target.radius);
       target.object.visible = this.frustum.intersectsSphere(this.tempSphere);
     }
@@ -6215,14 +6224,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         const earthVisible = this.earthMesh?.visible ?? false;
         this.moonMesh.visible = earthVisible;
         if (earthVisible && this.earthMesh) {
-          this.moonOrbitAngle += 0.008; // Faster than Earth orbit for visual clarity
+          // Freeze moon orbit & rotation during maan stop so Tranquility Base stays in view
+          const onMoon = this.activeCameraAnchorKey === 'maan';
+          if (!onMoon) {
+            this.moonOrbitAngle += 0.008;
+            this.moonMesh.rotation.y += 0.002;
+          }
           const ep = this.earthMesh.position;
           this.moonMesh.position.set(
             ep.x + 2.8 * Math.cos(this.moonOrbitAngle),
             ep.y + 0.3 * Math.sin(this.moonOrbitAngle * 0.5),
             ep.z + 2.8 * Math.sin(this.moonOrbitAngle)
           );
-          this.moonMesh.rotation.y += 0.002;
         }
         this.physicsManager.setKinematicTarget(this.moonMesh, this.moonMesh.position, this.moonMesh.quaternion);
 

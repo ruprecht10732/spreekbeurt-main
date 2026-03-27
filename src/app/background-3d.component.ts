@@ -875,16 +875,17 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Renderer
     this.renderer = new THREE.WebGLRenderer({
-      antialias: true,
+      antialias: false, // Disabled hardware AA to prevent smudging; Post-Processing SMAA handles this perfectly
       alpha: true,
       powerPreference: 'high-performance',
       logarithmicDepthBuffer: true,
     });
+    this.renderer.outputColorSpace = THREE.SRGBColorSpace; // CRITICAL: Fixes the washed-out gray look
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.shadowMap.enabled = true;
-    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFSoftShadowMap; // Cinematic soft penumbra shadows
     this.renderer.toneMappingExposure = 1.3;
     container.appendChild(this.renderer.domElement);
 
@@ -1134,7 +1135,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 finalColor = mix(fringeColor, vec3(1.0, 1.0, 0.98), core * 0.8 + airyRing * 0.3);
           finalColor += spike * spikeStrength * vec3(0.9, 0.85, 1.0) * 0.3;
 
-          float alpha = clamp(scaledLum, 0.0, 1.0);
+          // Sharpen faint stars so they don't look milky/blurry
+          float alpha = clamp(scaledLum, 0.0, 1.0) * mix(0.3, 1.0, clamp(vSize / 5.0, 0.0, 1.0));
           gl_FragColor = vec4(finalColor * (0.85 + vTwinkle * 0.2), alpha);
         }
       `,
@@ -1979,6 +1981,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         alpha += forwardScatter * 0.12;
         alpha *= pulse;
 
+        // CRITICAL: Force absolute zero opacity on the night side so space/planets remain deeply black
+        alpha *= smoothstep(-0.05, 0.1, sunDot);
+
         gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.3));
       }
     `;
@@ -2500,9 +2505,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.baseCameraY = this.moonWorldCameraPosition.y;
     this.baseCameraZ = this.moonWorldCameraPosition.z;
 
-    this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x;
-    this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y;
-    this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z;
+    // Multiply mouse parallax by 0.15 for a subtle, premium cinematic sway rather than wild swinging
+    this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x * 0.15;
+    this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y * 0.15;
+    this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z * 0.15;
 
     this.targetLookAt.copy(this.moonWorldLookPosition);
   }
@@ -2513,9 +2519,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
     this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
 
-    this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
-    this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
-    this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
+    // Multiply mouse parallax by 0.15 for a subtle, premium cinematic sway rather than wild swinging
+    this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x * 0.15 + this.cameraDriftX;
+    this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y * 0.15 + this.cameraDriftY;
+    this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z * 0.15 + this.cameraDriftZ;
 
     this.targetLookAt.set(
       anchor.x + this.theatreCameraValues.lookOffset.x,

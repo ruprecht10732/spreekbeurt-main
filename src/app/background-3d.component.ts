@@ -219,9 +219,32 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private lightsaberGroup!: THREE.Group;
   private saberRed!: THREE.Mesh;
   private saberGreen!: THREE.Mesh;
+  private saberGlowRed!: THREE.Mesh;
+  private saberGlowGreen!: THREE.Mesh;
   private saberLightRed!: THREE.PointLight;
   private saberLightGreen!: THREE.PointLight;
   private saberDuelTimer = 0;
+  private readonly saberClashSparks!: THREE.Points;
+  private readonly saberSparkPositions = new Float32Array(60 * 3); // 60 sparks
+  private readonly saberSparkVelocities = new Float32Array(60 * 3);
+  private readonly saberSparkLifetimes = new Float32Array(60);
+  private saberSparkIndex = 0;
+  // Duel combatant pivots
+  private sithPivot!: THREE.Group;
+  private jediPivot!: THREE.Group;
+  // Duel choreography — sequence of { duration, sithAngle, jediAngle, clash }
+  private readonly duelMoves = [
+    { dur: 0.5, sithZ: 0.8, jediZ: -0.5, sithX: 0.15, jediX: -0.15, clash: false },
+    { dur: 0.35, sithZ: -0.2, jediZ: 0.4, sithX: -0.1, jediX: 0.1, clash: true },
+    { dur: 0.6, sithZ: 1.1, jediZ: -0.9, sithX: 0.2, jediX: -0.3, clash: false },
+    { dur: 0.25, sithZ: 0.1, jediZ: 0.1, sithX: 0.0, jediX: 0.0, clash: true },
+    { dur: 0.7, sithZ: -0.6, jediZ: 1.2, sithX: -0.2, jediX: 0.25, clash: false },
+    { dur: 0.3, sithZ: 0.3, jediZ: -0.3, sithX: 0.05, jediX: -0.05, clash: true },
+    { dur: 0.55, sithZ: -1.0, jediZ: 0.7, sithX: 0.3, jediX: -0.15, clash: false },
+    { dur: 0.4, sithZ: 0.0, jediZ: 0.0, sithX: -0.05, jediX: 0.05, clash: true },
+  ];
+  private duelMoveIndex = 0;
+  private duelMoveElapsed = 0;
 
   // Hyperspace jump
   private hyperspaceActive = false;
@@ -745,7 +768,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Load milky way texture onto skybox
     this.textureLoader = new THREE.TextureLoader();
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_stars_milky_way.jpg', (tex) => {
+      this.textureLoader.load('8k_stars_milky_way.jpg', (tex) => {
         skyMat.map = tex;
         skyMat.color.setHex(0x222233); // muted blue-grey — natural deep-space tint
         skyMat.needsUpdate = true;
@@ -990,11 +1013,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiter = new THREE.Mesh(jupiterGeometry, jupiterMaterial);
     this.jupiterGroup.add(this.jupiter);
 
-    // Load NASA HST OPAL high-res Jupiter map from local assets
+    // Load high-res 8K Jupiter texture (Solar System Scope, CC BY 4.0)
     const textureLoader = this.textureLoader;
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load(
-        '20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg',
+        '8k_jupiter.jpg',
         (texture) => {
           if ('SRGBColorSpace' in THREE) {
             texture.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
@@ -1008,7 +1031,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           resolve();
         },
         undefined,
-        () => { console.warn('Could not load high-res Jupiter texture, using procedural fallback.'); resolve(); }
+        () => {
+          // Fallback to NASA OPAL texture
+          textureLoader.load('20181107_hlsp_opal_hst_wfc3-uvis_jupiter-2017a_color_globalmap2.jpg', (tex) => {
+            if ('SRGBColorSpace' in THREE) {
+              tex.colorSpace = (THREE as unknown as { SRGBColorSpace: THREE.ColorSpace }).SRGBColorSpace;
+            }
+            tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
+            tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
+            jupiterMaterial.map = tex; jupiterMaterial.needsUpdate = true;
+            resolve();
+          }, undefined, () => { console.warn('Could not load Jupiter texture.'); resolve(); });
+        }
       );
     }));
 
@@ -1132,7 +1166,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.moonMesh.visible = false;
       this.scene.add(this.moonMesh);
       this.loadPromises.push(new Promise<void>((resolve) => {
-        textureLoader.load('2k_moon.jpg', (tex) => {
+        textureLoader.load('8k_moon.jpg', (tex) => {
           tex.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           moonMat.map = tex; moonMat.color.setHex(0xffffff); moonMat.needsUpdate = true;
@@ -1645,27 +1679,20 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.baseCameraY = anchor.y + this.theatreCameraValues.offset.y;
         this.baseCameraZ = anchor.z + this.theatreCameraValues.offset.z;
 
-        // During falcon tracking, reduce mouse parallax to avoid camera snapping
-        const isFalconMode = this.activeCameraAnchorKey === 'falcon-launch' || this.activeCameraAnchorKey === 'falcon-landing';
-        const parallaxScale = isFalconMode ? 0.15 : 1;
-
-        this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x * parallaxScale + this.cameraDriftX;
-        this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y * parallaxScale + this.cameraDriftY;
-        this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z * parallaxScale + this.cameraDriftZ;
+        this.targetCameraX = this.baseCameraX + this.mouseX * this.theatreCameraValues.mouseParallax.x + this.cameraDriftX;
+        this.targetCameraY = this.baseCameraY + this.mouseY * this.theatreCameraValues.mouseParallax.y + this.cameraDriftY;
+        this.targetCameraZ = this.baseCameraZ + this.mouseX * this.theatreCameraValues.mouseParallax.z + this.cameraDriftZ;
         this.targetLookAt.set(
           anchor.x + this.theatreCameraValues.lookOffset.x,
           anchor.y + this.theatreCameraValues.lookOffset.y,
           anchor.z + this.theatreCameraValues.lookOffset.z,
         );
 
-        // Use faster lerp during falcon tracking for responsive following
-        const lerpSpeed = isFalconMode ? Math.max(this.cameraLerpSpeed, 0.06) : this.cameraLerpSpeed;
+        this.camera.position.x += (this.targetCameraX - this.camera.position.x) * this.cameraLerpSpeed;
+        this.camera.position.y += (this.targetCameraY - this.camera.position.y) * this.cameraLerpSpeed;
+        this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * this.cameraLerpSpeed;
 
-        this.camera.position.x += (this.targetCameraX - this.camera.position.x) * lerpSpeed;
-        this.camera.position.y += (this.targetCameraY - this.camera.position.y) * lerpSpeed;
-        this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * lerpSpeed;
-
-        this.currentLookAt.lerp(this.targetLookAt, lerpSpeed);
+        this.currentLookAt.lerp(this.targetLookAt, this.cameraLerpSpeed);
         this.controls.target.copy(this.currentLookAt);
       } else {
         this.controls.enabled = true;
@@ -1903,88 +1930,270 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createLightsaberDuel() {
     this.lightsaberGroup = new THREE.Group();
 
-    // Red saber blade (Sith)
+    // --- Volumetric blade shader (inner white core + outer colored glow) ---
+    const bladeShaderVert = `
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        vUv = uv;
+        vNormal = normalize(normalMatrix * normal);
+        vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
+        vViewDir = normalize(-mvPos.xyz);
+        gl_Position = projectionMatrix * mvPos;
+      }
+    `;
+    const bladeShaderFrag = `
+      uniform vec3 uColor;
+      uniform float uIntensity;
+      varying vec2 vUv;
+      varying vec3 vNormal;
+      varying vec3 vViewDir;
+      void main() {
+        float fresnel = 1.0 - abs(dot(vNormal, vViewDir));
+        float core = smoothstep(0.45, 0.0, abs(vUv.x - 0.5));
+        float glow = pow(fresnel, 1.5) * 0.8 + core * 1.2;
+        vec3 col = mix(vec3(1.0), uColor, fresnel * 0.7) * glow * uIntensity;
+        float alpha = clamp(glow * 1.1, 0.0, 1.0);
+        gl_FragColor = vec4(col, alpha);
+      }
+    `;
+
+    // Blade geometry — thin capsule
     const bladeGeo = new THREE.CapsuleGeometry(0.03, 1.2, 4, 8);
-    const redMat = new THREE.MeshStandardMaterial({
-      color: 0xff0000,
-      emissive: 0xff0000,
-      emissiveIntensity: 20,
-      transparent: true,
-      opacity: 0.95,
+    // Outer glow — slightly larger
+    const glowGeo = new THREE.CapsuleGeometry(0.09, 1.25, 4, 8);
+
+    // Red saber (Sith) — inner blade
+    const redBladeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(1.0, 0.05, 0.0) },
+        uIntensity: { value: 3.0 },
+      },
+      vertexShader: bladeShaderVert,
+      fragmentShader: bladeShaderFrag,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
-    this.saberRed = new THREE.Mesh(bladeGeo, redMat);
-    this.saberRed.position.set(-0.4, 0, 0);
-    this.lightsaberGroup.add(this.saberRed);
+    this.saberRed = new THREE.Mesh(bladeGeo, redBladeMat);
 
-    // Green saber blade (Jedi)
-    const greenMat = new THREE.MeshStandardMaterial({
-      color: 0x00ff00,
-      emissive: 0x00ff00,
-      emissiveIntensity: 20,
-      transparent: true,
-      opacity: 0.95,
+    // Red saber outer glow
+    const redGlowMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(1.0, 0.0, 0.0) },
+        uIntensity: { value: 1.2 },
+      },
+      vertexShader: bladeShaderVert,
+      fragmentShader: bladeShaderFrag,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
     });
-    this.saberGreen = new THREE.Mesh(bladeGeo.clone(), greenMat);
-    this.saberGreen.position.set(0.4, 0, 0);
-    this.lightsaberGroup.add(this.saberGreen);
+    this.saberGlowRed = new THREE.Mesh(glowGeo, redGlowMat);
+    this.saberRed.add(this.saberGlowRed);
 
-    // Simple hilt handles
-    const hiltGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.3, 8);
-    const hiltMat = new THREE.MeshStandardMaterial({ color: 0x888888, metalness: 0.9, roughness: 0.2 });
-    const hiltRed = new THREE.Mesh(hiltGeo, hiltMat);
-    hiltRed.position.set(-0.4, -0.75, 0);
-    this.lightsaberGroup.add(hiltRed);
-    const hiltGreen = new THREE.Mesh(hiltGeo.clone(), hiltMat.clone());
-    hiltGreen.position.set(0.4, -0.75, 0);
-    this.lightsaberGroup.add(hiltGreen);
+    // Green saber (Jedi) — inner blade
+    const greenBladeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(0.0, 1.0, 0.2) },
+        uIntensity: { value: 3.0 },
+      },
+      vertexShader: bladeShaderVert,
+      fragmentShader: bladeShaderFrag,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    this.saberGreen = new THREE.Mesh(bladeGeo.clone(), greenBladeMat);
 
-    // Dynamic PointLights on each blade
-    this.saberLightRed = new THREE.PointLight(0xff0000, 3, 8, 2);
-    this.saberLightRed.position.copy(this.saberRed.position);
+    // Green saber outer glow
+    const greenGlowMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(0.0, 1.0, 0.15) },
+        uIntensity: { value: 1.2 },
+      },
+      vertexShader: bladeShaderVert,
+      fragmentShader: bladeShaderFrag,
+      transparent: true, blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+    });
+    this.saberGlowGreen = new THREE.Mesh(glowGeo.clone(), greenGlowMat);
+    this.saberGreen.add(this.saberGlowGreen);
+
+    // Detailed hilts — layered cylinders for a more realistic look
+    const hiltMainGeo = new THREE.CylinderGeometry(0.038, 0.042, 0.28, 12);
+    const hiltEmitterGeo = new THREE.CylinderGeometry(0.032, 0.036, 0.06, 12);
+    const hiltPommelGeo = new THREE.CylinderGeometry(0.044, 0.038, 0.05, 12);
+    const hiltGripGeo = new THREE.CylinderGeometry(0.04, 0.04, 0.16, 6);
+
+    const hiltChromeMat = new THREE.MeshStandardMaterial({ color: 0xcccccc, metalness: 0.95, roughness: 0.1 });
+    const hiltDarkMat = new THREE.MeshStandardMaterial({ color: 0x222222, metalness: 0.8, roughness: 0.3 });
+    const hiltGripMat = new THREE.MeshStandardMaterial({ color: 0x111111, metalness: 0.4, roughness: 0.8 });
+
+    const createHilt = () => {
+      const hiltGroup = new THREE.Group();
+      hiltGroup.add(new THREE.Mesh(hiltMainGeo, hiltChromeMat));
+      const emitter = new THREE.Mesh(hiltEmitterGeo, hiltDarkMat);
+      emitter.position.y = 0.17;
+      hiltGroup.add(emitter);
+      const pommel = new THREE.Mesh(hiltPommelGeo, hiltDarkMat);
+      pommel.position.y = -0.165;
+      hiltGroup.add(pommel);
+      const grip = new THREE.Mesh(hiltGripGeo, hiltGripMat);
+      hiltGroup.add(grip);
+      return hiltGroup;
+    };
+
+    // Sith combatant pivot (blade + hilt attached)
+    this.sithPivot = new THREE.Group();
+    this.sithPivot.position.set(-0.5, 0, 0);
+    const sithHilt = createHilt();
+    sithHilt.position.y = -0.75;
+    this.sithPivot.add(sithHilt);
+    this.sithPivot.add(this.saberRed);
+    this.lightsaberGroup.add(this.sithPivot);
+
+    // Jedi combatant pivot
+    this.jediPivot = new THREE.Group();
+    this.jediPivot.position.set(0.5, 0, 0);
+    const jediHilt = createHilt();
+    jediHilt.position.y = -0.75;
+    this.jediPivot.add(jediHilt);
+    this.jediPivot.add(this.saberGreen);
+    this.lightsaberGroup.add(this.jediPivot);
+
+    // Dynamic area lights for ambient color bleed
+    this.saberLightRed = new THREE.PointLight(0xff2200, 5, 12, 1.5);
+    this.saberLightRed.position.copy(this.sithPivot.position);
     this.lightsaberGroup.add(this.saberLightRed);
-    this.saberLightGreen = new THREE.PointLight(0x00ff00, 3, 8, 2);
-    this.saberLightGreen.position.copy(this.saberGreen.position);
+    this.saberLightGreen = new THREE.PointLight(0x00ff44, 5, 12, 1.5);
+    this.saberLightGreen.position.copy(this.jediPivot.position);
     this.lightsaberGroup.add(this.saberLightGreen);
 
-    // Position near an orbiting TIE fighter area
+    // Clash spark particle system
+    const sparkGeo = new THREE.BufferGeometry();
+    sparkGeo.setAttribute('position', new THREE.BufferAttribute(this.saberSparkPositions, 3));
+    const sparkMat = new THREE.PointsMaterial({
+      color: 0xffffff,
+      size: 0.08,
+      transparent: true,
+      opacity: 0.9,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      sizeAttenuation: true,
+    });
+    (this as unknown as { saberClashSparks: THREE.Points }).saberClashSparks = new THREE.Points(sparkGeo, sparkMat);
+    this.lightsaberGroup.add(this.saberClashSparks);
+
+    // Position the duel arena near Jupiter
     const jp = this.jupiterGroup.position;
     this.lightsaberGroup.position.set(jp.x + 28, jp.y + 3, jp.z + 10);
-    this.lightsaberGroup.scale.setScalar(1.5);
+    this.lightsaberGroup.scale.setScalar(1.8);
     this.scene.add(this.lightsaberGroup);
   }
 
   private updateLightsaberDuel(time: number) {
-    if (!this.lightsaberGroup) return;
+    if (!this.lightsaberGroup || !this.sithPivot || !this.jediPivot) return;
+
+    const dt = time - this.saberDuelTimer;
     this.saberDuelTimer = time;
+    this.duelMoveElapsed += dt;
 
-    // Animated swing pattern — sabers cross and separate
-    const swing = Math.sin(time * 3) * 0.6;
-    const thrust = Math.sin(time * 2.1) * 0.3;
+    // Advance through choreography sequence
+    const move = this.duelMoves[this.duelMoveIndex];
+    if (this.duelMoveElapsed >= move.dur) {
+      this.duelMoveElapsed -= move.dur;
+      this.duelMoveIndex = (this.duelMoveIndex + 1) % this.duelMoves.length;
+    }
+    const nextMove = this.duelMoves[(this.duelMoveIndex + 1) % this.duelMoves.length];
+    const moveT = Math.min(this.duelMoveElapsed / move.dur, 1);
+    // Ease in-out for smooth transitions
+    const ease = moveT < 0.5 ? 2 * moveT * moveT : 1 - Math.pow(-2 * moveT + 2, 2) / 2;
 
-    this.saberRed.rotation.z = swing + 0.3;
-    this.saberRed.position.x = -0.4 + thrust * 0.3;
-    this.saberRed.position.y = Math.sin(time * 2.5) * 0.2;
-    this.saberGreen.rotation.z = -swing - 0.3;
-    this.saberGreen.position.x = 0.4 - thrust * 0.3;
-    this.saberGreen.position.y = Math.sin(time * 2.5 + 1) * 0.2;
+    // Sith pivot animation
+    const sithTargetZ = move.sithZ + (nextMove.sithZ - move.sithZ) * ease;
+    const sithTargetX = move.sithX + (nextMove.sithX - move.sithX) * ease;
+    this.sithPivot.rotation.z += (sithTargetZ - this.sithPivot.rotation.z) * 0.12;
+    this.sithPivot.rotation.x += (sithTargetX - this.sithPivot.rotation.x) * 0.12;
+    // Footwork — lateral movement
+    this.sithPivot.position.x = -0.5 + Math.sin(time * 1.8) * 0.15;
+    this.sithPivot.position.z = Math.sin(time * 1.2) * 0.1;
 
-    // Update light positions
-    this.saberLightRed.position.copy(this.saberRed.position);
-    this.saberLightGreen.position.copy(this.saberGreen.position);
+    // Jedi pivot animation
+    const jediTargetZ = move.jediZ + (nextMove.jediZ - move.jediZ) * ease;
+    const jediTargetX = move.jediX + (nextMove.jediX - move.jediX) * ease;
+    this.jediPivot.rotation.z += (jediTargetZ - this.jediPivot.rotation.z) * 0.12;
+    this.jediPivot.rotation.x += (jediTargetX - this.jediPivot.rotation.x) * 0.12;
+    this.jediPivot.position.x = 0.5 + Math.sin(time * 1.8 + Math.PI) * 0.15;
+    this.jediPivot.position.z = Math.sin(time * 1.2 + 1.5) * 0.1;
 
-    // Clash strobe — when blades are close together
-    const bladeDist = this.saberRed.position.distanceTo(this.saberGreen.position);
-    if (bladeDist < 0.5) {
-      const strobe = Math.random() > 0.3 ? 8 : 2;
+    // Blade shimmer — subtle intensity flicker on the shader
+    const flicker = 0.92 + Math.random() * 0.16;
+    const redMat = this.saberRed.material as THREE.ShaderMaterial;
+    const greenMat = this.saberGreen.material as THREE.ShaderMaterial;
+    if (redMat.uniforms) redMat.uniforms['uIntensity'].value = 3.0 * flicker;
+    if (greenMat.uniforms) greenMat.uniforms['uIntensity'].value = 3.0 * flicker;
+
+    // Update light positions (world space from pivots)
+    const redWorldPos = new THREE.Vector3();
+    this.saberRed.getWorldPosition(redWorldPos);
+    this.saberLightRed.position.copy(this.lightsaberGroup.worldToLocal(redWorldPos.clone()));
+    const greenWorldPos = new THREE.Vector3();
+    this.saberGreen.getWorldPosition(greenWorldPos);
+    this.saberLightGreen.position.copy(this.lightsaberGroup.worldToLocal(greenWorldPos.clone()));
+
+    // Clash detection — compare blade tip world positions
+    const bladeDist = redWorldPos.distanceTo(greenWorldPos);
+    const isClash = move.clash && moveT > 0.3 && moveT < 0.8;
+
+    if (isClash && bladeDist < 1.8) {
+      // Bright strobe on clash
+      const strobe = 6 + Math.random() * 6;
       this.saberLightRed.intensity = strobe;
       this.saberLightGreen.intensity = strobe;
+      // Emit sparks at midpoint
+      const mid = redWorldPos.clone().add(greenWorldPos).multiplyScalar(0.5);
+      const localMid = this.lightsaberGroup.worldToLocal(mid);
+      this.emitSaberSparks(localMid, 8);
     } else {
-      this.saberLightRed.intensity = 3;
-      this.saberLightGreen.intensity = 3;
+      this.saberLightRed.intensity = 5;
+      this.saberLightGreen.intensity = 5;
     }
 
+    // Update spark particles
+    this.updateSaberSparks(dt);
+
     // Gentle group rotation so the duel is visible from different angles
-    this.lightsaberGroup.rotation.y += 0.003;
+    this.lightsaberGroup.rotation.y += 0.002;
+  }
+
+  private emitSaberSparks(origin: THREE.Vector3, count: number) {
+    for (let i = 0; i < count; i++) {
+      const idx = this.saberSparkIndex % 60;
+      this.saberSparkPositions[idx * 3] = origin.x;
+      this.saberSparkPositions[idx * 3 + 1] = origin.y;
+      this.saberSparkPositions[idx * 3 + 2] = origin.z;
+      this.saberSparkVelocities[idx * 3] = (Math.random() - 0.5) * 4;
+      this.saberSparkVelocities[idx * 3 + 1] = (Math.random() - 0.5) * 4;
+      this.saberSparkVelocities[idx * 3 + 2] = (Math.random() - 0.5) * 4;
+      this.saberSparkLifetimes[idx] = 0.4 + Math.random() * 0.3;
+      this.saberSparkIndex++;
+    }
+  }
+
+  private updateSaberSparks(dt: number) {
+    for (let i = 0; i < 60; i++) {
+      if (this.saberSparkLifetimes[i] <= 0) continue;
+      this.saberSparkLifetimes[i] -= dt;
+      this.saberSparkPositions[i * 3] += this.saberSparkVelocities[i * 3] * dt;
+      this.saberSparkPositions[i * 3 + 1] += this.saberSparkVelocities[i * 3 + 1] * dt;
+      this.saberSparkPositions[i * 3 + 2] += this.saberSparkVelocities[i * 3 + 2] * dt;
+      // Gravity on sparks
+      this.saberSparkVelocities[i * 3 + 1] -= 6 * dt;
+      // Fade dead sparks far away
+      if (this.saberSparkLifetimes[i] <= 0) {
+        this.saberSparkPositions[i * 3] = 9999;
+        this.saberSparkPositions[i * 3 + 1] = 9999;
+        this.saberSparkPositions[i * 3 + 2] = 9999;
+      }
+    }
+    if (this.saberClashSparks) {
+      (this.saberClashSparks.geometry.attributes['position'] as THREE.BufferAttribute).needsUpdate = true;
+    }
   }
 
   triggerHyperspaceJump() {
@@ -2563,9 +2772,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       });
     });
 
-    // Lightsaber blades on bloom layer (Selective Bloom)
+    // Lightsaber blades + glow layers on bloom layer (Selective Bloom)
     if (this.saberRed) this.postProcessManager.addBloomSelection(this.saberRed);
     if (this.saberGreen) this.postProcessManager.addBloomSelection(this.saberGreen);
+    if (this.saberGlowRed) this.postProcessManager.addBloomSelection(this.saberGlowRed);
+    if (this.saberGlowGreen) this.postProcessManager.addBloomSelection(this.saberGlowGreen);
+    if (this.saberClashSparks) this.postProcessManager.addBloomSelection(this.saberClashSparks);
     // Death Star superlaser beam on bloom layer
     if (this.superlaserBeam) this.postProcessManager.addBloomSelection(this.superlaserBeam);
   }
@@ -2801,11 +3013,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Point exhaust light on
     const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
     if (light) light.intensity = 4;
-
-    // ★ Immediately switch camera to follow the launch
-    this.falconCameraAnchor.copy(this.earthMesh.position).lerp(this.falconGroup.position, 0.55);
-    this.activeCameraAnchorKey = 'falcon-launch';
-    this.userInteracting = false;
   }
 
   private getFalconCruiseMidpoint(): THREE.Vector3 {
@@ -2859,26 +3066,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     return 0.032;
   }
 
-  private updateFalconCameraAnchor(timeRatio: number, falconPosition: THREE.Vector3) {
-    if (timeRatio < 0.18) {
-      // Launch phase — camera blends between Earth and Falcon for dramatic liftoff view
-      const launchBlend = Math.min(timeRatio / 0.12, 1);
-      if (this.earthMesh) {
-        this.falconCameraAnchor.copy(this.earthMesh.position).lerp(falconPosition, 0.4 + launchBlend * 0.3);
-      }
-      this.activeCameraAnchorKey = 'falcon-launch';
-    } else if (timeRatio < 0.8) {
-      // Cruise phase — smoothly track the falcon mid-flight
-      this.falconCameraAnchor.lerp(falconPosition, 0.08);
-      this.activeCameraAnchorKey = 'falcon-launch';
-    } else {
-      // Landing phase — camera blends between Falcon and Mars for epic landing
-      const landingBlend = Math.min((timeRatio - 0.8) / 0.15, 1);
-      if (this.marsMesh) {
-        this.falconCameraAnchor.copy(falconPosition).lerp(this.marsMesh.position, landingBlend * 0.45);
-      }
-      this.activeCameraAnchorKey = 'falcon-landing';
-    }
+  private updateFalconCameraAnchor(_timeRatio: number, _falconPosition: THREE.Vector3) {
+    // Camera no longer tracks the falcon — it flies subtly in the background
   }
 
   private updateFalconExhaustVisuals(time: number, timeRatio: number) {
@@ -2927,10 +3116,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Exhaust light off
     const light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
     if (light) light.intensity = 0;
-    // Return camera to the tour's current planet stop
-    if (this.tourActive && this.tourStops.length > 0) {
-      this.activeCameraAnchorKey = this.tourStops[this.tourStopIndex].name;
-    }
   }
 
   private updateFalcon9(time: number) {
@@ -3068,9 +3253,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const sp = this.saturnGroup.position;
       this.titanMesh.position.set(sp.x + 20, sp.y, sp.z);
       this.scene.add(this.titanMesh);
-      // Load moon texture for Titan (reuse 2k_moon.jpg, tinted by material color)
+      // Load moon texture for Titan (reuse 8k_moon.jpg, tinted by material color)
       this.loadPromises.push(new Promise<void>((resolve) => {
-        this.textureLoader.load('2k_moon.jpg', (tex) => {
+        this.textureLoader.load('8k_moon.jpg', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           titanMat.map = tex;
           titanMat.color.setHex(0xcc9944); // Keep the warm orange tint
@@ -3090,7 +3275,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoMesh.position.set(-240, -25, -220);
       this.scene.add(this.plutoMesh);
       this.loadPromises.push(new Promise<void>((resolve) => {
-        this.textureLoader.load('2k_moon.jpg', (tex) => {
+        this.textureLoader.load('8k_moon.jpg', (tex) => {
           tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
           plutoMat.map = tex;
           plutoMat.color.setHex(0xc4a882);
@@ -3111,7 +3296,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Mars texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_mars.jpg', (tex) => {
+      this.textureLoader.load('8k_mars.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         marsMat.map = tex; marsMat.color.setHex(0xffffff); marsMat.needsUpdate = true;
         resolve();
@@ -3891,7 +4076,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Load Sun texture
     this.loadPromises.push(new Promise<void>((resolve) => {
-      this.textureLoader.load('2k_sun.jpg', (tex) => {
+      this.textureLoader.load('8k_sun.jpg', (tex) => {
         tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter;
         sunMat.uniforms['uSunTex'].value = tex;
         sunMat.needsUpdate = true;

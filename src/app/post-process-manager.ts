@@ -21,8 +21,8 @@ export class PostProcessManager {
     lightSource?: THREE.Mesh | THREE.Points,
   ) {
     this.composer = new EffectComposer(renderer, {
-      frameBufferType: THREE.HalfFloatType,
-      // Hardware multisampling is natively sharp and extremely fast compared to SMAA
+      // CRITICAL FOR CPU: 8-bit framebuffer. 16-bit HalfFloat causes massive bandwidth bottlenecks on integrated graphics.
+      frameBufferType: THREE.UnsignedByteType,
       multisampling: Math.min(4, renderer.capabilities.maxSamples)
     });
 

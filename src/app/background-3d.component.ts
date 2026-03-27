@@ -915,15 +915,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     // Milky Way skybox — immersive backdrop sphere
-    const skyGeo = new THREE.SphereGeometry(500, 64, 64);
+    const skyGeo = new THREE.SphereGeometry(500, 48, 48);
     const skyMat = new THREE.MeshBasicMaterial({
       color: 0x111122,
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
-      toneMapped: false // CRITICAL: Forces the background to stay pure OLED-black, untouched by ACESFilmic
+      toneMapped: false
     });
-    this.scene.add(new THREE.Mesh(skyGeo, skyMat));
+    const skyMesh = new THREE.Mesh(skyGeo, skyMat);
+    skyMesh.matrixAutoUpdate = false; // CRITICAL FOR CPU: Skips matrix math every frame
+    skyMesh.updateMatrix();
+    this.scene.add(skyMesh);
     // Shared loading manager for progress tracking
     const loadingManager = new THREE.LoadingManager();
 
@@ -951,12 +954,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         skyMat.color.setHex(0x333333); // neutral grey — let the texture do the talking
         skyMat.needsUpdate = true;
 
-        // Generate PMREM environment map from skybox for PBR reflections on ships/metals
-        const pmremGenerator = new THREE.PMREMGenerator(this.renderer);
-        pmremGenerator.compileEquirectangularShader();
-        this.scene.environment = pmremGenerator.fromEquirectangular(tex).texture;
-        this.scene.environmentIntensity = 0.05;
-        pmremGenerator.dispose();
+        // CRITICAL FOR CPU: PMREM Generator deleted.
+        // We do not need heavy environment reflections in pitch-black space.
 
         resolve();
       }, undefined, () => resolve());
@@ -1249,7 +1248,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const fallbackTexture = this.generateJupiterTexture();
     fallbackTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     
-    const jupiterGeometry = new THREE.SphereGeometry(10, 64, 64);
+    const jupiterGeometry = new THREE.SphereGeometry(10, 48, 48);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
       roughness: 0.65,
@@ -1296,7 +1295,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Create Earth for scale comparison (Slide 5)
     // Jupiter radius is 10. Earth radius is ~11.2 times smaller, so 10 / 11.2 = 0.89
-    const earthGeometry = new THREE.SphereGeometry(0.89, 64, 64);
+    const earthGeometry = new THREE.SphereGeometry(0.89, 48, 48);
     const earthMaterial = new THREE.MeshStandardMaterial({
       color: 0x2266cc, // Base blue if texture fails
       roughness: 0.8,
@@ -1400,7 +1399,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         }
       `,
       transparent: true,
-      side: THREE.BackSide,
+      side: THREE.FrontSide, // Enables Early-Z rejection
       depthWrite: false,
       blending: THREE.AdditiveBlending
     });
@@ -2010,12 +2009,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       vertexShader,
       fragmentShader,
       blending: THREE.AdditiveBlending,
-      side: THREE.BackSide,
+      side: THREE.FrontSide, // CRITICAL FOR CPU: Enables Early-Z rejection to prevent massive overdraw
       transparent: true,
       depthWrite: false
     });
 
-    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(10.3, 64, 64), atmosphereMaterial);
+    this.atmosphere = new THREE.Mesh(new THREE.SphereGeometry(10.3, 48, 48), atmosphereMaterial);
     this.jupiterGroup.add(this.atmosphere);
 
     // The 4 Galilean Moons — Kepler's 3rd law: T² ∝ a³, so ω ∝ a^(-3/2)
@@ -2758,7 +2757,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   /** Procedural fallback if the GLB fails to load */
   private createDeathStarFallback() {
-    const dsGeo = new THREE.SphereGeometry(4, 64, 64);
+    const dsGeo = new THREE.SphereGeometry(4, 48, 48);
     const dsMat = new THREE.MeshStandardMaterial({
       color: 0x888888, metalness: 0.8, roughness: 0.4,
       emissive: 0x0a0a0a, emissiveIntensity: 0.2,
@@ -3630,7 +3629,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.blackHoleGroup = new THREE.Group();
 
     // 1. Event Horizon — absolute black sphere, no light escapes
-    const horizonGeo = new THREE.SphereGeometry(6, 64, 64);
+    const horizonGeo = new THREE.SphereGeometry(6, 48, 48);
     const horizonMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
     const eventHorizon = new THREE.Mesh(horizonGeo, horizonMat);
     eventHorizon.renderOrder = -1;
@@ -3662,7 +3661,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.blackHoleGroup.add(photonRing);
 
     // 3. Gravitational Lensing shell — distorts background via refraction
-    const lensingGeo = new THREE.SphereGeometry(7.5, 64, 64);
+    const lensingGeo = new THREE.SphereGeometry(7.5, 48, 48);
     const lensingMat = new THREE.MeshPhysicalMaterial({
       transmission: 1, opacity: 1, ior: 2.33,
       roughness: 0, thickness: 12, side: THREE.BackSide,
@@ -5360,13 +5359,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.detachFalconFairing(this.falconFairingR, worldScale);
     }
 
+    // Fairings tumble outward dramatically
     if (this.falconFairingL.parent === this.scene) {
-      this.falconFairingL.position.x -= 0.012;
-      this.falconFairingL.position.y -= 0.006;
-      this.falconFairingL.rotateZ(0.06);
-      this.falconFairingR.position.x += 0.012;
-      this.falconFairingR.position.y -= 0.006;
-      this.falconFairingR.rotateZ(-0.06);
+      this.falconFairingL.position.x -= 0.018;
+      this.falconFairingL.position.y -= 0.004;
+      this.falconFairingL.rotateZ(0.08);
+      this.falconFairingL.rotateY(0.03);
+      this.falconFairingR.position.x += 0.018;
+      this.falconFairingR.position.y -= 0.004;
+      this.falconFairingR.rotateZ(-0.08);
+      this.falconFairingR.rotateY(-0.03);
     }
 
     if (this.falconFirstStage.parent === this.scene) {
@@ -5507,41 +5509,55 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private updateFirstStageReturn(t: number) {
-    // First stage: boostback burn → coast → entry → landing near Earth
+    // First stage: boostback → flip → coast → entry burn → hoverslam landing
     const returnT = Math.min(1, (t - 0.16) / 0.6);
     if (!this.earthMesh) return;
 
     const landingSpot = this.earthMesh.position.clone().add(new THREE.Vector3(0.6, 0.5, 0.6));
 
-    if (returnT < 0.2) {
-      // Boostback burn
+    if (returnT < 0.15) {
+      // Boostback burn — engines reignite, stage flips to face Earth
       this.falconExhaust.visible = true;
       const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
-      if (s1Light) s1Light.intensity = 3;
-      this.falconFirstStage.position.lerp(landingSpot, 0.008);
-      this.falconFirstStage.lookAt(landingSpot);
-    } else if (returnT < 0.55) {
-      // Coast — no engines
+      if (s1Light) s1Light.intensity = 4;
+      this.falconFirstStage.position.lerp(landingSpot, 0.006);
+      // Smoothly orient towards landing spot
+      const lookTarget = landingSpot.clone();
+      const dir = lookTarget.sub(this.falconFirstStage.position).normalize();
+      const targetQuat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, -1, 0), dir);
+      this.falconFirstStage.quaternion.slerp(targetQuat, 0.04);
+    } else if (returnT < 0.5) {
+      // Coast — engines off, ballistic arc
       this.falconExhaust.visible = false;
       const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
       if (s1Light) s1Light.intensity = 0;
-      this.falconFirstStage.position.lerp(landingSpot, 0.012);
-    } else if (returnT < 0.8) {
-      // Entry burn
+      this.falconFirstStage.position.lerp(landingSpot, 0.010);
+      // Grid fins steer — slight roll
+      this.falconFirstStage.rotateZ(0.003);
+    } else if (returnT < 0.75) {
+      // Entry burn — 3 engines relight to slow down in atmosphere
       this.falconExhaust.visible = true;
       const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
-      if (s1Light) s1Light.intensity = 2;
+      if (s1Light) s1Light.intensity = 3;
       this.falconFirstStage.position.lerp(landingSpot, 0.02);
       this.falconFirstStage.lookAt(landingSpot);
     } else {
-      // Landing burn — deploy legs
+      // Hoverslam / landing burn — single engine, legs deploy, precision landing
       this.falconExhaust.visible = true;
       const s1Light = this.falconExhaust.getObjectByName('exhaustLight') as THREE.PointLight;
-      if (s1Light) s1Light.intensity = (1 - returnT) * 10;
-      this.falconFirstStage.position.lerp(landingSpot, 0.04);
+      const landingProgress = (returnT - 0.75) / 0.25;
+      // Engine thrust tapers as it touches down
+      if (s1Light) s1Light.intensity = Math.max(0.5, (1 - landingProgress) * 8);
+      this.falconFirstStage.position.lerp(landingSpot, 0.05);
       this.falconFirstStage.lookAt(landingSpot);
-      const deployT = Math.min(1, (returnT - 0.8) / 0.15);
+      // Deploy landing legs progressively
+      const deployT = Math.min(1, (returnT - 0.75) / 0.10);
       this.falconLegs.forEach(leg => leg.rotation.x = deployT * 1.2);
+      // Kill exhaust right at touchdown
+      if (landingProgress > 0.95) {
+        this.falconExhaust.visible = false;
+        if (s1Light) s1Light.intensity = 0;
+      }
     }
   }
 
@@ -5571,7 +5587,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Saturn — visible in far background
     // Saturn equatorial radius: 60,268 km → 60268/71492 × 10 = 8.43 scene units
     this.saturnGroup = new THREE.Group();
-    const saturnGeo = new THREE.SphereGeometry(8.4, 64, 64);
+    const saturnGeo = new THREE.SphereGeometry(8.4, 48, 48);
     const saturnMat = new THREE.MeshStandardMaterial({
       color: 0xd4b06a, roughness: 0.5, metalness: 0.1
     });
@@ -5755,7 +5771,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.85, 0.55, 0.2), vec3(1.0, 0.75, 0.35), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.6);
         }`,
-      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.titanMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.58, 24, 24), titanAtmoMat));
 
@@ -5798,7 +5814,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.4, 0.55, 0.8), vec3(0.6, 0.75, 1.0), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.35);
         }`,
-      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.plutoMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.36, 20, 20), plutoAtmoMat));
   }
@@ -5842,7 +5858,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.9, 0.5, 0.25), vec3(1.0, 0.65, 0.35), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.3);
         }`,
-      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     const marsAtmo = new THREE.Mesh(new THREE.SphereGeometry(0.52, 24, 24), marsAtmoMat);
     this.marsMesh.add(marsAtmo);
@@ -5850,7 +5866,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createVenusSystem() {
     // Venus — inner solar system, near the Sun direction
-    const venusGeo = new THREE.SphereGeometry(0.846, 64, 64);
+    const venusGeo = new THREE.SphereGeometry(0.846, 48, 48);
     const venusMat = new THREE.MeshStandardMaterial({ color: 0xe8cda0, roughness: 0.7, metalness: 0.05 });
     this.venusMesh = new THREE.Mesh(venusGeo, venusMat);
     this.venusMesh.position.set(-42, 8, 25);
@@ -5881,14 +5897,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.95, 0.85, 0.6), vec3(1.0, 0.92, 0.7), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.2);
         }`,
-      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.venusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(0.9, 32, 32), venusAtmoMat));
   }
 
   private createMercurySystem() {
     // Mercury — smallest planet, closest to the Sun
-    const mercuryGeo = new THREE.SphereGeometry(0.341, 64, 64);
+    const mercuryGeo = new THREE.SphereGeometry(0.341, 48, 48);
     const mercuryMat = new THREE.MeshStandardMaterial({ color: 0xa0a0a0, roughness: 0.9, metalness: 0.15 });
     this.mercuryMesh = new THREE.Mesh(mercuryGeo, mercuryMat);
     this.mercuryMesh.position.set(-35, 5, 15);
@@ -5906,7 +5922,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createUranusSystem() {
     // Uranus — distant ice giant, opposite direction from Sun
     this.uranusGroup = new THREE.Group();
-    const uranusGeo = new THREE.SphereGeometry(3.575, 64, 64);
+    const uranusGeo = new THREE.SphereGeometry(3.575, 48, 48);
     const uranusMat = new THREE.MeshStandardMaterial({ color: 0x9dd8d8, roughness: 0.4, metalness: 0.05 });
     this.uranusMesh = new THREE.Mesh(uranusGeo, uranusMat);
     this.uranusGroup.add(this.uranusMesh);
@@ -5942,7 +5958,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.5, 0.85, 0.9), vec3(0.7, 0.95, 1.0), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.4);
         }`,
-      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.uranusMesh.add(new THREE.Mesh(new THREE.SphereGeometry(3.85, 32, 32), uranusAtmoMat));
   }
@@ -6013,7 +6029,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createNeptuneSystem() {
     // Neptune — farthest giant planet
     this.neptuneGroup = new THREE.Group();
-    const neptuneGeo = new THREE.SphereGeometry(3.464, 64, 64);
+    const neptuneGeo = new THREE.SphereGeometry(3.464, 48, 48);
     const neptuneMat = new THREE.MeshStandardMaterial({ color: 0x3366cc, roughness: 0.4, metalness: 0.05 });
     this.neptuneMesh = new THREE.Mesh(neptuneGeo, neptuneMat);
     this.neptuneGroup.add(this.neptuneMesh);
@@ -6043,7 +6059,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec3 col = mix(vec3(0.15, 0.3, 0.8), vec3(0.3, 0.5, 1.0), fresnel);
           gl_FragColor = vec4(col, fresnel * 0.5);
         }`,
-      transparent: true, side: THREE.BackSide, depthWrite: false, blending: THREE.AdditiveBlending
+      transparent: true, side: THREE.FrontSide, depthWrite: false, blending: THREE.AdditiveBlending
     });
     this.neptuneMesh.add(new THREE.Mesh(new THREE.SphereGeometry(3.75, 32, 32), neptuneAtmoMat));
     // Neptune ring system — faint ring arcs (Adams, Le Verrier, Galle)
@@ -6733,7 +6749,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const sunRadius = 6;
 
     // Photosphere — animated surface with limb darkening + granulation turbulence
-    const sunGeo = new THREE.SphereGeometry(sunRadius, 64, 64);
+    const sunGeo = new THREE.SphereGeometry(sunRadius, 48, 48);
     const sunMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },

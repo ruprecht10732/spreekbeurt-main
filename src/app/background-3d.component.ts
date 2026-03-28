@@ -151,6 +151,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private moonMesh!: THREE.Mesh;
   private moonOrbitAngle = 0;
   private tranquilityGroup!: THREE.Group; // Apollo 11 landing site artifacts
+  private moonLanderGroup!: THREE.Group;
+  private moonLanderLandingActive = false;
+  private moonLanderLandingStartTime = 0;
+  private moonLanderBaseY = 0;
   private lunarDust!: THREE.Points;
   private lunarDustVelocities!: Float32Array;
   private lunarDustLife!: Float32Array;
@@ -256,6 +260,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // JULIANASCHOOL star constellation after Pluto destruction
   private julianaStars!: THREE.Points;
+  private julianaLabelMesh!: THREE.Mesh;
 
   // ASBJØRN meteorite constellation (background easter egg)
   private asbjornMeteorRocks!: THREE.InstancedMesh;
@@ -490,8 +495,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.deathStarPlutoFlyTime = time;
     }
 
-    if (stopName === 'maan' && this.lunarDust && !this.lunarDustActive) {
-      this.activateLunarDust();
+    if (stopName === 'maan') {
+      if (this.lunarDust && !this.lunarDustActive) {
+        this.activateLunarDust();
+      }
+      if (this.moonLanderGroup) {
+        this.moonLanderGroup.position.y = this.moonLanderBaseY + 0.09;
+        this.moonLanderLandingActive = true;
+        this.moonLanderLandingStartTime = time;
+      }
     }
 
     // Columbia memorial — activate cinematic sequence
@@ -900,7 +912,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.0;
+    this.renderer.toneMappingExposure = 1.08;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -1540,6 +1552,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
       // ── Lunar Module — Enhanced Procedural ──────────────────────────
       const lmGroup = new THREE.Group();
+      this.moonLanderGroup = lmGroup;
+      this.moonLanderBaseY = 0;
 
       // Descent Stage — gold-foil octagonal body
       const goldFoilMat = new THREE.MeshStandardMaterial({
@@ -1640,6 +1654,42 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         rung.position.set(0.016, 0.003 + r * 0.003, 0);
         lmGroup.add(rung);
       }
+
+      // Replace procedural LM with downloaded moon-lander model when available.
+      const moonLanderLoader = new GLTFLoader();
+      this.loadPromises.push(new Promise<void>((resolve) => {
+        const onMoonLanderLoaded = (gltf: { scene: THREE.Group }) => {
+          const model = gltf.scene;
+          const box = new THREE.Box3().setFromObject(model);
+          const size = box.getSize(new THREE.Vector3());
+          const center = box.getCenter(new THREE.Vector3());
+          const maxDim = Math.max(size.x, size.y, size.z, 1e-3);
+          const scale = 0.08 / maxDim;
+          model.scale.setScalar(scale);
+          model.position.sub(center.multiplyScalar(scale));
+          model.position.y += 0.015;
+          model.traverse((child) => {
+            if ((child as THREE.Mesh).isMesh) {
+              const mesh = child as THREE.Mesh;
+              const mat = mesh.material as THREE.MeshStandardMaterial;
+              if (mat && mat.isMeshStandardMaterial) {
+                mat.roughness = Math.min(mat.roughness ?? 0.6, 0.75);
+                mat.metalness = Math.max(mat.metalness ?? 0.25, 0.25);
+                mat.needsUpdate = true;
+              }
+            }
+          });
+          lmGroup.clear();
+          lmGroup.add(model);
+          resolve();
+        };
+
+        const loadMoonLanderFallback = () => {
+          moonLanderLoader.load('moonlander_model.glb', onMoonLanderLoaded, undefined, () => resolve());
+        };
+
+        moonLanderLoader.load('/moonlander_model.glb', onMoonLanderLoaded, undefined, loadMoonLanderFallback);
+      }));
 
       this.tranquilityGroup.add(lmGroup);
 
@@ -2113,36 +2163,36 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Lighting — physically motivated but cinematic
     // Slightly warmer ambient picks up surface detail in shadow regions
-    const ambientLight = new THREE.AmbientLight(0x070714, 0.26);
+    const ambientLight = new THREE.AmbientLight(0x0c1122, 0.4);
     this.scene.add(ambientLight);
 
     // Main sun light — warm white (5778 K blackbody ≈ 0xfff5e0)
     // Positioned further away for more realistic parallel-ray feel
-    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 3.6);
+    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 4.15);
     this.sunLight.position.copy(this.sunPosition);
     this.scene.add(this.sunLight);
 
     // Point light at the Sun — natural inverse-square falloff; range increased for greater distance
-    const sunPointLight = new THREE.PointLight(0xffeedd, 16, 430, 1.5);
+    const sunPointLight = new THREE.PointLight(0xffeedd, 18, 500, 1.5);
     sunPointLight.position.copy(this.sunPosition);
     this.scene.add(sunPointLight);
 
     // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    const fillLight = new THREE.DirectionalLight(0x102244, 0.45);
+    const fillLight = new THREE.DirectionalLight(0x1b3760, 0.7);
     fillLight.position.set(100, -20, -65);
     this.scene.add(fillLight);
 
     // Subtle overhead hemisphere fill for readability
-    const hemiLight = new THREE.HemisphereLight(0x0a0f1e, 0x000000, 0.2);
+    const hemiLight = new THREE.HemisphereLight(0x101a33, 0x010103, 0.34);
     this.scene.add(hemiLight);
 
     // Warm rim/back light — adds depth by outlining dark-side edges
-    const rimLight = new THREE.DirectionalLight(0xffd6a8, 0.2);
+    const rimLight = new THREE.DirectionalLight(0xffd6a8, 0.32);
     rimLight.position.set(40, -20, -60);
     this.scene.add(rimLight);
 
     // Earthshine — faint blue fill from Earth's reflected light onto the Moon
-    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.06);
+    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.1);
     this.earthshineLight.position.set(10, 5, -5);
     this.scene.add(this.earthshineLight);
     this.scene.add(this.earthshineLight.target);
@@ -2948,7 +2998,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     const starMat = this.julianaStars.material as THREE.ShaderMaterial;
-    starMat.uniforms['uOpacity'].value = Math.min(1, (expTime - 3.0) * 1.05);
+    const opacity = Math.min(1, (expTime - 2.4) * 1.4);
+    starMat.uniforms['uOpacity'].value = opacity;
+    if (this.julianaLabelMesh) {
+      const mat = this.julianaLabelMesh.material as THREE.MeshBasicMaterial;
+      mat.opacity = opacity;
+      this.julianaLabelMesh.lookAt(this.camera.position);
+    }
   }
 
   private updatePeriodicSuperlaser(time: number) {
@@ -3114,6 +3170,37 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoMesh.position.z + 8,
     );
     this.scene.add(this.julianaStars);
+
+    // High-contrast text billboard so the word stays readable from distance.
+    const labelCanvas = document.createElement('canvas');
+    labelCanvas.width = 2048;
+    labelCanvas.height = 512;
+    const labelCtx = labelCanvas.getContext('2d')!;
+    labelCtx.clearRect(0, 0, labelCanvas.width, labelCanvas.height);
+    labelCtx.font = '900 248px "Pathway Gothic One", Arial, sans-serif';
+    labelCtx.textAlign = 'center';
+    labelCtx.textBaseline = 'middle';
+    labelCtx.lineWidth = 28;
+    labelCtx.strokeStyle = 'rgba(8, 12, 24, 0.95)';
+    labelCtx.fillStyle = 'rgba(255, 242, 166, 0.98)';
+    labelCtx.strokeText('JULIANASCHOOL', labelCanvas.width / 2, labelCanvas.height / 2);
+    labelCtx.fillText('JULIANASCHOOL', labelCanvas.width / 2, labelCanvas.height / 2);
+    const labelTexture = new THREE.CanvasTexture(labelCanvas);
+    labelTexture.generateMipmaps = false;
+    labelTexture.minFilter = THREE.LinearFilter;
+    labelTexture.magFilter = THREE.LinearFilter;
+    const labelMat = new THREE.MeshBasicMaterial({
+      map: labelTexture,
+      transparent: true,
+      opacity: 0,
+      depthWrite: false,
+      depthTest: false,
+      blending: THREE.NormalBlending,
+    });
+    this.julianaLabelMesh = new THREE.Mesh(new THREE.PlaneGeometry(40, 10), labelMat);
+    this.julianaLabelMesh.position.copy(this.plutoMesh.position).add(new THREE.Vector3(0, 4.8, 0));
+    this.julianaLabelMesh.renderOrder = 12;
+    this.scene.add(this.julianaLabelMesh);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -3510,20 +3597,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         resolve();
       };
 
-      const loadFallback = () => {
-        loader.load('space_shuttle_columbia.glb', onModelLoaded, undefined, () => {
-          // Fallback: simple recognizable shuttle shape if GLB fails
-          const fb = new THREE.Mesh(
-            new THREE.ConeGeometry(0.5, 4, 8),
-            new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }),
-          );
-          fb.rotation.z = -Math.PI / 2;
-          this.columbiaShuttleMesh.add(fb);
-          resolve();
+      const loadClassicShuttleFallback = () => {
+        loader.load('/space_shuttle_columbia.glb', onModelLoaded, undefined, () => {
+          loader.load('space_shuttle_columbia.glb', onModelLoaded, undefined, () => {
+            // Fallback: simple recognizable shuttle shape if GLB fails
+            const fb = new THREE.Mesh(
+              new THREE.ConeGeometry(0.5, 4, 8),
+              new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }),
+            );
+            fb.rotation.z = -Math.PI / 2;
+            this.columbiaShuttleMesh.add(fb);
+            resolve();
+          });
         });
       };
 
-      loader.load('/space_shuttle_columbia.glb', onModelLoaded, undefined, loadFallback);
+      // Prefer alternate model first, then classic shuttle.
+      loader.load('/columbia_alt_model.glb', onModelLoaded, undefined, () => {
+        loader.load('columbia_alt_model.glb', onModelLoaded, undefined, loadClassicShuttleFallback);
+      });
     }));
 
     this.columbiaShuttleMesh.scale.setScalar(0.8);
@@ -7668,7 +7760,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     this.updateAnimationContext();
     this.updateSceneCameraAndTour(time);
-    this.updateEarthMoonAndTitan();
+    this.updateEarthMoonAndTitan(time);
     this.updateDistanceBeam(time);
     this.updateImmersiveSceneEffects(deltaTime, time);
     this.updateSecondaryBodyAnimation(time);
@@ -7695,7 +7787,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateJupiterRotation();
   }
 
-  private updateEarthMoonAndTitan() {
+  private updateEarthMoonAndTitan(time: number) {
     if (this.earthMesh?.visible) {
       this.earthMesh.rotation.y += 0.005;
       if (this.earthOrbitActive) {
@@ -7704,7 +7796,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.physicsManager.setKinematicTarget(this.earthMesh, this.earthMesh.position, this.earthMesh.quaternion);
     }
 
-    this.updateMoonState();
+    this.updateMoonState(time);
 
     if (this.titanMesh && this.saturnGroup) {
       this.titanOrbitAngle += 0.003;
@@ -7723,7 +7815,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
   }
 
-  private updateMoonState() {
+  private updateMoonState(time: number) {
     if (!this.moonMesh) {
       return;
     }
@@ -7751,7 +7843,30 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.earthshineLight.target.updateMatrixWorld();
     }
 
+    this.updateMoonLanderLanding(time);
     this.updateLunarDust();
+  }
+
+  private updateMoonLanderLanding(time: number) {
+    if (!this.moonLanderGroup) {
+      return;
+    }
+
+    if (this.moonLanderLandingActive) {
+      const progress = Math.min(Math.max((time - this.moonLanderLandingStartTime) / 3.2, 0), 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const bobble = (1 - progress) * 0.005 * Math.sin(time * 18);
+      this.moonLanderGroup.position.y = this.moonLanderBaseY + (1 - eased) * 0.09 + bobble;
+      if (progress >= 1) {
+        this.moonLanderLandingActive = false;
+        this.moonLanderGroup.position.y = this.moonLanderBaseY;
+      }
+      return;
+    }
+
+    if (this.activeCameraAnchorKey !== 'maan') {
+      this.moonLanderGroup.position.y = this.moonLanderBaseY;
+    }
   }
 
   private updateLunarDust() {
@@ -7887,6 +8002,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private updateColumbiaSequence(deltaTime: number) {
     if (!this.columbiaSequenceActive || !this.columbiaGroup) return;
+
+    // Keep Columbia crash sequence anchored near Earth.
+    if (this.earthMesh) {
+      this.columbiaGroup.position.set(
+        this.earthMesh.position.x + 1.8,
+        this.earthMesh.position.y + 1.1,
+        this.earthMesh.position.z + 1.2,
+      );
+    }
 
     this.columbiaSequenceTime += deltaTime;
     const t = this.columbiaSequenceTime;

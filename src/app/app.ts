@@ -547,6 +547,7 @@ export class App implements AfterViewInit, OnDestroy {
   private videoRevealTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly bgMusicVolumeTween: ReturnType<typeof setInterval> | null = null;
   private bgMusicVolumeRafId: number | null = null;
+  private bgAudioKickoffTimer: ReturnType<typeof setInterval> | null = null;
   private readonly isBrowser: boolean;
   private readonly platformId = inject(PLATFORM_ID);
   private audioCtx: AudioContext | null = null;
@@ -639,6 +640,7 @@ export class App implements AfterViewInit, OnDestroy {
   ngOnDestroy() {
     if (this.bgMusicVolumeTween) clearInterval(this.bgMusicVolumeTween);
     if (this.bgMusicVolumeRafId) cancelAnimationFrame(this.bgMusicVolumeRafId);
+    if (this.bgAudioKickoffTimer) clearInterval(this.bgAudioKickoffTimer);
     if (this.videoRevealTimer) clearTimeout(this.videoRevealTimer);
     if (this.tourTimer) clearTimeout(this.tourTimer);
     this.clearMoonAudioTimers();
@@ -792,17 +794,49 @@ export class App implements AfterViewInit, OnDestroy {
   private startBgAudio() {
     const audio = this.bgAudio?.nativeElement;
     if (!audio) return;
+    if (this.bgAudioKickoffTimer) {
+      clearInterval(this.bgAudioKickoffTimer);
+      this.bgAudioKickoffTimer = null;
+    }
+    audio.load();
     audio.volume = 0.3;
+    audio.currentTime = Math.max(0, audio.currentTime || 0);
+    const tryPlay = () => {
+      if (!audio.paused) {
+        if (this.bgAudioKickoffTimer) {
+          clearInterval(this.bgAudioKickoffTimer);
+          this.bgAudioKickoffTimer = null;
+        }
+        return;
+      }
+      audio.play().catch(() => {});
+    };
     audio.play().catch(() => {
       // Autoplay blocked — start on first user interaction
       const resume = () => {
-        audio.play().catch(() => {});
+        tryPlay();
         document.removeEventListener('click', resume);
+        document.removeEventListener('pointerdown', resume);
+        document.removeEventListener('touchstart', resume);
         document.removeEventListener('keydown', resume);
       };
       document.addEventListener('click', resume, { once: true });
+      document.addEventListener('pointerdown', resume, { once: true });
+      document.addEventListener('touchstart', resume, { once: true });
       document.addEventListener('keydown', resume, { once: true });
     });
+
+    // Keep trying briefly until the browser allows playback.
+    this.bgAudioKickoffTimer = setInterval(() => {
+      if (!audio.paused) {
+        if (this.bgAudioKickoffTimer) {
+          clearInterval(this.bgAudioKickoffTimer);
+          this.bgAudioKickoffTimer = null;
+        }
+        return;
+      }
+      tryPlay();
+    }, 1200);
   }
 
   async animateSlideOut(dir: number) {

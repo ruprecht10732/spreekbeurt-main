@@ -3,6 +3,7 @@ import { isPlatformBrowser } from '@angular/common';
 import * as THREE from 'three';
 import { getProject, type ISheetObject } from '@theatre/core';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { PhysicsManager } from './physics-manager';
 import { PostProcessManager } from './post-process-manager';
@@ -102,6 +103,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private currentAtmospherePulse = 0;
   private targetJupiterSpinSpeed = 0.0005;
   private currentJupiterSpinSpeed = 0.0005;
+  private dracoLoader: DRACOLoader | null = null;
 
   // Cinematic camera drift — slow creeping motion within each slide
   private cameraDriftX = 0;
@@ -161,6 +163,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private lunarDustActive = false;
   private lunarDustTimer = 0;
   private earthshineLight!: THREE.DirectionalLight;
+  private nasaEarthOrbiters!: THREE.Group;
+  private issModelGroup!: THREE.Group;
+  private hubbleModelGroup!: THREE.Group;
+  private jwstModelGroup!: THREE.Group;
+  private marsSurfaceGroup!: THREE.Group;
+  private perseveranceModelGroup!: THREE.Group;
+  private ingenuityModelGroup!: THREE.Group;
+  private junoProbeGroup!: THREE.Group;
 
   // Titan — Saturn's largest moon
   private titanMesh!: THREE.Mesh;
@@ -414,6 +424,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     if (this.moonMesh) {
       this.tourStops.push({ name: 'maan' });
     }
+    if (this.columbiaGroup) {
+      this.tourStops.push({ name: 'columbia' });
+    }
     if (this.starmanGroup) {
       this.tourStops.push({ name: 'starman' });
     }
@@ -431,9 +444,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     if (this.blackHoleGroup) {
       this.tourStops.push({ name: 'blackhole' });
-    }
-    if (this.columbiaGroup) {
-      this.tourStops.push({ name: 'columbia' });
     }
     this.tourStops.push({ name: 'jupiter-einde' });
 
@@ -671,7 +681,240 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.userInteractionTimeout) {
         clearTimeout(this.userInteractionTimeout);
       }
+      this.dracoLoader?.dispose();
+      this.dracoLoader = null;
     }
+  }
+
+  private getConfiguredDracoLoader() {
+    if (!this.dracoLoader) {
+      this.dracoLoader = new DRACOLoader();
+      this.dracoLoader.setDecoderConfig({ type: 'js' });
+      this.dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.7/');
+    }
+
+    return this.dracoLoader;
+  }
+
+  private createConfiguredGltfLoader() {
+    const loader = new GLTFLoader();
+
+    if (this.isBrowser) {
+      loader.setDRACOLoader(this.getConfiguredDracoLoader());
+    }
+
+    return loader;
+  }
+
+  private loadDecorativeModel(options: {
+    primaryPath: string;
+    fallbackPath?: string;
+    targetGroup: THREE.Group;
+    desiredSize: number;
+    onReady?: (model: THREE.Group) => void;
+    onFailure?: () => void;
+  }) {
+    const loader = this.createConfiguredGltfLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      const applyModel = (gltf: { scene: THREE.Group }) => {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z, 1e-3);
+        const scale = options.desiredSize / maxDim;
+        const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+
+        model.scale.setScalar(scale);
+        model.position.sub(center);
+        model.traverse((child) => {
+          if (!(child as THREE.Mesh).isMesh) {
+            return;
+          }
+
+          const mesh = child as THREE.Mesh;
+          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          materials.forEach((material) => {
+            const mat = material as THREE.MeshStandardMaterial;
+            if (!mat.isMeshStandardMaterial) {
+              return;
+            }
+
+            mat.emissive = mat.emissive ?? new THREE.Color(0x000000);
+            mat.emissive.copy(mat.color).multiplyScalar(0.04);
+            mat.emissiveIntensity = Math.max(mat.emissiveIntensity ?? 0, 0.04);
+            mat.roughness = Math.min(mat.roughness ?? 0.7, 0.82);
+            mat.metalness = Math.max(mat.metalness ?? 0.08, 0.08);
+            mat.needsUpdate = true;
+          });
+        });
+
+        options.targetGroup.add(model);
+        options.onReady?.(model);
+        resolve();
+      };
+
+      const handleFailure = () => {
+        options.onFailure?.();
+        resolve();
+      };
+
+      const loadFallback = () => {
+        if (!options.fallbackPath) {
+          handleFailure();
+          return;
+        }
+
+        loader.load(options.fallbackPath, applyModel, undefined, handleFailure);
+      };
+
+      loader.load(options.primaryPath, applyModel, undefined, loadFallback);
+    }));
+  }
+
+  private createNasaMissionModels() {
+    this.createNasaEarthOrbiters();
+    this.createNasaMarsMissions();
+    this.createNasaJunoProbe();
+  }
+
+  private createNasaEarthOrbiters() {
+    this.nasaEarthOrbiters = new THREE.Group();
+    this.nasaEarthOrbiters.visible = false;
+    this.scene.add(this.nasaEarthOrbiters);
+
+    this.issModelGroup = new THREE.Group();
+    this.hubbleModelGroup = new THREE.Group();
+    this.jwstModelGroup = new THREE.Group();
+    this.nasaEarthOrbiters.add(this.issModelGroup, this.hubbleModelGroup, this.jwstModelGroup);
+
+    this.loadDecorativeModel({
+      primaryPath: '/nasa/nasa_iss_a.glb',
+      fallbackPath: 'nasa/nasa_iss_a.glb',
+      targetGroup: this.issModelGroup,
+      desiredSize: 0.42,
+      onReady: (model) => model.rotation.set(0.2, Math.PI * 0.1, -0.3),
+    });
+
+    this.loadDecorativeModel({
+      primaryPath: '/nasa/nasa_hubble_a.glb',
+      fallbackPath: 'nasa/nasa_hubble_a.glb',
+      targetGroup: this.hubbleModelGroup,
+      desiredSize: 0.22,
+      onReady: (model) => model.rotation.set(0.5, Math.PI * 0.45, 0.2),
+    });
+
+    this.loadDecorativeModel({
+      primaryPath: '/nasa/nasa_jwst_b.glb',
+      fallbackPath: 'nasa/nasa_jwst_b.glb',
+      targetGroup: this.jwstModelGroup,
+      desiredSize: 0.3,
+      onReady: (model) => model.rotation.set(0.2, -Math.PI * 0.15, 0.05),
+    });
+  }
+
+  private createNasaMarsMissions() {
+    this.marsSurfaceGroup = new THREE.Group();
+    this.marsSurfaceGroup.position.set(0.14, 0.39, 0.16);
+    this.marsSurfaceGroup.lookAt(0, 0, 0);
+    this.marsSurfaceGroup.rotateX(-Math.PI / 2);
+    this.marsSurfaceGroup.rotateZ(0.35);
+    this.marsMesh.add(this.marsSurfaceGroup);
+
+    this.perseveranceModelGroup = new THREE.Group();
+    this.perseveranceModelGroup.position.set(0, 0.01, 0);
+    this.marsSurfaceGroup.add(this.perseveranceModelGroup);
+    this.loadDecorativeModel({
+      primaryPath: '/nasa/nasa_mars_perseverance_rover.glb',
+      fallbackPath: 'nasa/nasa_mars_perseverance_rover.glb',
+      targetGroup: this.perseveranceModelGroup,
+      desiredSize: 0.18,
+      onReady: (model) => model.rotation.set(0, Math.PI * 0.35, 0),
+    });
+
+    this.ingenuityModelGroup = new THREE.Group();
+    this.ingenuityModelGroup.position.set(0.12, 0.055, -0.04);
+    this.marsSurfaceGroup.add(this.ingenuityModelGroup);
+    this.loadDecorativeModel({
+      primaryPath: '/nasa/nasa_ingenuity.glb',
+      fallbackPath: 'nasa/nasa_ingenuity.glb',
+      targetGroup: this.ingenuityModelGroup,
+      desiredSize: 0.08,
+      onReady: (model) => model.rotation.set(0, -Math.PI * 0.25, 0),
+    });
+  }
+
+  private createNasaJunoProbe() {
+    this.junoProbeGroup = new THREE.Group();
+    this.junoProbeGroup.visible = true;
+    this.jupiterGroup.add(this.junoProbeGroup);
+    this.loadDecorativeModel({
+      primaryPath: '/nasa/nasa_juno_a.glb',
+      fallbackPath: 'nasa/nasa_juno_a.glb',
+      targetGroup: this.junoProbeGroup,
+      desiredSize: 1.35,
+      onReady: (model) => model.rotation.set(0.1, 0.4, 0.2),
+    });
+  }
+
+  private buildColumbiaFallbackShuttle() {
+    const shuttle = new THREE.Group();
+    const whiteMaterial = new THREE.MeshStandardMaterial({ color: 0xf1f3f8, roughness: 0.42, metalness: 0.08 });
+    const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x171b24, roughness: 0.7, metalness: 0.02 });
+
+    const fuselage = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.42, 3.6, 18), whiteMaterial);
+    fuselage.rotation.z = Math.PI / 2;
+    shuttle.add(fuselage);
+
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 18), whiteMaterial);
+    nose.position.x = 2.15;
+    nose.rotation.z = -Math.PI / 2;
+    shuttle.add(nose);
+
+    const deltaWingShape = new THREE.Shape();
+    deltaWingShape.moveTo(-1.1, 0);
+    deltaWingShape.lineTo(0.15, 1.15);
+    deltaWingShape.lineTo(1.2, 0.35);
+    deltaWingShape.lineTo(0.55, 0);
+    deltaWingShape.closePath();
+    const wingGeometry = new THREE.ExtrudeGeometry(deltaWingShape, { depth: 0.04, bevelEnabled: false });
+
+    const topWing = new THREE.Mesh(wingGeometry, whiteMaterial);
+    topWing.rotation.x = Math.PI / 2;
+    topWing.rotation.z = Math.PI;
+    topWing.position.set(0.15, -0.02, -0.02);
+    shuttle.add(topWing);
+
+    const bottomWing = new THREE.Mesh(wingGeometry, whiteMaterial);
+    bottomWing.rotation.x = -Math.PI / 2;
+    bottomWing.rotation.z = Math.PI;
+    bottomWing.position.set(0.15, 0.02, 0.02);
+    shuttle.add(bottomWing);
+
+    const verticalTail = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.08, 0.8), whiteMaterial);
+    verticalTail.rotation.z = Math.PI / 2;
+    verticalTail.position.set(-1.28, 0.42, 0);
+    shuttle.add(verticalTail);
+
+    const leftEngine = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.11, 0.5, 12), darkMaterial);
+    leftEngine.rotation.z = Math.PI / 2;
+    leftEngine.position.set(-1.95, -0.12, 0.18);
+    shuttle.add(leftEngine);
+
+    const centerEngine = leftEngine.clone();
+    centerEngine.position.set(-2, 0, 0);
+    shuttle.add(centerEngine);
+
+    const rightEngine = leftEngine.clone();
+    rightEngine.position.set(-1.95, 0.12, -0.18);
+    shuttle.add(rightEngine);
+
+    const cockpit = new THREE.Mesh(new THREE.BoxGeometry(0.56, 0.18, 0.36), darkMaterial);
+    cockpit.position.set(1.1, 0.14, 0);
+    shuttle.add(cockpit);
+
+    shuttle.rotation.set(0.18, -0.95, -0.22);
+    shuttle.scale.setScalar(1.15);
+    return shuttle;
   }
 
   private onMouseMove(event: MouseEvent) {
@@ -1655,7 +1898,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }
 
       // Replace procedural LM with downloaded moon-lander model when available.
-      const moonLanderLoader = new GLTFLoader();
+      const moonLanderLoader = this.createConfiguredGltfLoader();
       this.loadPromises.push(new Promise<void>((resolve) => {
         const onMoonLanderLoaded = (gltf: { scene: THREE.Group }) => {
           const model = gltf.scene;
@@ -1683,11 +1926,19 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           resolve();
         };
 
-        const loadMoonLanderFallback = () => {
-          moonLanderLoader.load('moonlander_model.glb', onMoonLanderLoaded, undefined, () => resolve());
+        const loadLocalMoonLander = () => {
+          moonLanderLoader.load('/moonlander_model.glb', onMoonLanderLoaded, undefined, () => {
+            moonLanderLoader.load('moonlander_model.glb', onMoonLanderLoaded, undefined, () => resolve());
+          });
         };
 
-        moonLanderLoader.load('/moonlander_model.glb', onMoonLanderLoaded, undefined, loadMoonLanderFallback);
+        const loadMoonLanderFallback = () => {
+          moonLanderLoader.load('/nasa/nasa_apollo_lunar_module.glb', onMoonLanderLoaded, undefined, () => {
+            moonLanderLoader.load('nasa/nasa_apollo_lunar_module.glb', onMoonLanderLoaded, undefined, loadLocalMoonLander);
+          });
+        };
+
+        loadMoonLanderFallback();
       }));
 
       this.tranquilityGroup.add(lmGroup);
@@ -2248,6 +2499,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Solar system planets: Saturn, Mars
     this.createSolarSystemPlanets();
+    this.createNasaMissionModels();
 
     // SpaceX Falcon 9 rocket (launches from Earth during tour)
     this.falconGroup = this.buildFalcon9();
@@ -2992,13 +3244,19 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private updateJulianaConstellation(expTime: number) {
-    if (expTime <= 3.0 || !this.julianaStars) {
+    if (expTime <= 2.2 || !this.julianaStars) {
       return;
     }
 
     const starMat = this.julianaStars.material as THREE.ShaderMaterial;
-    const opacity = Math.min(1, (expTime - 2.4) * 1.4);
-    starMat.uniforms['uOpacity'].value = opacity;
+    const reveal = Math.min(1, (expTime - 2.2) * 0.9);
+    const towardCamera = this.camera.position.clone().sub(this.plutoMesh.position).normalize();
+    this.julianaStars.position.copy(this.plutoMesh.position);
+    this.julianaStars.position.y += 4.6 + Math.sin(expTime * 0.8) * 0.12;
+    this.julianaStars.position.addScaledVector(towardCamera, 1.4 + reveal * 2.2);
+    this.julianaStars.scale.setScalar(0.9 + reveal * 0.9);
+    this.julianaStars.lookAt(this.camera.position);
+    starMat.uniforms['uOpacity'].value = reveal;
   }
 
   private updatePeriodicSuperlaser(time: number) {
@@ -3090,16 +3348,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // 4. "JULIANASCHOOL" Constellation (Canvas to Particles)
     const canvas = document.createElement('canvas');
-    canvas.width = 2048; canvas.height = 512;
+    canvas.width = 2560; canvas.height = 640;
     const ctx = canvas.getContext('2d')!;
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'white';
-    ctx.font = '900 220px "Pathway Gothic One", Arial, sans-serif';
+    ctx.font = '900 280px "Pathway Gothic One", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.lineWidth = 18;
+    ctx.lineJoin = 'round';
+    ctx.lineWidth = 34;
     ctx.strokeStyle = 'white';
+    ctx.strokeText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
     ctx.strokeText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
     ctx.fillText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
 
@@ -3111,15 +3371,15 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     for (let y = 0; y < canvas.height; y += 2) {
       for (let x = 0; x < canvas.width; x += 2) {
         const idx = (y * canvas.width + x) * 4;
-        if (imgData[idx] > 32) {
-          const px = (x - canvas.width / 2) * 0.007;
-          const py = -(y - canvas.height / 2) * 0.007;
-          const pz = (Math.random() - 0.5) * 0.2;
+        if (imgData[idx] > 16) {
+          const px = (x - canvas.width / 2) * 0.009;
+          const py = -(y - canvas.height / 2) * 0.009;
+          const pz = (Math.random() - 0.5) * 0.12;
           starPositions.push(px, py, pz);
-          const isGold = Math.random() > 0.4;
-          const color = new THREE.Color(isGold ? 0xffe81f : 0xaaccff);
+          const warmMix = 0.72 + Math.random() * 0.28;
+          const color = new THREE.Color(1, 0.9 * warmMix, 0.45 + Math.random() * 0.25);
           starColors.push(color.r, color.g, color.b);
-          starSizes.push(Math.random() * 4.2 + 4.2);
+          starSizes.push(Math.random() * 3.6 + 5.4);
         }
       }
     }
@@ -3138,7 +3398,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * (220.0 / -mvPosition.z);
+          gl_PointSize = aSize * (280.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -3148,10 +3408,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           float d = length(gl_PointCoord - vec2(0.5));
           if (d > 0.5) discard;
-          float core = exp(-d * 9.0);
-          float glow = exp(-d * 4.2);
-          vec3 color = mix(vColor, vec3(1.0), core * 0.35);
-          gl_FragColor = vec4(color, (core * 0.75 + glow * 0.5) * min(1.0, uOpacity * 1.2));
+          float core = exp(-d * 11.5);
+          float glow = exp(-d * 5.1);
+          vec3 color = mix(vColor, vec3(1.0, 0.98, 0.92), core * 0.45);
+          gl_FragColor = vec4(color, (core * 0.95 + glow * 0.7) * min(1.0, uOpacity * 1.25));
         }
       `,
       transparent: true,
@@ -3160,8 +3420,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     this.julianaStars = new THREE.Points(starGeo, starMat);
+    this.julianaStars.frustumCulled = false;
+    this.julianaStars.renderOrder = 20;
     this.julianaStars.position.copy(this.plutoMesh.position);
-    this.julianaStars.position.y += 3;
+    this.julianaStars.position.y += 4.6;
+    this.julianaStars.scale.setScalar(1.15);
     // Face toward the camera approach direction (pluto tour offset is roughly +x,+y,+z)
     this.julianaStars.lookAt(
       this.plutoMesh.position.x + 8,
@@ -3535,7 +3798,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // ─── Space Shuttle Orbiter — NASA GLB model ────────────────────────
     this.columbiaShuttleMesh = new THREE.Group();
-    const loader = new GLTFLoader();
+    const loader = this.createConfiguredGltfLoader();
     this.loadPromises.push(new Promise<void>((resolve) => {
       const onModelLoaded = (gltf: { scene: THREE.Group }) => {
         const model = gltf.scene;
@@ -3543,10 +3806,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         const box = new THREE.Box3().setFromObject(model);
         const size = box.getSize(new THREE.Vector3());
         const maxDim = Math.max(size.x, size.y, size.z);
-        const scale = 4 / maxDim;
+        const scale = 5.6 / maxDim;
         model.scale.setScalar(scale);
         const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
         model.position.sub(center);
+        model.rotation.set(0.2, -0.95, -0.24);
 
         // Boost visibility so the shuttle reads against dark space
         model.traverse((child) => {
@@ -3565,28 +3829,24 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         resolve();
       };
 
-      const loadClassicShuttleFallback = () => {
+      const loadProjectShuttleFallback = () => {
         loader.load('/space_shuttle_columbia.glb', onModelLoaded, undefined, () => {
           loader.load('space_shuttle_columbia.glb', onModelLoaded, undefined, () => {
-            // Fallback: simple recognizable shuttle shape if GLB fails
-            const fb = new THREE.Mesh(
-              new THREE.ConeGeometry(0.5, 4, 8),
-              new THREE.MeshStandardMaterial({ color: 0xf0f0f0, roughness: 0.4 }),
-            );
-            fb.rotation.z = -Math.PI / 2;
+            // Fallback: keep a shuttle silhouette instead of a generic cone.
+            const fb = this.buildColumbiaFallbackShuttle();
             this.columbiaShuttleMesh.add(fb);
             resolve();
           });
         });
       };
 
-      // Prefer alternate model first, then classic shuttle.
-      loader.load('/columbia_alt_model.glb', onModelLoaded, undefined, () => {
-        loader.load('columbia_alt_model.glb', onModelLoaded, undefined, loadClassicShuttleFallback);
+      // Prefer NASA's shuttle orbiter model for Columbia, then fall back to project-local shuttle assets.
+      loader.load('/nasa/nasa_space_shuttle_d.glb', onModelLoaded, undefined, () => {
+        loader.load('nasa/nasa_space_shuttle_d.glb', onModelLoaded, undefined, loadProjectShuttleFallback);
       });
     }));
 
-    this.columbiaShuttleMesh.scale.setScalar(0.8);
+    this.columbiaShuttleMesh.scale.setScalar(1.05);
     this.columbiaGroup.add(this.columbiaShuttleMesh);
 
     // ─── Re-entry plasma trail ──────────────────────────────────────────
@@ -3724,7 +3984,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Position near Earth — Columbia broke up during re-entry over Earth
     // Earth is at (-8, 2, -5); keep Columbia close so both fit in frame.
-    this.columbiaGroup.position.set(-6.2, 3.1, -3.8);
+    this.columbiaGroup.position.set(-6.9, 2.7, -4.15);
     this.columbiaGroup.visible = false;
 
     // Dedicated lighting so the shuttle is visible against Earth's glow
@@ -5449,12 +5709,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private handleFalconLaunchAndSeparation(t: number, s1Light: THREE.PointLight | null, s2Light: THREE.PointLight | null) {
     if (t < 0.14) {
-      const thrust = 2;
+      const thrust = 2.8;
       const phase = t < 0.06 ? 'LIFTOFF' : 'MAX-Q';
       this.falconGroup.lookAt(this.getFalconFlightTarget(Math.min(t + 0.05, 1)));
       this.falconExhaust.visible = true;
       this.falconSecondExhaust.visible = false;
-      if (s1Light) s1Light.intensity = thrust * 3;
+      if (s1Light) s1Light.intensity = thrust * 4.6;
       this.falconLegs.forEach(leg => leg.rotation.x = 0);
       return { thrust, phase };
     }
@@ -5471,9 +5731,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     if (t < 0.2) {
-      const thrust = 1.2;
+      const thrust = 1.6;
       this.falconSecondExhaust.visible = true;
-      if (s2Light) s2Light.intensity = 3;
+      if (s2Light) s2Light.intensity = 4.8;
       this.falconGroup.lookAt(this.getFalconFlightTarget(Math.min(t + 0.05, 1)));
       if (this.falconFirstStage.parent === this.scene) {
         // Continue the flip — first stage rotates 180° for boostback
@@ -5485,7 +5745,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       return { thrust, phase: 'MVAC IGN' };
     }
 
-    const thrust = 1.2;
+    const thrust = 1.4;
     this.handleFalconFairingSeparation(s1Light, s2Light, t);
     return { thrust, phase: 'FAIRING SEP' };
   }
@@ -5506,7 +5766,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.scene.add(this.falconFirstStage);
 
       // Cold gas thruster flash at the interstage — brief bright puff
-      const flashLight = new THREE.PointLight(0xffffff, 8, 2, 2);
+      const flashLight = new THREE.PointLight(0xffffff, 14, 2.8, 2);
       flashLight.position.copy(worldPos);
       this.scene.add(flashLight);
       // Fade out the flash over 400ms
@@ -5518,7 +5778,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           flashLight.dispose();
           return;
         }
-        flashLight.intensity = 8 * (1 - elapsed / 400);
+          flashLight.intensity = 14 * (1 - elapsed / 400);
         requestAnimationFrame(fadeFlash);
       };
       requestAnimationFrame(fadeFlash);
@@ -5611,27 +5871,31 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private updateFalconExhaustScale(t: number, thrust: number) {
     const time = (Date.now() - this.startTime) * 0.001;
     if (this.falconExhaust.visible) {
-      const s1Thrust = t < 0.14 ? thrust : 1;
+      const s1Thrust = t < 0.14 ? thrust * 1.25 : 1.2;
       // Smooth sine-based flicker instead of Math.random() which causes per-frame jitter
-      const s1Flicker = 1 + Math.sin(time * 25) * 0.08 + Math.sin(time * 37) * 0.05;
-      this.falconExhaust.scale.set(s1Thrust, s1Thrust * s1Flicker, s1Thrust);
+      const s1Flicker = 1 + Math.sin(time * 25) * 0.1 + Math.sin(time * 37) * 0.08;
+      this.falconExhaust.scale.set(s1Thrust * 1.05, s1Thrust * 1.55 * s1Flicker, s1Thrust * 1.05);
     }
 
     if (this.falconSecondExhaust.visible) {
       const s2Thrust = Math.max(0.3, thrust);
-      const s2Flicker = 1 + Math.sin(time * 30) * 0.06 + Math.sin(time * 43) * 0.04;
-      this.falconSecondExhaust.scale.set(s2Thrust * 0.6, s2Thrust * 0.6 * s2Flicker, s2Thrust * 0.6);
+      const s2Flicker = 1 + Math.sin(time * 30) * 0.08 + Math.sin(time * 43) * 0.05;
+      this.falconSecondExhaust.scale.set(s2Thrust * 0.8, s2Thrust * 0.95 * s2Flicker, s2Thrust * 0.8);
     }
+
+    const bloomBase = t < 0.22 ? 0.75 : t < 0.82 ? 0.2 : 0.45;
+    this.postProcessManager?.setBloomIntensity(this.originalBloomIntensity + thrust * bloomBase);
   }
 
   private updateFalconCameraTracking(t: number, elapsed: number, targetPosition: THREE.Vector3, thrust: number) {
-    this.cameraLerpSpeed = 0.06;
+    this.cameraLerpSpeed = 0.08;
 
     if (t < 0.12 && this.earthMesh) {
       this.targetCameraX = this.earthMesh.position.x + 0.8;
       this.targetCameraY = this.earthMesh.position.y + 0.3;
       this.targetCameraZ = this.earthMesh.position.z + 1.8;
       this.targetLookAt.copy(targetPosition);
+      this.applyFalconLaunchCameraShake(t, elapsed, thrust);
       return;
     }
 
@@ -5643,6 +5907,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.falconSeparated && this.falconFirstStage.parent === this.scene) {
         this.targetLookAt.copy(new THREE.Vector3().lerpVectors(targetPosition, this.falconFirstStage.position, 0.3));
       }
+      this.applyFalconLaunchCameraShake(t, elapsed, thrust);
       return;
     }
 
@@ -5652,6 +5917,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.targetCameraY = this.earthMesh.position.y + 1.5 + lerpT * 2;
       this.targetCameraZ = this.earthMesh.position.z + 4 + lerpT * 2;
       this.targetLookAt.copy(targetPosition);
+      this.applyFalconLaunchCameraShake(t, elapsed, thrust);
       return;
     }
 
@@ -5667,6 +5933,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.targetCameraY = targetPosition.y + offset.y;
       this.targetCameraZ = targetPosition.z + offset.z;
       this.targetLookAt.copy(targetPosition);
+      this.applyFalconLaunchCameraShake(t, elapsed, thrust);
       return;
     }
 
@@ -5678,7 +5945,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const landT = elapsed * 12;
       this.targetCameraX += Math.sin(landT) * thrust * 0.008;
       this.targetCameraY += Math.cos(landT * 1.3) * thrust * 0.005;
+      this.applyFalconLaunchCameraShake(t, elapsed, thrust);
     }
+  }
+
+  private applyFalconLaunchCameraShake(t: number, elapsed: number, thrust: number) {
+    const liftoffShake = t < 0.14 ? (1 - t / 0.14) * 0.055 : 0;
+    const separationKick = t >= 0.16 && t < 0.22 ? 0.018 : 0;
+    const landingShake = t > 0.82 ? (1 - t) * 0.05 : 0;
+    const shake = (liftoffShake + separationKick + landingShake) * Math.max(thrust, 0.8);
+    if (shake <= 0) {
+      return;
+    }
+
+    const rumble = elapsed * 42;
+    this.targetCameraX += Math.sin(rumble) * shake;
+    this.targetCameraY += Math.cos(rumble * 1.4) * shake * 0.65;
+    this.targetCameraZ += Math.sin(rumble * 0.6) * shake * 0.55;
+    this.targetLookAt.x += Math.sin(rumble * 0.8) * shake * 0.2;
+    this.targetLookAt.y += Math.cos(rumble * 1.2) * shake * 0.14;
   }
 
   private emitFalconTelemetry(t: number, thrust: number, phase: string) {
@@ -7889,6 +8174,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     this.updateStarmanAnimation();
     this.updateFloatingAstronaut();
+    this.updateNasaMissionAnimation(time);
     if (this.venusMesh) this.venusMesh.rotation.y -= 0.0003;
     if (this.mercuryMesh) this.mercuryMesh.rotation.y += 0.001;
     if (this.uranusMesh) this.uranusMesh.rotation.y += 0.0004;
@@ -7911,6 +8197,56 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updateAsbjornMeteorStorm(time);
     if (this.radiationBelt) {
       (this.radiationBelt.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
+    }
+  }
+
+  private updateNasaMissionAnimation(time: number) {
+    if (this.earthMesh && this.nasaEarthOrbiters) {
+      const earthVisible = this.earthMesh.visible;
+      this.nasaEarthOrbiters.visible = earthVisible;
+      if (earthVisible) {
+        const earthPosition = this.earthMesh.position;
+        this.issModelGroup.position.set(
+          earthPosition.x + Math.cos(time * 0.9) * 1.55,
+          earthPosition.y + 0.24 + Math.sin(time * 1.6) * 0.12,
+          earthPosition.z + Math.sin(time * 0.9) * 1.55,
+        );
+        this.issModelGroup.rotation.y += 0.015;
+
+        this.hubbleModelGroup.position.set(
+          earthPosition.x + Math.cos(time * 0.55 + 1.3) * 2.05,
+          earthPosition.y + 0.65 + Math.sin(time * 1.1) * 0.16,
+          earthPosition.z + Math.sin(time * 0.55 + 1.3) * 2.05,
+        );
+        this.hubbleModelGroup.rotation.y += 0.01;
+
+        this.jwstModelGroup.position.set(
+          earthPosition.x + Math.cos(time * 0.38 + 2.2) * 2.8,
+          earthPosition.y + 1.1 + Math.sin(time * 0.8 + 0.7) * 0.18,
+          earthPosition.z + Math.sin(time * 0.38 + 2.2) * 2.8,
+        );
+        this.jwstModelGroup.rotation.y += 0.004;
+      }
+    }
+
+    if (this.ingenuityModelGroup) {
+      this.ingenuityModelGroup.position.y = 0.055 + Math.sin(time * 3.2) * 0.018;
+      this.ingenuityModelGroup.rotation.y += 0.12;
+    }
+
+    if (this.perseveranceModelGroup) {
+      this.perseveranceModelGroup.rotation.y = Math.sin(time * 0.18) * 0.08;
+    }
+
+    if (this.junoProbeGroup) {
+      const orbitAngle = time * 0.18;
+      this.junoProbeGroup.position.set(
+        Math.cos(orbitAngle) * 15.5,
+        Math.sin(time * 0.42) * 2.2,
+        Math.sin(orbitAngle) * 15.5,
+      );
+      this.junoProbeGroup.lookAt(0, 0, 0);
+      this.junoProbeGroup.rotateY(Math.PI * 0.5);
     }
   }
 
@@ -7976,9 +8312,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Keep Columbia crash sequence anchored near Earth.
     if (this.earthMesh) {
       this.columbiaGroup.position.set(
-        this.earthMesh.position.x + 1.8,
-        this.earthMesh.position.y + 1.1,
-        this.earthMesh.position.z + 1.2,
+        this.earthMesh.position.x + 1.15,
+        this.earthMesh.position.y + 0.62,
+        this.earthMesh.position.z + 0.88,
       );
     }
 
@@ -7990,10 +8326,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       if (this.columbiaShuttleMesh) {
         this.columbiaShuttleMesh.visible = true;
         // Shuttle moves forward
-        this.columbiaShuttleMesh.position.x = t * 1.1;
-        // Slight nose-up re-entry attitude
-        this.columbiaShuttleMesh.rotation.z = -0.15;
-        this.columbiaShuttleMesh.rotation.x = Math.sin(t * 0.5) * 0.02;
+        this.columbiaShuttleMesh.position.set(t * 0.72 - 0.45, Math.sin(t * 0.65) * 0.08, -t * 0.16);
+        // Banked, nose-up re-entry attitude so the orbiter silhouette reads clearly.
+        this.columbiaShuttleMesh.rotation.set(0.16 + Math.sin(t * 0.5) * 0.03, -0.92, -0.28);
       }
       if (this.columbiaTrails) {
         const mat = this.columbiaTrails.material as THREE.ShaderMaterial;

@@ -233,11 +233,11 @@ const TOUR_SHOTS: Record<keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS, CameraSho
     flareVisible: false,
   },
   columbia: {
-    offset: { x: 7.5, y: 2.4, z: 7.8 },
-    lookOffset: { x: -1.6, y: -0.7, z: -1.2 },
+    offset: { x: 4.6, y: 1.7, z: 5.4 },
+    lookOffset: { x: -0.6, y: -0.2, z: -0.6 },
     drift: { x: -0.0005, y: 0.0003, z: -0.0004 },
-    mouseParallax: { x: 0.15, y: 0.15, z: 0 },
-    lerp: 0.05,
+    mouseParallax: { x: 0.12, y: 0.12, z: 0 },
+    lerp: 0.042,
     flareVisible: false,
   },
   'jupiter-einde': {

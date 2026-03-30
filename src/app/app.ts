@@ -725,6 +725,13 @@ export class App implements AfterViewInit, OnDestroy {
         { value: '1969', label: 'APOLLO 11', sub: '20 juli — maanlanding' },
         { value: '∅ wind', label: 'VOETSPOREN', sub: 'voor altijd in het stof' },
       ]},
+    'columbia': { title: 'Columbia', icon: '🛰️', color: 'rgba(255,150,105,0.94)',
+      stats: [
+        { value: 'STS-107', label: 'MISSIE', sub: 'wetenschappelijke shuttlevlucht' },
+        { value: '7', label: 'BEMANNING', sub: 'zeven astronauten herdacht' },
+        { value: '1 FEB 2003', label: 'RAMP', sub: 'tijdens terugkeer naar de aarde' },
+        { value: 'RE-ENTRY', label: 'LOCATIE', sub: 'hoog in de aardatmosfeer' },
+      ]},
     'mars': { title: 'Mars', icon: '🔴', color: 'rgba(230,100,60,0.92)',
       stats: [
         { value: '21 km', label: 'OLYMPUS MONS', sub: 'hoogste berg ooit' },

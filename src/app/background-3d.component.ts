@@ -260,7 +260,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // JULIANASCHOOL star constellation after Pluto destruction
   private julianaStars!: THREE.Points;
-  private julianaLabelMesh!: THREE.Mesh;
 
   // ASBJØRN meteorite constellation (background easter egg)
   private asbjornMeteorRocks!: THREE.InstancedMesh;
@@ -692,7 +691,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   /** Generates a procedural Jupiter placeholder texture (low-res — real 8K texture replaces it) */
   private generateJupiterTexture(): THREE.CanvasTexture {
-    const W = 512, H = 256;
+    const W = 256, H = 128;
     const canvas = document.createElement('canvas');
     canvas.width = W; canvas.height = H;
     const ctx = canvas.getContext('2d')!;
@@ -910,9 +909,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.08;
+    this.renderer.toneMappingExposure = 1.42;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -1028,7 +1027,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     };
 
     // Reduced from 150,000 for CPU performance
-    const STAR_COUNT = 15000;
+    const STAR_COUNT = 6000;
     for (let i = 0; i < STAR_COUNT; i++) {
       // Spherical distribution
       const r = 80 + Math.pow(Math.random(), 0.5) * 1920;
@@ -1182,7 +1181,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Add space dust / particles for parallax depth
     const dustGeometry = new THREE.BufferGeometry();
-    const dustCount = 1500;
+    const dustCount = 600;
     const dustPos = new Float32Array(dustCount * 3);
     for(let i=0; i<dustCount*3; i++) {
         dustPos[i] = (Math.random() - 0.5) * 100;
@@ -1272,7 +1271,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const fallbackTexture = this.generateJupiterTexture();
     fallbackTexture.anisotropy = this.renderer.capabilities.getMaxAnisotropy();
     
-    const jupiterGeometry = new THREE.SphereGeometry(10, 128, 128);
+    const jupiterGeometry = new THREE.SphereGeometry(10, 64, 64);
     const jupiterMaterial = new THREE.MeshStandardMaterial({ 
       map: fallbackTexture,
       roughness: 0.65,
@@ -2027,38 +2026,38 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         vec3 sunDir = normalize(uSunDirection);
         float sunDot = dot(vNormalWorld, sunDir);
 
-        // Improved Rayleigh-like fresnel — higher exponent avoids plastic rim
-        float fresnel = pow(clamp(1.0 - dot(viewDirection, vNormal), 0.0, 1.0), 6.0);
+        // Softer fresnel keeps the limb readable without crushing the dark side.
+        float fresnel = pow(clamp(1.0 - dot(viewDirection, vNormal), 0.0, 1.0), 5.0);
         float pulse = mix(1.0, 1.04, uPulse * 0.15);
 
-        // Terminator wrap-around: atmosphere should glow slightly past the shadow line
-        float terminator = smoothstep(-0.2, 0.2, sunDot);
-        float daySide = smoothstep(-0.05, 0.35, sunDot);
-        float terminatorBand = 1.0 - smoothstep(0.0, 0.16, abs(sunDot));
+        // Wider wrap keeps some scattering on the shadow side for readability.
+        float terminator = smoothstep(-0.32, 0.24, sunDot);
+        float daySide = smoothstep(-0.16, 0.32, sunDot);
+        float terminatorBand = 1.0 - smoothstep(0.0, 0.24, abs(sunDot));
 
         // Forward scattering through the limb (light shining through the atmosphere edge)
-        float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 6.0);
+        float forwardScatter = pow(max(dot(viewDirection, sunDir), 0.0), 5.0);
 
         // Deep orange/red "sunset" band at the terminator edge (Rayleigh scattering through dense gas)
         vec3 sunsetColor = vec3(1.0, 0.35, 0.08);
-        float sunsetIntensity = smoothstep(-0.08, 0.06, sunDot) * smoothstep(0.18, 0.0, sunDot);
+        float sunsetIntensity = smoothstep(-0.16, 0.08, sunDot) * smoothstep(0.24, -0.02, sunDot);
         vec3 dayColor = mix(vec3(0.92, 0.88, 0.8), vec3(0.98, 0.95, 0.86), daySide);
+        vec3 nightColor = vec3(0.06, 0.08, 0.12);
 
-        // Blend nightside black → sunset orange → day color
-        vec3 finalAtmoColor = mix(vec3(0.0), sunsetColor, sunsetIntensity);
+        // Blend lifted night haze → sunset orange → day color
+        vec3 finalAtmoColor = mix(nightColor, sunsetColor, sunsetIntensity);
         finalAtmoColor = mix(finalAtmoColor, dayColor, daySide);
 
-        // Atmosphere only glows where the sun illuminates, with slight wrap-around at terminator
-        float alpha = fresnel * terminator * 0.85;
-        alpha += fresnel * terminatorBand * 0.45;
-        alpha += fresnel * sunsetIntensity * 0.55;
-        alpha += forwardScatter * 0.12;
+        // Keep a gentle night-side haze instead of hard clipping to black.
+        float nightHaze = smoothstep(-0.7, -0.08, sunDot) * 0.22;
+        float alpha = fresnel * terminator * 0.78;
+        alpha += fresnel * terminatorBand * 0.32;
+        alpha += fresnel * sunsetIntensity * 0.42;
+        alpha += forwardScatter * 0.1;
+        alpha += fresnel * nightHaze;
         alpha *= pulse;
 
-        // CRITICAL: Force absolute zero opacity on the night side so space/planets remain deeply black
-        alpha *= smoothstep(-0.05, 0.1, sunDot);
-
-        gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.3));
+        gl_FragColor = vec4(finalAtmoColor, clamp(alpha, 0.0, 0.38));
       }
     `;
 
@@ -2163,12 +2162,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Lighting — physically motivated but cinematic
     // Slightly warmer ambient picks up surface detail in shadow regions
-    const ambientLight = new THREE.AmbientLight(0x0c1122, 0.4);
+    const ambientLight = new THREE.AmbientLight(0x0c1122, 0.72);
     this.scene.add(ambientLight);
 
     // Main sun light — warm white (5778 K blackbody ≈ 0xfff5e0)
     // Positioned further away for more realistic parallel-ray feel
-    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 4.15);
+    this.sunLight = new THREE.DirectionalLight(0xfff5e0, 6.2);
     this.sunLight.position.copy(this.sunPosition);
     this.scene.add(this.sunLight);
 
@@ -2178,21 +2177,21 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(sunPointLight);
 
     // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    const fillLight = new THREE.DirectionalLight(0x1b3760, 0.7);
+    const fillLight = new THREE.DirectionalLight(0x1b3760, 1.15);
     fillLight.position.set(100, -20, -65);
     this.scene.add(fillLight);
 
     // Subtle overhead hemisphere fill for readability
-    const hemiLight = new THREE.HemisphereLight(0x101a33, 0x010103, 0.34);
+    const hemiLight = new THREE.HemisphereLight(0x101a33, 0x010103, 0.56);
     this.scene.add(hemiLight);
 
     // Warm rim/back light — adds depth by outlining dark-side edges
-    const rimLight = new THREE.DirectionalLight(0xffd6a8, 0.32);
+    const rimLight = new THREE.DirectionalLight(0xffd6a8, 0.52);
     rimLight.position.set(40, -20, -60);
     this.scene.add(rimLight);
 
     // Earthshine — faint blue fill from Earth's reflected light onto the Moon
-    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.1);
+    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.18);
     this.earthshineLight.position.set(10, 5, -5);
     this.scene.add(this.earthshineLight);
     this.scene.add(this.earthshineLight.target);
@@ -3000,11 +2999,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const starMat = this.julianaStars.material as THREE.ShaderMaterial;
     const opacity = Math.min(1, (expTime - 2.4) * 1.4);
     starMat.uniforms['uOpacity'].value = opacity;
-    if (this.julianaLabelMesh) {
-      const mat = this.julianaLabelMesh.material as THREE.MeshBasicMaterial;
-      mat.opacity = opacity;
-      this.julianaLabelMesh.lookAt(this.camera.position);
-    }
   }
 
   private updatePeriodicSuperlaser(time: number) {
@@ -3101,9 +3095,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     ctx.fillStyle = 'black';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.fillStyle = 'white';
-    ctx.font = '900 230px "Pathway Gothic One", Arial, sans-serif';
+    ctx.font = '900 220px "Pathway Gothic One", Arial, sans-serif';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    ctx.lineWidth = 18;
+    ctx.strokeStyle = 'white';
+    ctx.strokeText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
     ctx.fillText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
 
     const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
@@ -3115,14 +3112,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       for (let x = 0; x < canvas.width; x += 2) {
         const idx = (y * canvas.width + x) * 4;
         if (imgData[idx] > 32) {
-          const px = (x - canvas.width / 2) * 0.009;
-          const py = -(y - canvas.height / 2) * 0.009;
+          const px = (x - canvas.width / 2) * 0.007;
+          const py = -(y - canvas.height / 2) * 0.007;
           const pz = (Math.random() - 0.5) * 0.2;
           starPositions.push(px, py, pz);
           const isGold = Math.random() > 0.4;
           const color = new THREE.Color(isGold ? 0xffe81f : 0xaaccff);
           starColors.push(color.r, color.g, color.b);
-          starSizes.push(Math.random() * 5 + 3.4);
+          starSizes.push(Math.random() * 4.2 + 4.2);
         }
       }
     }
@@ -3141,7 +3138,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vColor = color;
           vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * (190.0 / -mvPosition.z);
+          gl_PointSize = aSize * (220.0 / -mvPosition.z);
           gl_Position = projectionMatrix * mvPosition;
         }
       `,
@@ -3151,8 +3148,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           float d = length(gl_PointCoord - vec2(0.5));
           if (d > 0.5) discard;
-          float glow = exp(-d * 4.5);
-          gl_FragColor = vec4(vColor, glow * min(1.0, uOpacity * 1.15));
+          float core = exp(-d * 9.0);
+          float glow = exp(-d * 4.2);
+          vec3 color = mix(vColor, vec3(1.0), core * 0.35);
+          gl_FragColor = vec4(color, (core * 0.75 + glow * 0.5) * min(1.0, uOpacity * 1.2));
         }
       `,
       transparent: true,
@@ -3170,37 +3169,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoMesh.position.z + 8,
     );
     this.scene.add(this.julianaStars);
-
-    // High-contrast text billboard so the word stays readable from distance.
-    const labelCanvas = document.createElement('canvas');
-    labelCanvas.width = 2048;
-    labelCanvas.height = 512;
-    const labelCtx = labelCanvas.getContext('2d')!;
-    labelCtx.clearRect(0, 0, labelCanvas.width, labelCanvas.height);
-    labelCtx.font = '900 248px "Pathway Gothic One", Arial, sans-serif';
-    labelCtx.textAlign = 'center';
-    labelCtx.textBaseline = 'middle';
-    labelCtx.lineWidth = 28;
-    labelCtx.strokeStyle = 'rgba(8, 12, 24, 0.95)';
-    labelCtx.fillStyle = 'rgba(255, 242, 166, 0.98)';
-    labelCtx.strokeText('JULIANASCHOOL', labelCanvas.width / 2, labelCanvas.height / 2);
-    labelCtx.fillText('JULIANASCHOOL', labelCanvas.width / 2, labelCanvas.height / 2);
-    const labelTexture = new THREE.CanvasTexture(labelCanvas);
-    labelTexture.generateMipmaps = false;
-    labelTexture.minFilter = THREE.LinearFilter;
-    labelTexture.magFilter = THREE.LinearFilter;
-    const labelMat = new THREE.MeshBasicMaterial({
-      map: labelTexture,
-      transparent: true,
-      opacity: 0,
-      depthWrite: false,
-      depthTest: false,
-      blending: THREE.NormalBlending,
-    });
-    this.julianaLabelMesh = new THREE.Mesh(new THREE.PlaneGeometry(40, 10), labelMat);
-    this.julianaLabelMesh.position.copy(this.plutoMesh.position).add(new THREE.Vector3(0, 4.8, 0));
-    this.julianaLabelMesh.renderOrder = 12;
-    this.scene.add(this.julianaLabelMesh);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -4693,7 +4661,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private createMilkyWayBand() {
     // Milky Way band — dense galactic-plane stars with varied depth and color
     // Reduced from 55,000 for CPU performance
-    const bandCount = 8000;
+    const bandCount = 3000;
     const bandGeo = new THREE.BufferGeometry();
     const bandPos = new Float32Array(bandCount * 3);
     const bandColors = new Float32Array(bandCount * 3);
@@ -4845,7 +4813,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createCosmicDustClouds() {
     // Volumetric cosmic dust clouds — denser, more color variety
-    const cDustCount = 5000;
+    const cDustCount = 1400;
     const cGeo = new THREE.BufferGeometry();
     const cPos = new Float32Array(cDustCount * 3);
     const cColors = new Float32Array(cDustCount * 3);
@@ -4873,7 +4841,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private createStarClusters() {
-    const clusterCount = 3500;
+    const clusterCount = 1000;
     const clusterGeo = new THREE.IcosahedronGeometry(0.18, 0);
     const clusterMat = new THREE.MeshBasicMaterial({
       color: 0xffffff,
@@ -8144,6 +8112,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
       this.postProcessManager?.setSize(window.innerWidth, window.innerHeight);
     }
   }

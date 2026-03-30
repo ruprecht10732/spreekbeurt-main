@@ -18,19 +18,19 @@ const fragmentShader = /* glsl */ `
     vec2 center = uv - 0.5;
     float dist = length(center);
 
-    // ── Vignette — cinematic oval falloff, heavier near corners ──
-    float vignette = smoothstep(1.1, 0.32, dist * 0.95);
+    // ── Vignette — softer falloff so edges stay readable ──
+    float vignette = smoothstep(0.95, 0.18, dist * 0.9);
 
     vec3 color = inputColor.rgb;
 
-    // ── Lift / Gamma / Gain — true-black shadows, neutral mids, warm highlights ──
-    vec3 lift  = vec3(0.0, 0.0, 0.0);         // no shadow lift — space is black
-    vec3 gamma = vec3(1.0, 1.0, 1.0);         // neutral midtones
-    vec3 gain  = vec3(1.05, 1.02, 1.0);       // subtle warm highlight push
+    // ── Lift / Gamma / Gain — slightly lifted blacks, brighter mids, warm highlights ──
+    vec3 lift  = vec3(0.028, 0.028, 0.032);
+    vec3 gamma = vec3(1.08, 1.07, 1.05);
+    vec3 gain  = vec3(1.04, 1.03, 1.01);
     color = liftGammaGain(color, lift, gamma, gain);
 
-    // ── Gentle contrast boost — preserves blacks, adds punch to midtones ──
-    color = mix(vec3(0.5), color, 1.15);
+    // ── Reduced contrast so space does not collapse into crushed blacks ──
+    color = mix(vec3(0.5), color, 1.04);
 
     // ── Very fine film grain — only visible on mid-darks, invisible on stars ──
     float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));
@@ -38,8 +38,9 @@ const fragmentShader = /* glsl */ `
     float grain = (random(uv * 800.0 + fract(uTime * 3.7)) - 0.5) * 0.0025;
     color += grain * grainMask;
 
-    // Apply vignette
-    outputColor = vec4(color * vignette, inputColor.a);
+    // Keep a small black floor lift while preserving the vignette shape.
+    color = mix(color * 0.84, color, vignette);
+    outputColor = vec4(color, inputColor.a);
   }
 `;
 

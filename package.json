@@ -6,6 +6,8 @@
     "start": "ng serve",
     "dev": "cross-env ng serve --port=3000 --host=0.0.0.0 --define=\"GEMINI_API_KEY=\\'${GEMINI_API_KEY}\\'\" ${DISABLE_HMR:+--live-reload=false}",
     "build": "ng build",
+    "videos:optimize": "node scripts/optimize-videos.mjs",
+    "videos:optimize:dry-run": "node scripts/optimize-videos.mjs --dry-run",
     "postinstall": "node scripts/fix-rapier-init-warning.mjs",
     "watch": "ng build --watch --configuration development",
     "test": "ng test",

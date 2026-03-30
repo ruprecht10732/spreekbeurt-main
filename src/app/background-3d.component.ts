@@ -1154,7 +1154,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.42;
+    this.renderer.toneMappingExposure = 1.18;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate

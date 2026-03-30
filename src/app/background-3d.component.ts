@@ -3196,7 +3196,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.updatePlutoFlash(expTime);
     this.updatePlutoShockwave(expTime);
     this.updatePlutoDebrisField();
-    this.updateJulianaConstellation(expTime);
     return true;
   }
 
@@ -3241,22 +3240,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.plutoDebris.setMatrixAt(index, dummy.matrix);
     }
     this.plutoDebris.instanceMatrix.needsUpdate = true;
-  }
-
-  private updateJulianaConstellation(expTime: number) {
-    if (expTime <= 2.2 || !this.julianaStars) {
-      return;
-    }
-
-    const starMat = this.julianaStars.material as THREE.ShaderMaterial;
-    const reveal = Math.min(1, (expTime - 2.2) * 0.9);
-    const towardCamera = this.camera.position.clone().sub(this.plutoMesh.position).normalize();
-    this.julianaStars.position.copy(this.plutoMesh.position);
-    this.julianaStars.position.y += 4.6 + Math.sin(expTime * 0.8) * 0.12;
-    this.julianaStars.position.addScaledVector(towardCamera, 1.4 + reveal * 2.2);
-    this.julianaStars.scale.setScalar(0.9 + reveal * 0.9);
-    this.julianaStars.lookAt(this.camera.position);
-    starMat.uniforms['uOpacity'].value = reveal;
   }
 
   private updatePeriodicSuperlaser(time: number) {
@@ -3346,92 +3329,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.plutoDebris.visible = false;
     this.scene.add(this.plutoDebris);
 
-    // 4. "JULIANASCHOOL" Constellation (Canvas to Particles)
-    const canvas = document.createElement('canvas');
-    canvas.width = 2560; canvas.height = 640;
-    const ctx = canvas.getContext('2d')!;
-    ctx.fillStyle = 'black';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'white';
-    ctx.font = '900 280px "Pathway Gothic One", Arial, sans-serif';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.lineJoin = 'round';
-    ctx.lineWidth = 34;
-    ctx.strokeStyle = 'white';
-    ctx.strokeText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
-    ctx.strokeText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
-    ctx.fillText('JULIANASCHOOL', canvas.width / 2, canvas.height / 2);
-
-    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
-    const starPositions: number[] = [];
-    const starColors: number[] = [];
-    const starSizes: number[] = [];
-
-    for (let y = 0; y < canvas.height; y += 2) {
-      for (let x = 0; x < canvas.width; x += 2) {
-        const idx = (y * canvas.width + x) * 4;
-        if (imgData[idx] > 16) {
-          const px = (x - canvas.width / 2) * 0.009;
-          const py = -(y - canvas.height / 2) * 0.009;
-          const pz = (Math.random() - 0.5) * 0.12;
-          starPositions.push(px, py, pz);
-          const warmMix = 0.72 + Math.random() * 0.28;
-          const color = new THREE.Color(1, 0.9 * warmMix, 0.45 + Math.random() * 0.25);
-          starColors.push(color.r, color.g, color.b);
-          starSizes.push(Math.random() * 3.6 + 5.4);
-        }
-      }
-    }
-
-    const starGeo = new THREE.BufferGeometry();
-    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPositions, 3));
-    starGeo.setAttribute('color', new THREE.Float32BufferAttribute(starColors, 3));
-    starGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(starSizes, 1));
-
-    const starMat = new THREE.ShaderMaterial({
-      uniforms: { uOpacity: { value: 0 } },
-      vertexShader: `
-        attribute float aSize;
-        attribute vec3 color;
-        varying vec3 vColor;
-        void main() {
-          vColor = color;
-          vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * (280.0 / -mvPosition.z);
-          gl_Position = projectionMatrix * mvPosition;
-        }
-      `,
-      fragmentShader: `
-        uniform float uOpacity;
-        varying vec3 vColor;
-        void main() {
-          float d = length(gl_PointCoord - vec2(0.5));
-          if (d > 0.5) discard;
-          float core = exp(-d * 11.5);
-          float glow = exp(-d * 5.1);
-          vec3 color = mix(vColor, vec3(1.0, 0.98, 0.92), core * 0.45);
-          gl_FragColor = vec4(color, (core * 0.95 + glow * 0.7) * min(1.0, uOpacity * 1.25));
-        }
-      `,
-      transparent: true,
-      blending: THREE.AdditiveBlending,
-      depthWrite: false,
-    });
-
-    this.julianaStars = new THREE.Points(starGeo, starMat);
-    this.julianaStars.frustumCulled = false;
-    this.julianaStars.renderOrder = 20;
-    this.julianaStars.position.copy(this.plutoMesh.position);
-    this.julianaStars.position.y += 4.6;
-    this.julianaStars.scale.setScalar(1.15);
-    // Face toward the camera approach direction (pluto tour offset is roughly +x,+y,+z)
-    this.julianaStars.lookAt(
-      this.plutoMesh.position.x + 8,
-      this.plutoMesh.position.y + 6,
-      this.plutoMesh.position.z + 8,
-    );
-    this.scene.add(this.julianaStars);
   }
 
   // ═══════════════════════════════════════════════════════════════════════════

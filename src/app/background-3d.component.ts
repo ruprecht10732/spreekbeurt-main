@@ -5157,6 +5157,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         const center = bbox.getCenter(new THREE.Vector3());
         const safeHeight = Math.max(size.y, 1e-3);
         const normalizedScale = 0.62 / safeHeight;
+        const proceduralFirstStageMeshes = new Set<THREE.Object3D>(this.falconFirstStage.children);
+        const proceduralSecondStageMeshes = new Set<THREE.Object3D>(this.falconSecondStage.children);
 
         const makeSegment = (yScale: number, yPos: number, radialScale = 1) => {
           const segment = baseModel.clone(true);
@@ -5184,19 +5186,19 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         this.falconFirstStage.add(firstStageModel);
         this.falconSecondStage.add(secondStageModel);
 
-        // Hide procedural body meshes but keep exhaust/fairings/physics rig active.
-        const keepVisible = new Set<THREE.Object3D>([
-          this.falconExhaust,
-          this.falconSecondExhaust,
-          this.falconFairingL,
-          this.falconFairingR,
-        ]);
-        [this.falconFirstStage, this.falconSecondStage].forEach((stage) => {
-          stage.traverse((child) => {
-            if (child instanceof THREE.Mesh && !keepVisible.has(child)) {
-              child.visible = false;
-            }
-          });
+        // Hide only the procedural placeholder geometry and keep the loaded GLB visible.
+        proceduralFirstStageMeshes.forEach((child) => {
+          if (child instanceof THREE.Mesh || child instanceof THREE.Group) {
+            child.visible = false;
+          }
+        });
+        proceduralSecondStageMeshes.forEach((child) => {
+          if (child === this.falconSecondExhaust || child === this.falconFairingL || child === this.falconFairingR) {
+            return;
+          }
+          if (child instanceof THREE.Mesh || child instanceof THREE.Group) {
+            child.visible = false;
+          }
         });
 
         resolve();

@@ -1532,7 +1532,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Sky backdrop — camera-centered so extreme zooms still feel enveloped by space.
     const skyGeo = new THREE.SphereGeometry(500, 48, 48);
     this.skyBackdropMaterial = new THREE.MeshBasicMaterial({
-      color: 0x111122,
+      color: 0x060610,
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
@@ -1541,13 +1541,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.skyBackdropMesh = new THREE.Mesh(skyGeo, this.skyBackdropMaterial);
     this.scene.add(this.skyBackdropMesh);
     this.skyOverlayMaterial = new THREE.MeshBasicMaterial({
-      color: 0x0d1220,
+      color: 0x060a14,
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
       toneMapped: false,
       transparent: true,
-      opacity: 0.16,
+      opacity: 0.08,
       blending: THREE.AdditiveBlending,
     });
     this.skyOverlayMesh = new THREE.Mesh(new THREE.SphereGeometry(496, 48, 48), this.skyOverlayMaterial);
@@ -1577,7 +1577,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         tex.minFilter = THREE.LinearFilter;
         tex.magFilter = THREE.LinearFilter;
         this.skyBackdropMaterial.map = tex;
-        this.skyBackdropMaterial.color.setHex(0x333333);
+        this.skyBackdropMaterial.color.setHex(0x141414);
         this.skyBackdropMaterial.needsUpdate = true;
 
         resolve();
@@ -1588,7 +1588,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         tex.minFilter = THREE.LinearFilter;
         tex.magFilter = THREE.LinearFilter;
         this.skyOverlayMaterial.map = tex;
-        this.skyOverlayMaterial.color.setHex(0x7782a0);
+        this.skyOverlayMaterial.color.setHex(0x3a4060);
         this.skyOverlayMaterial.needsUpdate = true;
       };
 
@@ -3170,18 +3170,18 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     if (this.skyBackdropMaterial) {
       this.skyBackdropMaterial.color.setRGB(
-        THREE.MathUtils.lerp(0.18, 0.3, overlayEase),
-        THREE.MathUtils.lerp(0.18, 0.28, overlayEase),
-        THREE.MathUtils.lerp(0.22, 0.34, overlayEase),
+        THREE.MathUtils.lerp(0.075, 0.12, overlayEase),
+        THREE.MathUtils.lerp(0.075, 0.11, overlayEase),
+        THREE.MathUtils.lerp(0.085, 0.14, overlayEase),
       );
     }
 
     if (this.skyOverlayMaterial) {
-      this.skyOverlayMaterial.opacity = THREE.MathUtils.lerp(0.08, 0.38, overlayEase);
+      this.skyOverlayMaterial.opacity = THREE.MathUtils.lerp(0.04, 0.18, overlayEase);
       this.skyOverlayMaterial.color.setRGB(
-        THREE.MathUtils.lerp(0.34, 0.5, overlayEase),
-        THREE.MathUtils.lerp(0.38, 0.54, overlayEase),
-        THREE.MathUtils.lerp(0.48, 0.68, overlayEase),
+        THREE.MathUtils.lerp(0.16, 0.24, overlayEase),
+        THREE.MathUtils.lerp(0.18, 0.26, overlayEase),
+        THREE.MathUtils.lerp(0.24, 0.34, overlayEase),
       );
     }
   }
@@ -4336,11 +4336,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           const mesh = child as THREE.Mesh;
           const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
           for (const material of materials) {
-            // Clamp tone-mapped exposure on standard materials
             if ((material as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
               const mat = material as THREE.MeshStandardMaterial;
-              if (mat.emissiveIntensity > 1) {
-                mat.emissiveIntensity = Math.min(mat.emissiveIntensity, 1);
+              // Aggressively clamp emissive so the black hole doesn't glow white
+              mat.emissiveIntensity = Math.min(mat.emissiveIntensity, 0.35);
+              if (mat.emissive) {
+                mat.emissive.multiplyScalar(0.4);
               }
               mat.toneMapped = true;
               mat.needsUpdate = true;
@@ -4350,8 +4351,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
         this.blackHoleGroup.add(model);
 
-        // Subtle warm point light from the accretion region
-        const diskLight = new THREE.PointLight(0xff7733, 1.2, 80, 1.8);
+        // Very subtle warm point light from the accretion region
+        const diskLight = new THREE.PointLight(0xff7733, 0.3, 60, 2.2);
         diskLight.position.set(0, 3, 0);
         this.blackHoleGroup.add(diskLight);
 

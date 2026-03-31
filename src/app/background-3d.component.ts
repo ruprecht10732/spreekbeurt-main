@@ -4314,18 +4314,50 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.blackHoleGroup.position.set(-350, -50, -400);
     this.scene.add(this.blackHoleGroup);
 
-    // Load the GLB model into the group
-    this.loadDecorativeModel({
-      primaryPath: 'black_hole.glb',
-      targetGroup: this.blackHoleGroup,
-      desiredSize: 50,
-      onReady: () => {
-        // Add ambient light from model's accretion disk
-        const diskLight = new THREE.PointLight(0xff7733, 2, 80, 1.5);
+    // Load the GLB model directly — preserve the artist's materials as-is
+    // (loadDecorativeModel overrides emissive/roughness which blows out a black hole model)
+    const loader = this.createConfiguredGltfLoader();
+    this.loadPromises.push(new Promise<void>((resolve) => {
+      loader.load('black_hole.glb', (gltf) => {
+        const model = gltf.scene;
+        const box = new THREE.Box3().setFromObject(model);
+        const size = box.getSize(new THREE.Vector3());
+        const maxDim = Math.max(size.x, size.y, size.z, 1e-3);
+        const scale = 50 / maxDim;
+        const center = box.getCenter(new THREE.Vector3()).multiplyScalar(scale);
+
+        model.scale.setScalar(scale);
+        model.position.sub(center);
+
+        // Tone down any overly bright emissive surfaces so the model
+        // sits naturally in the dark space scene without washing out.
+        model.traverse((child) => {
+          if (!(child as THREE.Mesh).isMesh) return;
+          const mesh = child as THREE.Mesh;
+          const materials = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const material of materials) {
+            // Clamp tone-mapped exposure on standard materials
+            if ((material as THREE.MeshStandardMaterial).isMeshStandardMaterial) {
+              const mat = material as THREE.MeshStandardMaterial;
+              if (mat.emissiveIntensity > 1) {
+                mat.emissiveIntensity = Math.min(mat.emissiveIntensity, 1);
+              }
+              mat.toneMapped = true;
+              mat.needsUpdate = true;
+            }
+          }
+        });
+
+        this.blackHoleGroup.add(model);
+
+        // Subtle warm point light from the accretion region
+        const diskLight = new THREE.PointLight(0xff7733, 1.2, 80, 1.8);
         diskLight.position.set(0, 3, 0);
         this.blackHoleGroup.add(diskLight);
-      },
-    });
+
+        resolve();
+      }, undefined, () => resolve());
+    }));
   }
 
   private updateBlackHole(time: number) {

@@ -325,7 +325,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Gargantua Black Hole
   private blackHoleGroup!: THREE.Group;
-  private accretionDisk!: THREE.Mesh;
 
   // Lightsaber duel
   private lightsaberGroup!: THREE.Group;
@@ -393,9 +392,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private tourTransitionProgress = 0;
   private readonly TOUR_STOP_DURATION = 8; // seconds at each planet
   private readonly TOUR_TRANSITION_DURATION = 3; // seconds flying between planets
-  private readonly TOUR_FINALE_DURATION = 18;
-  private readonly TOUR_FINALE_RETURN_DURATION = 12;
-  private readonly TOUR_FINALE_HOLD_DURATION = 4;
+  private readonly TOUR_FINALE_DURATION = 8;
+  private readonly TOUR_FINALE_RETURN_DURATION = 5;
+  private readonly TOUR_FINALE_HOLD_DURATION = 2.5;
   private tourStops: { name: keyof typeof THEATRE_TOUR_SEQUENCE_POSITIONS }[] = [];
   private activeCameraAnchorKey = 'title';
   private tourFinaleActive = false;
@@ -735,13 +734,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const fog = this.scene?.fog as THREE.FogExp2 | null;
 
     this.targetStarSpeed = this.getTourFinaleStarSpeed(progress);
-    this.targetMoonSpeedMultiplier = THREE.MathUtils.lerp(0.4, 0.02, revealEase);
-    this.targetJupiterSpinSpeed = THREE.MathUtils.lerp(0.00035, 0.00004, revealEase);
-    this.targetShipSpeedMultiplier = THREE.MathUtils.lerp(0.35, 0.04, revealEase);
-    this.cameraLerpSpeed = THREE.MathUtils.lerp(0.03, 0.08, accelerationEase);
+    this.targetMoonSpeedMultiplier = THREE.MathUtils.lerp(0.4, 0.001, revealEase);
+    this.targetJupiterSpinSpeed = THREE.MathUtils.lerp(0.00035, 0.000002, revealEase);
+    this.targetShipSpeedMultiplier = THREE.MathUtils.lerp(0.35, 0.002, revealEase);
+    this.cameraLerpSpeed = THREE.MathUtils.lerp(0.06, 0.32, accelerationEase);
 
     if (fog) {
-      fog.density = THREE.MathUtils.lerp(this.defaultFogDensity, 0.000025, revealEase);
+      fog.density = THREE.MathUtils.lerp(this.defaultFogDensity, 0.000001, revealEase);
     }
 
     if (this.renderer) {
@@ -753,8 +752,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     if (this.camera) {
-      const finaleFov = THREE.MathUtils.lerp(this.originalFov, 74, accelerationEase);
-      const finaleFar = THREE.MathUtils.lerp(1000, 180000, revealEase);
+      const finaleFov = THREE.MathUtils.lerp(this.originalFov, 64, accelerationEase);
+      const finaleFar = THREE.MathUtils.lerp(1000, 2000000, revealEase);
       if (Math.abs(this.camera.fov - finaleFov) > 0.001 || Math.abs(this.camera.far - finaleFar) > 0.001) {
         this.camera.fov = finaleFov;
         this.camera.far = finaleFar;
@@ -770,50 +769,50 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       return;
     }
 
-    this.observableUniverseClusterMaterial.uniforms['uOpacity'].value = THREE.MathUtils.lerp(0.012, 0.42, progress);
-    this.observableUniverseFilamentMaterial.opacity = THREE.MathUtils.lerp(0.006, 0.2, progress);
-    this.observableUniverseLayer.scale.setScalar(THREE.MathUtils.lerp(1, 1.22, progress));
+    this.observableUniverseClusterMaterial.uniforms['uOpacity'].value = THREE.MathUtils.lerp(0.012, 0.56, progress);
+    this.observableUniverseFilamentMaterial.opacity = THREE.MathUtils.lerp(0.006, 0.3, progress);
+    this.observableUniverseLayer.scale.setScalar(THREE.MathUtils.lerp(1, 1.4, progress));
     this.observableUniverseLayer.rotation.y = progress * 0.22;
     this.observableUniverseLayer.rotation.x = progress * 0.08;
   }
 
   private getTourFinaleStarSpeed(progress: number): number {
-    if (progress < 0.22) {
-      const phaseT = THREE.MathUtils.smootherstep(progress / 0.22, 0, 1);
-      return THREE.MathUtils.lerp(0.0004, 0.003, phaseT);
+    if (progress < 0.08) {
+      const phaseT = THREE.MathUtils.smootherstep(progress / 0.08, 0, 1);
+      return THREE.MathUtils.lerp(0.001, 0.02, phaseT);
     }
 
-    if (progress < 0.62) {
-      const phaseT = THREE.MathUtils.smootherstep((progress - 0.22) / 0.4, 0, 1);
-      return THREE.MathUtils.lerp(0.003, 0.015, phaseT);
+    if (progress < 0.35) {
+      const phaseT = THREE.MathUtils.smootherstep((progress - 0.08) / 0.27, 0, 1);
+      return THREE.MathUtils.lerp(0.02, 0.16, phaseT);
     }
 
-    const phaseT = THREE.MathUtils.smootherstep((progress - 0.62) / 0.38, 0, 1);
-    return THREE.MathUtils.lerp(0.015, 0.046, phaseT);
+    const phaseT = THREE.MathUtils.smootherstep((progress - 0.35) / 0.65, 0, 1);
+    return THREE.MathUtils.lerp(0.16, 0.4, phaseT);
   }
 
   private getTourFinaleCameraScale(progress: number): number {
-    if (progress < 0.2) {
-      const phaseT = THREE.MathUtils.smootherstep(progress / 0.2, 0, 1);
-      return THREE.MathUtils.lerp(1, 6, phaseT);
+    if (progress < 0.06) {
+      const phaseT = THREE.MathUtils.smootherstep(progress / 0.06, 0, 1);
+      return THREE.MathUtils.lerp(1, 60, phaseT);
     }
 
-    if (progress < 0.58) {
-      const phaseT = THREE.MathUtils.smootherstep((progress - 0.2) / 0.38, 0, 1);
-      return THREE.MathUtils.lerp(6, 120, phaseT);
+    if (progress < 0.25) {
+      const phaseT = THREE.MathUtils.smootherstep((progress - 0.06) / 0.19, 0, 1);
+      return THREE.MathUtils.lerp(60, 5000, phaseT);
     }
 
-    const phaseT = THREE.MathUtils.smootherstep((progress - 0.58) / 0.42, 0, 1);
-    return THREE.MathUtils.lerp(120, 960, phaseT);
+    const phaseT = THREE.MathUtils.smootherstep((progress - 0.25) / 0.75, 0, 1);
+    return THREE.MathUtils.lerp(5000, 100000, phaseT);
   }
 
   private emitTourFinaleTelemetry() {
     const progress = this.tourFinaleProgress;
     let phase = this.tourFinaleDirection === 1 ? 'OBSERVABLE UNIVERSE' : 'RETURN VECTOR';
     if (this.tourFinaleDirection === 1) {
-      if (progress < 0.2) {
+      if (progress < 0.06) {
         phase = 'LEAVING JUPITER';
-      } else if (progress < 0.58) {
+      } else if (progress < 0.25) {
         phase = 'LOCAL GROUP';
       }
     } else if (progress > 0.68) {
@@ -3259,9 +3258,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const anchor = this.getCameraAnchorForKey(this.activeCameraAnchorKey);
     const finaleActive = this.activeCameraAnchorKey === 'jupiter-einde' && (this.tourFinaleActive || this.tourFinaleComplete);
     const finaleScale = finaleActive ? this.getTourFinaleCameraScale(this.tourFinaleProgress) : 1;
-    const revealEase = finaleActive ? THREE.MathUtils.smootherstep(this.tourFinaleProgress, 0.2, 1) : 0;
+    const revealEase = finaleActive ? THREE.MathUtils.smootherstep(this.tourFinaleProgress, 0.05, 1) : 0;
     const offsetX = this.theatreCameraValues.offset.x * finaleScale;
-    const offsetY = this.theatreCameraValues.offset.y * finaleScale + 48 * revealEase;
+    const offsetY = this.theatreCameraValues.offset.y * finaleScale + 300 * revealEase;
     const offsetZ = this.theatreCameraValues.offset.z * finaleScale;
     const mouseParallaxScale = finaleActive ? THREE.MathUtils.lerp(1, 0.03, revealEase) : 1;
 
@@ -4312,180 +4311,25 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   private createBlackHole() {
     this.blackHoleGroup = new THREE.Group();
-
-    // 1. Event Horizon — absolute black sphere, no light escapes
-    const horizonGeo = new THREE.SphereGeometry(6, 48, 48);
-    const horizonMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
-    const eventHorizon = new THREE.Mesh(horizonGeo, horizonMat);
-    eventHorizon.renderOrder = -1;
-    this.blackHoleGroup.add(eventHorizon);
-
-    // 2. Photon Sphere — thin bright ring at 1.5× Schwarzschild radius
-    const photonGeo = new THREE.TorusGeometry(9, 0.15, 32, 256);
-    const photonMat = new THREE.ShaderMaterial({
-      vertexShader: `
-        varying vec3 vNormal; varying vec3 vViewDir;
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          vViewDir = normalize(-mv.xyz);
-          gl_Position = projectionMatrix * mv;
-        }`,
-      fragmentShader: `
-        varying vec3 vNormal; varying vec3 vViewDir;
-        void main() {
-          float fresnel = pow(1.0 - abs(dot(vNormal, vViewDir)), 3.0);
-          vec3 col = mix(vec3(1.0, 0.85, 0.5), vec3(1.0, 1.0, 1.0), fresnel);
-          gl_FragColor = vec4(col * 2.5, fresnel * 0.9);
-        }`,
-      transparent: true, side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    const photonRing = new THREE.Mesh(photonGeo, photonMat);
-    photonRing.rotation.x = Math.PI / 2;
-    this.blackHoleGroup.add(photonRing);
-
-    // 3. Gravitational Lensing shell — distorts background via refraction
-    const lensingGeo = new THREE.SphereGeometry(7.5, 48, 48);
-    const lensingMat = new THREE.MeshPhysicalMaterial({
-      transmission: 1, opacity: 1, ior: 2.33,
-      roughness: 0, thickness: 12, side: THREE.BackSide,
-      attenuationColor: new THREE.Color(0.02, 0.01, 0),
-      attenuationDistance: 20,
-    });
-    const lensingSphere = new THREE.Mesh(lensingGeo, lensingMat);
-    this.blackHoleGroup.add(lensingSphere);
-
-    // 4. Accretion Disk — Interstellar-style with Doppler beaming, temperature gradient, turbulence
-    const diskGeo = new THREE.RingGeometry(8, 28, 256, 64);
-    const diskMat = new THREE.ShaderMaterial({
-      uniforms: {
-        uTime: { value: 0 },
-      },
-      vertexShader: `
-        varying vec2 vUv;
-        varying vec3 vWorldPos;
-        void main() {
-          vUv = uv;
-          vec4 worldPos = modelMatrix * vec4(position, 1.0);
-          vWorldPos = worldPos.xyz;
-          gl_Position = projectionMatrix * viewMatrix * worldPos;
-        }
-      `,
-      fragmentShader: `
-        uniform float uTime;
-        varying vec2 vUv;
-
-        float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-
-        float noise(vec2 p) {
-          vec2 i = floor(p); vec2 f = fract(p);
-          float a = hash(i); float b = hash(i + vec2(1,0));
-          float c = hash(i + vec2(0,1)); float d = hash(i + vec2(1,1));
-          vec2 u = f*f*(3.0-2.0*f);
-          return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
-        }
-
-        float fbm(vec2 p) {
-          float v = 0.0; float a = 0.5; mat2 rot = mat2(cos(0.5),sin(0.5),-sin(0.5),cos(0.5));
-          for(int i = 0; i < 6; i++) {
-            v += a * noise(p); p = rot * p * 2.01; a *= 0.5;
-          }
-          return v;
-        }
-
-        void main() {
-          vec2 c = vUv - 0.5;
-          float r = length(c) * 2.0;
-          float angle = atan(c.y, c.x);
-
-          // Keplerian rotation — inner orbits much faster
-          float angularVel = 3.0 / pow(max(r, 0.05), 1.5);
-          float spin = angle + uTime * angularVel;
-
-          // Multi-scale turbulence for gaseous structure
-          float n1 = fbm(vec2(spin * 3.0, r * 8.0 - uTime * 0.5));
-          float n2 = fbm(vec2(spin * 6.0 + 2.3, r * 16.0 - uTime * 0.3));
-          float n3 = fbm(vec2(spin * 1.5 - 0.7, r * 4.0 + uTime * 0.2));
-          float turb = n1 * 0.6 + n2 * 0.25 + n3 * 0.15;
-
-          // Temperature gradient: white-hot inner → orange → dull red outer
-          float temp = smoothstep(1.0, 0.0, r) * 0.8 + turb * 0.2;
-          vec3 hotWhite = vec3(1.0, 0.98, 0.95);
-          vec3 orange   = vec3(1.0, 0.55, 0.1);
-          vec3 deepRed  = vec3(0.6, 0.12, 0.02);
-          vec3 col = temp > 0.6 ? mix(orange, hotWhite, (temp - 0.6) / 0.4)
-                   : temp > 0.25 ? mix(deepRed, orange, (temp - 0.25) / 0.35)
-                   : deepRed * (temp / 0.25);
-
-          // Relativistic Doppler beaming — approaching side boosted, receding dimmed
-          float doppler = 1.0 + 0.7 * sin(angle + 0.3);
-          // Limb brightening at inner edge (photon pile-up)
-          float innerBright = exp(-pow((r - 0.05) * 5.0, 2.0)) * 3.0;
-
-          // Radial density profile: fades at both edges
-          float density = smoothstep(0.0, 0.12, r) * smoothstep(1.0, 0.65, r);
-
-          // Ring sub-structure — concentric density waves
-          float rings = 0.7 + 0.3 * sin(r * 60.0 + turb * 8.0);
-
-          float intensity = pow(turb, 1.2) * doppler * density * rings + innerBright;
-
-          // HDR emission
-          vec3 final = col * intensity * 4.0;
-
-          gl_FragColor = vec4(final, intensity * 0.95);
-        }
-      `,
-      transparent: true, side: THREE.DoubleSide,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-
-    this.accretionDisk = new THREE.Mesh(diskGeo, diskMat);
-    this.accretionDisk.rotation.x = Math.PI / 2.15;
-    this.accretionDisk.rotation.y = 0.15;
-    this.blackHoleGroup.add(this.accretionDisk);
-
-    // 5. Volumetric glow halo — warm ambient light surrounding the disk
-    const glowGeo = new THREE.SphereGeometry(30, 32, 32);
-    const glowMat = new THREE.ShaderMaterial({
-      vertexShader: `
-        varying vec3 vNormal; varying vec3 vViewDir;
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          vViewDir = normalize(-mv.xyz);
-          gl_Position = projectionMatrix * mv;
-        }`,
-      fragmentShader: `
-        varying vec3 vNormal; varying vec3 vViewDir;
-        void main() {
-          float fresnel = pow(1.0 - abs(dot(vNormal, vViewDir)), 5.0);
-          vec3 col = vec3(1.0, 0.45, 0.1) * fresnel * 0.3;
-          gl_FragColor = vec4(col, fresnel * 0.15);
-        }`,
-      transparent: true, side: THREE.BackSide,
-      blending: THREE.AdditiveBlending, depthWrite: false,
-    });
-    this.blackHoleGroup.add(new THREE.Mesh(glowGeo, glowMat));
-
-    // 6. Ambient light from accretion disk — subtle warm illumination
-    const diskLight = new THREE.PointLight(0xff7733, 2, 80, 1.5);
-    diskLight.position.set(0, 3, 0);
-    this.blackHoleGroup.add(diskLight);
-
-    // Position far into deep space, past Pluto
     this.blackHoleGroup.position.set(-350, -50, -400);
     this.scene.add(this.blackHoleGroup);
+
+    // Load the GLB model into the group
+    this.loadDecorativeModel({
+      primaryPath: 'black_hole.glb',
+      targetGroup: this.blackHoleGroup,
+      desiredSize: 50,
+      onReady: () => {
+        // Add ambient light from model's accretion disk
+        const diskLight = new THREE.PointLight(0xff7733, 2, 80, 1.5);
+        diskLight.position.set(0, 3, 0);
+        this.blackHoleGroup.add(diskLight);
+      },
+    });
   }
 
   private updateBlackHole(time: number) {
     if (!this.blackHoleGroup) return;
-
-    // Update accretion disk shader time
-    if (this.accretionDisk) {
-      (this.accretionDisk.material as THREE.ShaderMaterial).uniforms['uTime'].value = time;
-    }
 
     // Slow ominous rotation
     this.blackHoleGroup.rotation.y += 0.001;

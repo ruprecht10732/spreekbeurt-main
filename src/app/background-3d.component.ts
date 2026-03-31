@@ -24,6 +24,18 @@ interface CameraBreathing {
   z: number;
 }
 
+export interface TelemetryHudData {
+  label: string;
+  phase: string;
+  accent: 'alert' | 'warning' | 'nominal' | 'cosmic';
+  primaryLabel: string;
+  primaryValue: string;
+  primaryUnit: string;
+  secondaryLabel: string;
+  secondaryValue: string;
+  secondaryUnit: string;
+}
+
 @Component({
   selector: 'app-background-3d',
   standalone: true,
@@ -39,7 +51,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   @Input() tourMode = false;
   @Output() loaded = new EventEmitter<void>();
   @Output() tourPlanet = new EventEmitter<string>();
-  @Output() telemetry = new EventEmitter<{altitude: number, speed: number, phase: string} | null>();
+  @Output() telemetry = new EventEmitter<TelemetryHudData | null>();
   @Output() loadProgress = new EventEmitter<number>();
   @ViewChild('canvasContainer', { static: true }) canvasContainer!: ElementRef<HTMLDivElement>;
 
@@ -191,6 +203,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Galaxy band
   private galaxyBand!: THREE.Points;
+  private skyBackdropMesh!: THREE.Mesh;
+  private skyBackdropMaterial!: THREE.MeshBasicMaterial;
+  private skyOverlayMesh!: THREE.Mesh;
+  private skyOverlayMaterial!: THREE.MeshBasicMaterial;
   private ambientSpaceLight!: THREE.AmbientLight;
   private sunPointLight!: THREE.PointLight;
   private sunFillLight!: THREE.DirectionalLight;
@@ -729,16 +745,16 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     if (this.renderer) {
-      this.renderer.toneMappingExposure = THREE.MathUtils.lerp(this.defaultToneMappingExposure, 1.42, bloomEase);
+      this.renderer.toneMappingExposure = THREE.MathUtils.lerp(this.defaultToneMappingExposure, 1.28, bloomEase);
     }
 
     if (!this.hyperspaceActive) {
-      this.postProcessManager?.setBloomIntensity(THREE.MathUtils.lerp(this.originalBloomIntensity, 9.5, bloomEase));
+      this.postProcessManager?.setBloomIntensity(THREE.MathUtils.lerp(this.originalBloomIntensity, 7.8, bloomEase));
     }
 
     if (this.camera) {
-      const finaleFov = THREE.MathUtils.lerp(this.originalFov, 98, accelerationEase);
-      const finaleFar = THREE.MathUtils.lerp(1000, 14000, revealEase);
+      const finaleFov = THREE.MathUtils.lerp(this.originalFov, 74, accelerationEase);
+      const finaleFar = THREE.MathUtils.lerp(1000, 180000, revealEase);
       if (Math.abs(this.camera.fov - finaleFov) > 0.001 || Math.abs(this.camera.far - finaleFar) > 0.001) {
         this.camera.fov = finaleFov;
         this.camera.far = finaleFar;
@@ -754,8 +770,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       return;
     }
 
-    this.observableUniverseClusterMaterial.uniforms['uOpacity'].value = THREE.MathUtils.lerp(0.012, 0.26, progress);
-    this.observableUniverseFilamentMaterial.opacity = THREE.MathUtils.lerp(0.006, 0.12, progress);
+    this.observableUniverseClusterMaterial.uniforms['uOpacity'].value = THREE.MathUtils.lerp(0.012, 0.42, progress);
+    this.observableUniverseFilamentMaterial.opacity = THREE.MathUtils.lerp(0.006, 0.2, progress);
+    this.observableUniverseLayer.scale.setScalar(THREE.MathUtils.lerp(1, 1.22, progress));
     this.observableUniverseLayer.rotation.y = progress * 0.22;
     this.observableUniverseLayer.rotation.x = progress * 0.08;
   }
@@ -772,22 +789,22 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     const phaseT = THREE.MathUtils.smootherstep((progress - 0.62) / 0.38, 0, 1);
-    return THREE.MathUtils.lerp(0.015, 0.034, phaseT);
+    return THREE.MathUtils.lerp(0.015, 0.046, phaseT);
   }
 
   private getTourFinaleCameraScale(progress: number): number {
     if (progress < 0.2) {
       const phaseT = THREE.MathUtils.smootherstep(progress / 0.2, 0, 1);
-      return THREE.MathUtils.lerp(1, 4, phaseT);
+      return THREE.MathUtils.lerp(1, 6, phaseT);
     }
 
     if (progress < 0.58) {
       const phaseT = THREE.MathUtils.smootherstep((progress - 0.2) / 0.38, 0, 1);
-      return THREE.MathUtils.lerp(4, 28, phaseT);
+      return THREE.MathUtils.lerp(6, 120, phaseT);
     }
 
     const phaseT = THREE.MathUtils.smootherstep((progress - 0.58) / 0.42, 0, 1);
-    return THREE.MathUtils.lerp(28, 120, phaseT);
+    return THREE.MathUtils.lerp(120, 960, phaseT);
   }
 
   private emitTourFinaleTelemetry() {
@@ -805,19 +822,73 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       phase = 'BACK THROUGH THE VOID';
     }
 
-    const distanceScale = this.getTourFinaleCameraScale(progress);
-    const baseDistance = Math.hypot(
-      this.theatreCameraValues.offset.x,
-      this.theatreCameraValues.offset.y,
-      this.theatreCameraValues.offset.z,
-    );
+    const cosmicDistanceKm = this.getTourFinaleCosmicDistanceKm(progress);
+    const lookbackYears = THREE.MathUtils.lerp(12, 13.8e9, THREE.MathUtils.smootherstep(progress, 0, 1));
+    const distanceReading = this.formatCosmicDistance(cosmicDistanceKm);
+    const lookbackReading = this.formatLookbackTime(lookbackYears);
 
+    this.emitTelemetry({
+      label: this.tourFinaleDirection === 1 ? 'DEEP SPACE' : 'JUPITER RETURN',
+      phase,
+      accent: 'cosmic',
+      primaryLabel: 'RADIUS',
+      primaryValue: distanceReading.value,
+      primaryUnit: distanceReading.unit,
+      secondaryLabel: 'LOOKBACK',
+      secondaryValue: lookbackReading.value,
+      secondaryUnit: lookbackReading.unit,
+    });
+  }
+
+  private getTourFinaleCosmicDistanceKm(progress: number): number {
+    const minimumDistanceKm = 350_000;
+    const observableUniverseRadiusKm = 4.4e23;
+    const easedProgress = THREE.MathUtils.smootherstep(progress, 0, 1);
+    return Math.exp(THREE.MathUtils.lerp(Math.log(minimumDistanceKm), Math.log(observableUniverseRadiusKm), easedProgress));
+  }
+
+  private formatCosmicDistance(distanceKm: number): { value: string; unit: string } {
+    const astronomicalUnitKm = 149_597_870.7;
+    const lightYearKm = 9.4607e12;
+
+    if (distanceKm < 1_000_000) {
+      return { value: Math.round(distanceKm).toLocaleString('en-US'), unit: 'KM' };
+    }
+
+    if (distanceKm < astronomicalUnitKm * 0.2) {
+      return { value: (distanceKm / 1_000_000).toFixed(1), unit: 'M KM' };
+    }
+
+    if (distanceKm < lightYearKm * 0.2) {
+      return { value: (distanceKm / astronomicalUnitKm).toFixed(distanceKm < astronomicalUnitKm * 10 ? 2 : 1), unit: 'AU' };
+    }
+
+    if (distanceKm < lightYearKm * 1_000_000) {
+      return { value: (distanceKm / lightYearKm).toFixed(distanceKm < lightYearKm * 100 ? 2 : 1), unit: 'LY' };
+    }
+
+    return { value: (distanceKm / (lightYearKm * 1_000_000_000)).toFixed(1), unit: 'GLY' };
+  }
+
+  private formatLookbackTime(years: number): { value: string; unit: string } {
+    if (years < 1_000) {
+      return { value: Math.round(years).toLocaleString('en-US'), unit: 'YR' };
+    }
+
+    if (years < 1_000_000) {
+      return { value: (years / 1_000).toFixed(1), unit: 'KYR' };
+    }
+
+    if (years < 1_000_000_000) {
+      return { value: (years / 1_000_000).toFixed(1), unit: 'MYR' };
+    }
+
+    return { value: (years / 1_000_000_000).toFixed(1), unit: 'BYR' };
+  }
+
+  private emitTelemetry(data: TelemetryHudData) {
     this.ngZone.run(() => {
-      this.telemetry.emit({
-        altitude: Math.round(baseDistance * distanceScale * 2_500_000),
-        speed: Math.round(this.targetStarSpeed * 1_000_000),
-        phase,
-      });
+      this.telemetry.emit(data);
     });
   }
 
@@ -1459,19 +1530,29 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       }, 4000);
     });
 
-    // Milky Way skybox — immersive backdrop sphere
+    // Sky backdrop — camera-centered so extreme zooms still feel enveloped by space.
     const skyGeo = new THREE.SphereGeometry(500, 48, 48);
-    const skyMat = new THREE.MeshBasicMaterial({
+    this.skyBackdropMaterial = new THREE.MeshBasicMaterial({
       color: 0x111122,
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
       toneMapped: false
     });
-    const skyMesh = new THREE.Mesh(skyGeo, skyMat);
-    skyMesh.matrixAutoUpdate = false; // CRITICAL FOR CPU: Skips matrix math every frame
-    skyMesh.updateMatrix();
-    this.scene.add(skyMesh);
+    this.skyBackdropMesh = new THREE.Mesh(skyGeo, this.skyBackdropMaterial);
+    this.scene.add(this.skyBackdropMesh);
+    this.skyOverlayMaterial = new THREE.MeshBasicMaterial({
+      color: 0x0d1220,
+      side: THREE.BackSide,
+      fog: false,
+      depthWrite: false,
+      toneMapped: false,
+      transparent: true,
+      opacity: 0.16,
+      blending: THREE.AdditiveBlending,
+    });
+    this.skyOverlayMesh = new THREE.Mesh(new THREE.SphereGeometry(496, 48, 48), this.skyOverlayMaterial);
+    this.scene.add(this.skyOverlayMesh);
     // Shared loading manager for progress tracking
     const loadingManager = new THREE.LoadingManager();
 
@@ -1492,21 +1573,30 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Prefer a real NASA all-sky map; keep the existing Milky Way texture as fallback.
     this.textureLoader = new THREE.TextureLoader(loadingManager);
     this.loadPromises.push(new Promise<void>((resolve) => {
-      const applySkyTexture = (tex: THREE.Texture) => {
+      const applyBaseSkyTexture = (tex: THREE.Texture) => {
         tex.generateMipmaps = false;
         tex.minFilter = THREE.LinearFilter;
-        skyMat.map = tex;
-        skyMat.color.setHex(0x333333); // neutral grey — let the texture do the talking
-        skyMat.needsUpdate = true;
-
-        // CRITICAL FOR CPU: PMREM Generator deleted.
-        // We do not need heavy environment reflections in pitch-black space.
+        tex.magFilter = THREE.LinearFilter;
+        this.skyBackdropMaterial.map = tex;
+        this.skyBackdropMaterial.color.setHex(0x333333);
+        this.skyBackdropMaterial.needsUpdate = true;
 
         resolve();
       };
 
-      this.textureLoader.load('nasa/deep_starmap_2020_4k.jpg', applySkyTexture, undefined, () => {
-        this.textureLoader.load('8k_stars_milky_way.webp', applySkyTexture, undefined, () => resolve());
+      const applyOverlayTexture = (tex: THREE.Texture) => {
+        tex.generateMipmaps = false;
+        tex.minFilter = THREE.LinearFilter;
+        tex.magFilter = THREE.LinearFilter;
+        this.skyOverlayMaterial.map = tex;
+        this.skyOverlayMaterial.color.setHex(0x7782a0);
+        this.skyOverlayMaterial.needsUpdate = true;
+      };
+
+      this.textureLoader.load('eso_milky_way_panorama.jpg', applyOverlayTexture, undefined, () => undefined);
+
+      this.textureLoader.load('nasa/deep_starmap_2020_4k.jpg', applyBaseSkyTexture, undefined, () => {
+        this.textureLoader.load('8k_stars_milky_way.webp', applyBaseSkyTexture, undefined, () => resolve());
       });
     }));
 
@@ -2695,31 +2785,31 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — biased toward a single believable solar source, not a studio rig.
-    this.ambientSpaceLight = new THREE.AmbientLight(0x070b14, 0.22);
+    this.ambientSpaceLight = new THREE.AmbientLight(0x050810, 0.14);
     this.scene.add(this.ambientSpaceLight);
 
     // Main sun light — warm white (5778 K blackbody ≈ 0xfff5e0)
     // Positioned further away for more realistic parallel-ray feel
-    this.sunLight = new THREE.DirectionalLight(0xfff6e8, 3.8);
+    this.sunLight = new THREE.DirectionalLight(0xfff5e6, 3.2);
     this.sunLight.position.copy(this.sunPosition);
     this.scene.add(this.sunLight);
 
     // Point light at the Sun — natural inverse-square falloff; range increased for greater distance
-    this.sunPointLight = new THREE.PointLight(0xfff2dc, 7.5, 420, 1.8);
+    this.sunPointLight = new THREE.PointLight(0xfff0d8, 5.8, 420, 1.8);
     this.sunPointLight.position.copy(this.sunPosition);
     this.scene.add(this.sunPointLight);
 
     // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    this.sunFillLight = new THREE.DirectionalLight(0x15233a, 0.18);
+    this.sunFillLight = new THREE.DirectionalLight(0x0d1b31, 0.1);
     this.sunFillLight.position.set(100, -20, -65);
     this.scene.add(this.sunFillLight);
 
     // Subtle overhead hemisphere fill for readability
-    this.sunHemiLight = new THREE.HemisphereLight(0x0a1122, 0x010102, 0.18);
+    this.sunHemiLight = new THREE.HemisphereLight(0x08111f, 0x010102, 0.12);
     this.scene.add(this.sunHemiLight);
 
     // Warm rim/back light — adds depth by outlining dark-side edges
-    this.sunRimLight = new THREE.DirectionalLight(0xffc48a, 0.14);
+    this.sunRimLight = new THREE.DirectionalLight(0xe7d6bf, 0.08);
     this.sunRimLight.position.set(40, -20, -60);
     this.scene.add(this.sunRimLight);
 
@@ -3055,7 +3145,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.updateAutomaticCameraTargets(breathing);
     }
 
-    const effectiveLerp = this.cameraLerpSpeed * 3.0;
+    const effectiveLerp = this.cameraLerpSpeed * 3;
     this.camera.position.x += (this.targetCameraX - this.camera.position.x) * effectiveLerp;
     this.camera.position.y += (this.targetCameraY - this.camera.position.y) * effectiveLerp;
     this.camera.position.z += (this.targetCameraZ - this.camera.position.z) * effectiveLerp;
@@ -3063,6 +3153,38 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.currentLookAt.lerp(this.targetLookAt, effectiveLerp);
     this.controls.target.copy(this.currentLookAt);
     this.controls.update();
+    this.updateSkyBackdrop();
+  }
+
+  private updateSkyBackdrop() {
+    if (!this.camera) {
+      return;
+    }
+
+    this.skyBackdropMesh?.position.copy(this.camera.position);
+    this.skyOverlayMesh?.position.copy(this.camera.position);
+
+    const finaleProgress = this.activeCameraAnchorKey === 'jupiter-einde'
+      ? this.tourFinaleProgress
+      : 0;
+    const overlayEase = THREE.MathUtils.smootherstep(finaleProgress, 0.25, 1);
+
+    if (this.skyBackdropMaterial) {
+      this.skyBackdropMaterial.color.setRGB(
+        THREE.MathUtils.lerp(0.18, 0.3, overlayEase),
+        THREE.MathUtils.lerp(0.18, 0.28, overlayEase),
+        THREE.MathUtils.lerp(0.22, 0.34, overlayEase),
+      );
+    }
+
+    if (this.skyOverlayMaterial) {
+      this.skyOverlayMaterial.opacity = THREE.MathUtils.lerp(0.08, 0.38, overlayEase);
+      this.skyOverlayMaterial.color.setRGB(
+        THREE.MathUtils.lerp(0.34, 0.5, overlayEase),
+        THREE.MathUtils.lerp(0.38, 0.54, overlayEase),
+        THREE.MathUtils.lerp(0.48, 0.68, overlayEase),
+      );
+    }
   }
 
   private updateCameraDrift(): CameraBreathing {
@@ -3139,9 +3261,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     const finaleScale = finaleActive ? this.getTourFinaleCameraScale(this.tourFinaleProgress) : 1;
     const revealEase = finaleActive ? THREE.MathUtils.smootherstep(this.tourFinaleProgress, 0.2, 1) : 0;
     const offsetX = this.theatreCameraValues.offset.x * finaleScale;
-    const offsetY = this.theatreCameraValues.offset.y * finaleScale + 24 * revealEase;
+    const offsetY = this.theatreCameraValues.offset.y * finaleScale + 48 * revealEase;
     const offsetZ = this.theatreCameraValues.offset.z * finaleScale;
-    const mouseParallaxScale = finaleActive ? THREE.MathUtils.lerp(1, 0.08, revealEase) : 1;
+    const mouseParallaxScale = finaleActive ? THREE.MathUtils.lerp(1, 0.03, revealEase) : 1;
 
     this.baseCameraX = anchor.x + offsetX;
     this.baseCameraY = anchor.y + offsetY;
@@ -6302,12 +6424,23 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   }
 
   private emitFalconTelemetry(t: number, thrust: number, phase: string) {
-    this.ngZone.run(() => {
-      this.telemetry.emit({
-        altitude: Math.round((1 - t) * 250000),
-        speed: Math.round(Math.max(thrust, 0.5) * 8000),
-        phase
-      });
+    let accent: TelemetryHudData['accent'] = 'nominal';
+    if (phase === 'MAX-Q') {
+      accent = 'alert';
+    } else if (phase === 'COAST') {
+      accent = 'warning';
+    }
+
+    this.emitTelemetry({
+      label: 'FALCON 9',
+      phase,
+      accent,
+      primaryLabel: 'ALTITUDE',
+      primaryValue: Math.round((1 - t) * 250_000).toLocaleString('en-US'),
+      primaryUnit: 'KM',
+      secondaryLabel: 'VELOCITY',
+      secondaryValue: Math.round(Math.max(thrust, 0.5) * 8_000).toLocaleString('en-US'),
+      secondaryUnit: 'KM/H',
     });
   }
 
@@ -8809,10 +8942,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private updateSunLightRig() {
     const sunDistance = this.camera.position.distanceTo(this.sunPosition);
     const lightFalloff = THREE.MathUtils.clamp(160 / sunDistance, 0.3, 1);
-    this.sunLight.intensity = THREE.MathUtils.lerp(2.6, 4.2, lightFalloff);
-    this.sunPointLight.intensity = THREE.MathUtils.lerp(3.2, 7.5, lightFalloff);
-    this.sunFillLight.intensity = THREE.MathUtils.lerp(0.08, 0.22, lightFalloff);
-    this.sunRimLight.intensity = THREE.MathUtils.lerp(0.05, 0.16, lightFalloff);
+    this.sunLight.intensity = THREE.MathUtils.lerp(2.1, 3.4, lightFalloff);
+    this.sunPointLight.intensity = THREE.MathUtils.lerp(2.6, 5.8, lightFalloff);
+    this.sunFillLight.intensity = THREE.MathUtils.lerp(0.04, 0.12, lightFalloff);
+    this.sunRimLight.intensity = THREE.MathUtils.lerp(0.02, 0.08, lightFalloff);
+    this.sunHemiLight.intensity = THREE.MathUtils.lerp(0.05, 0.12, lightFalloff);
+    this.ambientSpaceLight.intensity = THREE.MathUtils.lerp(0.08, 0.16, lightFalloff);
   }
 
   private onWindowResize() {

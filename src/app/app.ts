@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, HostListener, signal, computed, effect, ViewChild, ElementRef, AfterViewInit, OnDestroy, PLATFORM_ID, inject } from '@angular/core';
 import { isPlatformBrowser, DecimalPipe } from '@angular/common';
 import { MatIconModule } from '@angular/material/icon';
-import { Background3DComponent } from './background-3d.component';
+import { Background3DComponent, type TelemetryHudData } from './background-3d.component';
 import { SLIDES } from './slides.data';
 import { animate, stagger, cubicBezier } from 'motion';
 
@@ -106,22 +106,23 @@ interface CelebrationFrameState {
         <!-- Status Badge -->
         <div class="bg-black/60 border border-white/20 backdrop-blur-md px-4 py-2 rounded-sm flex items-center gap-3">
           <div class="w-3 h-3 rounded-full animate-pulse"
-               [class.bg-red-500]="telemetry()!.phase === 'MAX-Q'"
-               [class.bg-yellow-500]="telemetry()!.phase === 'COAST'"
-               [class.bg-green-500]="telemetry()!.phase === 'HOVERSLAM' || telemetry()!.phase === 'ENTRY BURN'">
+               [class.bg-red-500]="telemetry()!.accent === 'alert'"
+               [class.bg-yellow-500]="telemetry()!.accent === 'warning'"
+               [class.bg-green-500]="telemetry()!.accent === 'nominal'"
+               [class.bg-sky-400]="telemetry()!.accent === 'cosmic'">
           </div>
-          <span class="font-mono text-sm tracking-widest text-white/90">FALCON 9 • {{ telemetry()!.phase }}</span>
+          <span class="font-mono text-sm tracking-widest text-white/90">{{ telemetry()!.label }} • {{ telemetry()!.phase }}</span>
         </div>
 
         <!-- Data Readouts -->
         <div class="flex gap-4">
           <div class="bg-black/40 border border-white/10 backdrop-blur-md p-4 rounded-sm min-w-[140px]">
-            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">ALTITUDE</div>
-            <div class="font-mono text-3xl text-white">{{ telemetry()!.altitude | number }} <span class="text-sm text-white/50">KM</span></div>
+            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">{{ telemetry()!.primaryLabel }}</div>
+            <div class="font-mono text-3xl text-white">{{ telemetry()!.primaryValue }} <span class="text-sm text-white/50">{{ telemetry()!.primaryUnit }}</span></div>
           </div>
           <div class="bg-black/40 border border-white/10 backdrop-blur-md p-4 rounded-sm min-w-[140px]">
-            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">VELOCITY</div>
-            <div class="font-mono text-3xl text-white">{{ telemetry()!.speed | number }} <span class="text-sm text-white/50">KM/H</span></div>
+            <div class="text-[10px] text-white/50 font-mono mb-1 tracking-widest">{{ telemetry()!.secondaryLabel }}</div>
+            <div class="font-mono text-3xl text-white">{{ telemetry()!.secondaryValue }} <span class="text-sm text-white/50">{{ telemetry()!.secondaryUnit }}</span></div>
           </div>
         </div>
       </div>
@@ -533,7 +534,7 @@ export class App implements AfterViewInit, OnDestroy {
   isMuted = signal(false);
   selectedQuizOption = signal(-1);
   sceneLoaded = signal(false);
-  telemetry = signal<{altitude: number, speed: number, phase: string} | null>(null);
+  telemetry = signal<TelemetryHudData | null>(null);
   loadingProgress = signal<number>(0);
   currentDistance = signal(0);
   celebrationActive = signal(false);

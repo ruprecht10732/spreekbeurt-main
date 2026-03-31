@@ -1532,7 +1532,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Sky backdrop — camera-centered so extreme zooms still feel enveloped by space.
     const skyGeo = new THREE.SphereGeometry(500, 48, 48);
     this.skyBackdropMaterial = new THREE.MeshBasicMaterial({
-      color: 0x060610,
+      color: 0x020203,
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
@@ -1541,7 +1541,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.skyBackdropMesh = new THREE.Mesh(skyGeo, this.skyBackdropMaterial);
     this.scene.add(this.skyBackdropMesh);
     this.skyOverlayMaterial = new THREE.MeshBasicMaterial({
-      color: 0x060a14,
+      color: 0x020305,
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
@@ -1806,7 +1806,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       color: 0xaaaaaa, 
       size: 0.12, 
       transparent: true, 
-      opacity: 0.25 
+      opacity: 0.06 
     });
     this.dustSystem = new THREE.Points(dustGeometry, dustMaterial);
     this.dustSystem.frustumCulled = false;
@@ -1861,7 +1861,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           void main() {
             vec3 pos = normalize(vPos) * 3.0 + uSeed;
             float n = fbm(pos + uTime * 0.01);
-            float alpha = smoothstep(0.3, 0.7, n) * 0.12;
+            float alpha = smoothstep(0.3, 0.7, n) * 0.04;
             gl_FragColor = vec4(uColor * 2.0, alpha);
           }
         `,
@@ -2672,7 +2672,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         finalAtmoColor = mix(finalAtmoColor, dayColor, daySide);
 
         // Keep a gentle night-side haze instead of hard clipping to black.
-        float nightHaze = smoothstep(-0.7, -0.08, sunDot) * 0.22;
+        float nightHaze = smoothstep(-0.7, -0.08, sunDot) * 0.04;
         float alpha = fresnel * terminator * 0.78;
         alpha += fresnel * terminatorBand * 0.32;
         alpha += fresnel * sunsetIntensity * 0.42;
@@ -2784,7 +2784,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — biased toward a single believable solar source, not a studio rig.
-    this.ambientSpaceLight = new THREE.AmbientLight(0x050810, 0.06);
+    this.ambientSpaceLight = new THREE.AmbientLight(0x050810, 0.015);
     this.scene.add(this.ambientSpaceLight);
 
     // Main sun light — warm white (5778 K blackbody ≈ 0xfff5e0)
@@ -2799,12 +2799,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.sunPointLight);
 
     // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    this.sunFillLight = new THREE.DirectionalLight(0x0d1b31, 0.04);
+    this.sunFillLight = new THREE.DirectionalLight(0x0d1b31, 0.015);
     this.sunFillLight.position.set(100, -20, -65);
     this.scene.add(this.sunFillLight);
 
     // Subtle overhead hemisphere fill for readability
-    this.sunHemiLight = new THREE.HemisphereLight(0x08111f, 0x010102, 0.05);
+    this.sunHemiLight = new THREE.HemisphereLight(0x08111f, 0x010102, 0.015);
     this.scene.add(this.sunHemiLight);
 
     // Warm rim/back light — adds depth by outlining dark-side edges
@@ -3170,14 +3170,14 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     if (this.skyBackdropMaterial) {
       this.skyBackdropMaterial.color.setRGB(
-        THREE.MathUtils.lerp(0.075, 0.12, overlayEase),
-        THREE.MathUtils.lerp(0.075, 0.11, overlayEase),
-        THREE.MathUtils.lerp(0.085, 0.14, overlayEase),
+        THREE.MathUtils.lerp(0.002, 0.12, overlayEase),
+        THREE.MathUtils.lerp(0.002, 0.11, overlayEase),
+        THREE.MathUtils.lerp(0.005, 0.14, overlayEase),
       );
     }
 
     if (this.skyOverlayMaterial) {
-      this.skyOverlayMaterial.opacity = THREE.MathUtils.lerp(0.04, 0.18, overlayEase);
+      this.skyOverlayMaterial.opacity = THREE.MathUtils.lerp(0.015, 0.18, overlayEase);
       this.skyOverlayMaterial.color.setRGB(
         THREE.MathUtils.lerp(0.16, 0.24, overlayEase),
         THREE.MathUtils.lerp(0.18, 0.26, overlayEase),
@@ -5429,7 +5429,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     cGeo.setAttribute('position', new THREE.Float32BufferAttribute(cPos, 3));
     cGeo.setAttribute('color', new THREE.Float32BufferAttribute(cColors, 3));
     this.scene.add(new THREE.Points(cGeo, new THREE.PointsMaterial({
-      size: 0.5, transparent: true, opacity: 0.14, vertexColors: true,
+      size: 0.5, transparent: true, opacity: 0.04, vertexColors: true,
       blending: THREE.AdditiveBlending, depthWrite: false
     })));
   }

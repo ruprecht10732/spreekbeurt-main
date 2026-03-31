@@ -24,7 +24,7 @@ const fragmentShader = /* glsl */ `
     vec3 color = inputColor.rgb;
 
     // ── Lift / Gamma / Gain — slightly lifted blacks, brighter mids, warm highlights ──
-    vec3 lift  = vec3(0.028, 0.028, 0.032);
+    vec3 lift  = vec3(0.001, 0.001, 0.003);
     vec3 gamma = vec3(1.08, 1.07, 1.05);
     vec3 gain  = vec3(1.04, 1.03, 1.01);
     color = liftGammaGain(color, lift, gamma, gain);

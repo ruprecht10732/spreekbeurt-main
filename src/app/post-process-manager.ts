@@ -31,8 +31,8 @@ export class PostProcessManager {
     // Optimized Bloom for CPU
     this.bloomEffect = new BloomEffect({
       blendFunction: BlendFunction.SCREEN,
-      intensity: 0.85,
-      luminanceThreshold: 0.92,
+      intensity: 0.9,
+      luminanceThreshold: 0.95,
       luminanceSmoothing: 0.15,
       mipmapBlur: false, // Saves huge CPU overhead
       radius: 0.58,

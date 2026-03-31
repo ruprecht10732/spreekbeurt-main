@@ -1532,7 +1532,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     // Sky backdrop — camera-centered so extreme zooms still feel enveloped by space.
     const skyGeo = new THREE.SphereGeometry(500, 48, 48);
     this.skyBackdropMaterial = new THREE.MeshBasicMaterial({
-      color: 0x020203,
+      color: 0x010102,
       side: THREE.BackSide,
       fog: false,
       depthWrite: false,
@@ -1547,7 +1547,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false,
       toneMapped: false,
       transparent: true,
-      opacity: 0.08,
+      opacity: 0.04,
       blending: THREE.AdditiveBlending,
     });
     this.skyOverlayMesh = new THREE.Mesh(new THREE.SphereGeometry(496, 48, 48), this.skyOverlayMaterial);
@@ -1610,7 +1610,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
     fgDustGeo.setAttribute('position', new THREE.Float32BufferAttribute(fgDustPos, 3));
     const fgDust = new THREE.Points(fgDustGeo, new THREE.PointsMaterial({
-      color: 0x6688cc, transparent: true, opacity: 0.08,
+      color: 0x6688cc, transparent: true, opacity: 0.05,
       size: 0.12, sizeAttenuation: true,
       blending: THREE.AdditiveBlending, depthWrite: false
     }));
@@ -1806,7 +1806,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       color: 0xaaaaaa, 
       size: 0.12, 
       transparent: true, 
-      opacity: 0.06 
+      opacity: 0.08 
     });
     this.dustSystem = new THREE.Points(dustGeometry, dustMaterial);
     this.dustSystem.frustumCulled = false;
@@ -1988,8 +1988,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         textureLoader.load('2k_earth_specular_map.webp', (tex) => {
           tex.generateMipmaps = false; tex.minFilter = THREE.LinearFilter;
           earthMaterial.metalnessMap = tex;
-          earthMaterial.roughness = 0.65;
-          earthMaterial.metalness = 0.15;
+          earthMaterial.roughness = 0.35;
+          earthMaterial.metalness = 0.1;
           earthMaterial.needsUpdate = true;
           resolve();
         }, undefined, () => resolve());
@@ -2784,12 +2784,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — biased toward a single believable solar source, not a studio rig.
-    this.ambientSpaceLight = new THREE.AmbientLight(0x050810, 0.015);
+    this.ambientSpaceLight = new THREE.AmbientLight(0x020305, 0.01);
     this.scene.add(this.ambientSpaceLight);
 
     // Main sun light — warm white (5778 K blackbody ≈ 0xfff5e0)
     // Positioned further away for more realistic parallel-ray feel
-    this.sunLight = new THREE.DirectionalLight(0xfff5e6, 1.4);
+    this.sunLight = new THREE.DirectionalLight(0xfff5e6, 1.8);
     this.sunLight.position.copy(this.sunPosition);
     this.scene.add(this.sunLight);
 
@@ -2799,12 +2799,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.sunPointLight);
 
     // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    this.sunFillLight = new THREE.DirectionalLight(0x0d1b31, 0.015);
+    this.sunFillLight = new THREE.DirectionalLight(0x0a1525, 0.015);
     this.sunFillLight.position.set(100, -20, -65);
     this.scene.add(this.sunFillLight);
 
     // Subtle overhead hemisphere fill for readability
-    this.sunHemiLight = new THREE.HemisphereLight(0x08111f, 0x010102, 0.015);
+    this.sunHemiLight = new THREE.HemisphereLight(0x040810, 0x000000, 0.01);
     this.scene.add(this.sunHemiLight);
 
     // Warm rim/back light — adds depth by outlining dark-side edges
@@ -3177,7 +3177,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     if (this.skyOverlayMaterial) {
-      this.skyOverlayMaterial.opacity = THREE.MathUtils.lerp(0.015, 0.18, overlayEase);
+      this.skyOverlayMaterial.opacity = THREE.MathUtils.lerp(0.01, 0.18, overlayEase);
       this.skyOverlayMaterial.color.setRGB(
         THREE.MathUtils.lerp(0.16, 0.24, overlayEase),
         THREE.MathUtils.lerp(0.18, 0.26, overlayEase),

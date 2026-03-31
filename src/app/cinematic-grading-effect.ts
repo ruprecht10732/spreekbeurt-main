@@ -23,14 +23,11 @@ const fragmentShader = /* glsl */ `
 
     vec3 color = inputColor.rgb;
 
-    // ── Lift / Gamma / Gain — slightly lifted blacks, brighter mids, warm highlights ──
-    vec3 lift  = vec3(0.001, 0.001, 0.003);
-    vec3 gamma = vec3(1.08, 1.07, 1.05);
-    vec3 gain  = vec3(1.04, 1.03, 1.01);
+    // ── Lift / Gamma / Gain — preserve a true black floor with a tiny blue bias ──
+    vec3 lift  = vec3(0.0, 0.0, 0.002);
+    vec3 gamma = vec3(1.0, 1.0, 1.0);
+    vec3 gain  = vec3(1.0, 1.0, 1.0);
     color = liftGammaGain(color, lift, gamma, gain);
-
-    // ── Reduced contrast so space does not collapse into crushed blacks ──
-    color = mix(vec3(0.5), color, 1.04);
 
     // ── Very fine film grain — only visible on mid-darks, invisible on stars ──
     float lum = dot(color, vec3(0.2126, 0.7152, 0.0722));

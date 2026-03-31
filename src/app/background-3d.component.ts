@@ -411,6 +411,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
   // Shared texture loader
   private textureLoader!: THREE.TextureLoader;
+  private bakedNoiseTexture: THREE.CanvasTexture | null = null;
 
   private readonly ngZone = inject(NgZone);
   private readonly platformId = inject(PLATFORM_ID);
@@ -1425,6 +1426,33 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     return texture;
   }
 
+  private createPreRenderedNoiseTexture(): THREE.CanvasTexture {
+    const size = 256;
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d')!;
+    const imgData = ctx.createImageData(size, size);
+
+    for (let index = 0; index < imgData.data.length; index += 4) {
+      const value = Math.floor(Math.random() * 255);
+      imgData.data[index] = value;
+      imgData.data[index + 1] = value;
+      imgData.data[index + 2] = value;
+      imgData.data[index + 3] = 255;
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.minFilter = THREE.LinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.wrapS = THREE.RepeatWrapping;
+    texture.wrapT = THREE.RepeatWrapping;
+    texture.generateMipmaps = false;
+    return texture;
+  }
+
   private applyTextureEffects(
     u: number, v: number, r: number, g: number, b: number,
     fbm: (x: number, y: number, octaves: number, lacunarity?: number, gain?: number) => number
@@ -1501,7 +1529,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       powerPreference: 'high-performance',
     });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 0.75;
     container.appendChild(this.renderer.domElement);
@@ -1813,6 +1841,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.scene.add(this.dustSystem);
 
     // Deep-space nebula clouds
+    const bakedNoiseMap = this.bakedNoiseTexture ?? (this.bakedNoiseTexture = this.createPreRenderedNoiseTexture());
     const nebulaConfigs = [
       { color: new THREE.Color(0x1a0a2e), radius: 250, pos: [-300, 100, -500] },
       { color: new THREE.Color(0x0a1628), radius: 300, pos: [200, -80, -600] },
@@ -1829,38 +1858,28 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         uniforms: {
           uColor: { value: cfg.color },
           uTime: { value: 0 },
+          uNoiseMap: { value: bakedNoiseMap },
           uSeed: { value: i * 42.5 }
         },
         vertexShader: `
-          varying vec3 vPos;
+          varying vec2 vUv;
           void main() {
-            vPos = position;
+            vUv = uv;
             gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
           }
         `,
         fragmentShader: `
           uniform vec3 uColor;
           uniform float uTime;
+          uniform sampler2D uNoiseMap;
           uniform float uSeed;
-          varying vec3 vPos;
-          float hash(vec3 p) { return fract(sin(dot(p, vec3(12.9898, 78.233, 37.719))) * 43758.5453); }
-          float noise(vec3 p) {
-            vec3 i = floor(p); vec3 f = fract(p);
-            f = f * f * (3.0 - 2.0 * f);
-            float a = hash(i); float b = hash(i + vec3(1,0,0));
-            float c = hash(i + vec3(0,1,0)); float d = hash(i + vec3(1,1,0));
-            float e = hash(i + vec3(0,0,1)); float f1 = hash(i + vec3(1,0,1));
-            float g = hash(i + vec3(0,1,1)); float h = hash(i + vec3(1,1,1));
-            return mix(mix(mix(a,b,f.x), mix(c,d,f.x), f.y), mix(mix(e,f1,f.x), mix(g,h,f.x), f.y), f.z);
-          }
-          float fbm(vec3 p) {
-            float v = 0.0; float a = 0.5;
-            for (int i = 0; i < 4; i++) { v += a * noise(p); p *= 2.0; a *= 0.5; }
-            return v;
-          }
+          varying vec2 vUv;
           void main() {
-            vec3 pos = normalize(vPos) * 3.0 + uSeed;
-            float n = fbm(pos + uTime * 0.01);
+            vec2 seedOffset = vec2(fract(uSeed * 0.037), fract(uSeed * 0.073));
+            vec2 scrolledUv = vUv + vec2(uTime * 0.005, uTime * 0.002) + seedOffset;
+            float n1 = texture2D(uNoiseMap, scrolledUv * 2.0).r;
+            float n2 = texture2D(uNoiseMap, scrolledUv * 4.0 - vec2(0.5)).r;
+            float n = (n1 + n2) * 0.5;
             float alpha = smoothstep(0.3, 0.7, n) * 0.04;
             gl_FragColor = vec4(uColor * 2.0, alpha);
           }
@@ -7567,10 +7586,12 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
 
     // Photosphere — animated surface with limb darkening + granulation turbulence
     const sunGeo = new THREE.SphereGeometry(sunRadius, 48, 48);
+    const bakedNoiseMap = this.bakedNoiseTexture ?? (this.bakedNoiseTexture = this.createPreRenderedNoiseTexture());
     const sunMat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
-        uSunTex: { value: null as THREE.Texture | null }
+        uSunTex: { value: null as THREE.Texture | null },
+        uNoiseMap: { value: bakedNoiseMap }
       },
       vertexShader: `
         varying vec3 vNormal;
@@ -7586,29 +7607,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       fragmentShader: `
         uniform float uTime;
         uniform sampler2D uSunTex;
+        uniform sampler2D uNoiseMap;
         varying vec3 vNormal;
         varying vec3 vPos;
         varying vec2 vUv;
-
-        // Simplex-like hash noise for granulation
-        vec3 hash3(vec3 p) {
-          p = vec3(dot(p,vec3(127.1,311.7,74.7)), dot(p,vec3(269.5,183.3,246.1)), dot(p,vec3(113.5,271.9,124.6)));
-          return -1.0 + 2.0 * fract(sin(p) * 43758.5453);
-        }
-        float noise3(vec3 p) {
-          vec3 i = floor(p);
-          vec3 f = fract(p);
-          vec3 u = f * f * (3.0 - 2.0 * f);
-          return mix(mix(mix(dot(hash3(i+vec3(0,0,0)),f-vec3(0,0,0)), dot(hash3(i+vec3(1,0,0)),f-vec3(1,0,0)), u.x),
-                         mix(dot(hash3(i+vec3(0,1,0)),f-vec3(0,1,0)), dot(hash3(i+vec3(1,1,0)),f-vec3(1,1,0)), u.x), u.y),
-                     mix(mix(dot(hash3(i+vec3(0,0,1)),f-vec3(0,0,1)), dot(hash3(i+vec3(1,0,1)),f-vec3(1,0,1)), u.x),
-                         mix(dot(hash3(i+vec3(0,1,1)),f-vec3(0,1,1)), dot(hash3(i+vec3(1,1,1)),f-vec3(1,1,1)), u.x), u.y), u.z);
-        }
-        float fbm(vec3 p) {
-          float v = 0.0; float a = 0.5;
-          for (int i = 0; i < 4; i++) { v += a * noise3(p); p *= 2.0; a *= 0.5; }
-          return v;
-        }
 
         void main() {
           vec3 viewDir = normalize(-vPos);
@@ -7622,12 +7624,13 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           vec4 baseTex = texture2D(uSunTex, vUv);
           vec3 baseColor = baseTex.rgb;
           
-          // Animated granulation turbulence — convection cells on surface
-          vec3 noiseCoord = vec3(vUv * 8.0, uTime * 0.03);
-          float granulation = fbm(noiseCoord) * 0.15;
-          
-          // Sunspot-like dark patches (slow drift)
-          float spots = smoothstep(0.35, 0.5, fbm(vec3(vUv * 3.0, uTime * 0.008)));
+          vec2 flow1 = vUv * 8.0 + vec2(uTime * 0.01, uTime * 0.015);
+          vec2 flow2 = vUv * 12.0 - vec2(uTime * 0.02, 0.0);
+          float noise1 = texture2D(uNoiseMap, flow1).r;
+          float noise2 = texture2D(uNoiseMap, flow2).r;
+          float granulation = (noise1 * noise2) * 0.3;
+
+          float spots = smoothstep(0.4, 0.6, texture2D(uNoiseMap, vUv * 2.0 + uTime * 0.005).r);
           
           // Color temperature variation (hotter center = whiter, cooler limb = redder)
           vec3 hotColor = vec3(1.0, 0.98, 0.92);  // ~6000K white-yellow
@@ -7638,8 +7641,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           finalColor += granulation * vec3(1.0, 0.85, 0.5);
           finalColor *= (1.0 - spots * 0.15); // Darken in sunspot regions
           
-          // HDR emission — mild push for tone mapping bloom
-          finalColor *= 1.2;
+          // HDR emission — strong push for tone mapping bloom
+          finalColor *= 4.0;
           
           gl_FragColor = vec4(finalColor, 1.0);
         }
@@ -8832,7 +8835,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       this.camera.aspect = window.innerWidth / window.innerHeight;
       this.camera.updateProjectionMatrix();
       this.renderer.setSize(window.innerWidth, window.innerHeight);
-      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+      this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.25));
       this.postProcessManager?.setSize(window.innerWidth, window.innerHeight);
     }
   }

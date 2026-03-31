@@ -1891,6 +1891,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       });
       const nebula = new THREE.Mesh(nebulaGeo, nebulaMat);
       nebula.position.set(cfg.pos[0], cfg.pos[1], cfg.pos[2]);
+      nebula.updateMatrix();
+      nebula.matrixAutoUpdate = false;
       this.scene.add(nebula);
       this.nebulae.push(nebula);
     });
@@ -1914,7 +1916,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
     
     this.jupiter = new THREE.Mesh(jupiterGeometry, jupiterMaterial);
-    this.jupiter.receiveShadow = true;
     this.jupiterGroup.add(this.jupiter);
 
     // Load high-res 8K Jupiter texture (Solar System Scope, CC BY 4.0)
@@ -1960,8 +1961,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
     
     this.earthMesh = new THREE.Mesh(earthGeometry, earthMaterial);
-    this.earthMesh.castShadow = true;
-    this.earthMesh.receiveShadow = true; // Allows clouds to cast shadows onto the surface
     
     // Position Earth to the left and slightly in front of Jupiter so it's clearly visible on slide 5
     // Jupiter is at (12, 0, -15). We want Earth to be near the camera focus on slide 5.
@@ -2021,7 +2020,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       color: 0xffffff, roughness: 1, metalness: 0
     });
     this.earthCloudsMesh = new THREE.Mesh(earthCloudGeo, earthCloudMat);
-    this.earthCloudsMesh.castShadow = true; // Clouds physically cast shadows onto the Earth
     this.earthMesh.add(this.earthCloudsMesh);
     this.loadPromises.push(new Promise<void>((resolve) => {
       textureLoader.load('2k_earth_clouds.webp', (tex) => {
@@ -2180,7 +2178,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         normalScale: new THREE.Vector2(0.6, 0.6),
       });
       const terrainMesh = new THREE.Mesh(terrainGeo, terrainMat);
-      terrainMesh.receiveShadow = true;
       this.tranquilityGroup.add(terrainMesh);
 
       // ── Lunar Module — Enhanced Procedural ──────────────────────────
@@ -2198,7 +2195,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         goldFoilMat
       );
       lmBody.position.y = 0.014;
-      lmBody.castShadow = true;
       lmGroup.add(lmBody);
 
       // Ascent Stage — upper cabin (lighter grey, boxy)
@@ -2208,7 +2204,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         ascentMat
       );
       ascentStage.position.y = 0.027;
-      ascentStage.castShadow = true;
       lmGroup.add(ascentStage);
 
       // Triangular windows on ascent stage
@@ -2247,7 +2242,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         new THREE.MeshStandardMaterial({ color: 0xaaaaaa, roughness: 0.3, metalness: 0.8 })
       );
       lmBase.position.y = 0.005;
-      lmBase.castShadow = true;
       lmGroup.add(lmBase);
 
       // 4 landing legs with struts and foot pads
@@ -2258,11 +2252,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         leg.position.set(Math.cos(legAngle) * 0.013, 0.005, Math.sin(legAngle) * 0.013);
         leg.rotation.z = Math.cos(legAngle) * 0.35;
         leg.rotation.x = Math.sin(legAngle) * 0.35;
-        leg.castShadow = true;
         lmGroup.add(leg);
         const pad = new THREE.Mesh(new THREE.CylinderGeometry(0.003, 0.003, 0.001, 6), legMat);
         pad.position.set(Math.cos(legAngle) * 0.018, 0.001, Math.sin(legAngle) * 0.018);
-        pad.castShadow = true;
         lmGroup.add(pad);
         const strut = new THREE.Mesh(new THREE.CylinderGeometry(0.0005, 0.0005, 0.012, 3), legMat);
         strut.position.set(Math.cos(legAngle) * 0.01, 0.008, Math.sin(legAngle) * 0.01);
@@ -2379,7 +2371,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         new THREE.MeshStandardMaterial({ color: 0xdddddd, roughness: 0.5, metalness: 0.4 })
       );
       alsepBody.position.y = 0.002;
-      alsepBody.castShadow = true;
       alsep.add(alsepBody);
       const solarPanel = new THREE.Mesh(
         new THREE.PlaneGeometry(0.006, 0.003),
@@ -2398,7 +2389,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         new THREE.MeshStandardMaterial({ color: 0xcccccc, roughness: 0.4, metalness: 0.6 })
       );
       flagPole.position.y = 0.011;
-      flagPole.castShadow = true;
       flagGroup.add(flagPole);
       // Horizontal crossbar
       const crossbar = new THREE.Mesh(
@@ -2739,8 +2729,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       const geo = new THREE.SphereGeometry(config.size, 32, 32);
       const mat = new THREE.MeshStandardMaterial({ color: config.color, roughness: 0.8, bumpScale: 0.05 });
       const mesh = new THREE.Mesh(geo, mat);
-      mesh.castShadow = true;
-      mesh.receiveShadow = true;
       this.jupiterGroup.add(mesh);
       this.galileanMoons.push({ mesh, distance: config.distance, speed: config.speed, angle: Math.random() * Math.PI * 2 });
 
@@ -5363,6 +5351,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     });
 
     this.galaxyBand = new THREE.Points(bandGeo, bandMat);
+    this.galaxyBand.updateMatrix();
+    this.galaxyBand.matrixAutoUpdate = false;
     this.scene.add(this.galaxyBand);
   }
 
@@ -5391,7 +5381,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     gGeo.setAttribute('aSize', new THREE.Float32BufferAttribute(gSizes, 1));
     gGeo.setAttribute('color', new THREE.Float32BufferAttribute(gColors, 3));
 
-    this.scene.add(new THREE.Points(gGeo, new THREE.ShaderMaterial({
+    const distantGalaxies = new THREE.Points(gGeo, new THREE.ShaderMaterial({
       vertexShader: `
         attribute float aSize;
         attribute vec3 color;
@@ -5421,7 +5411,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending
-    })));
+    }));
+    distantGalaxies.updateMatrix();
+    distantGalaxies.matrixAutoUpdate = false;
+    this.scene.add(distantGalaxies);
   }
 
   private createCosmicDustClouds() {
@@ -5525,13 +5518,6 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       canSleep: false,
     });
 
-    this.spaceshipData.forEach((ship) => {
-      ship.group.traverse((child) => {
-        if (child instanceof THREE.Mesh) {
-          child.castShadow = true;
-        }
-      });
-    });
   }
 
   private registerFrustumTargets() {
@@ -7691,7 +7677,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       transparent: true, side: THREE.FrontSide,
       depthWrite: false, blending: THREE.AdditiveBlending
     });
-    this.sunMesh.add(new THREE.Mesh(chromoGeo, chromoMat));
+    const chromosphereMesh = new THREE.Mesh(chromoGeo, chromoMat);
+    chromosphereMesh.updateMatrix();
+    chromosphereMesh.matrixAutoUpdate = false;
+    this.sunMesh.add(chromosphereMesh);
 
     // Inner corona (K-corona — electron-scattered white light)
     const coronaInnerGeo = new THREE.SphereGeometry(sunRadius * 1.7, 48, 48);
@@ -7745,6 +7734,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       depthWrite: false, blending: THREE.AdditiveBlending
     });
     const coronaInner = new THREE.Mesh(coronaInnerGeo, coronaInnerMat);
+    coronaInner.updateMatrix();
+    coronaInner.matrixAutoUpdate = false;
     this.sunMesh.add(coronaInner);
 
     // Outer corona (F-corona — dust-scattered, very faint extended halo)
@@ -7777,7 +7768,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       transparent: true, side: THREE.BackSide,
       depthWrite: false, blending: THREE.AdditiveBlending
     });
-    this.sunMesh.add(new THREE.Mesh(coronaOuterGeo, coronaOuterMat));
+    const coronaOuter = new THREE.Mesh(coronaOuterGeo, coronaOuterMat);
+    coronaOuter.updateMatrix();
+    coronaOuter.matrixAutoUpdate = false;
+    this.sunMesh.add(coronaOuter);
 
     // God-rays / volumetric light cone (subtle directional glow toward camera)
     const godRayGeo = new THREE.SphereGeometry(sunRadius * 5, 16, 16);
@@ -7805,7 +7799,10 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
       transparent: true, side: THREE.BackSide,
       depthWrite: false, blending: THREE.AdditiveBlending
     });
-    this.sunMesh.add(new THREE.Mesh(godRayGeo, godRayMat));
+    const godRayMesh = new THREE.Mesh(godRayGeo, godRayMat);
+    godRayMesh.updateMatrix();
+    godRayMesh.matrixAutoUpdate = false;
+    this.sunMesh.add(godRayMesh);
 
     this.scene.add(this.sunMesh);
   }

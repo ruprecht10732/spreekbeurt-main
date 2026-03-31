@@ -362,9 +362,9 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
   private hyperspaceTimer = 0;
   private readonly hyperspaceDuration = 2.5;
   private originalFov = 60;
-  private readonly originalBloomIntensity = 1.6;
+  private readonly originalBloomIntensity = 0.7;
   private readonly defaultFogDensity = 0.00015;
-  private readonly defaultToneMappingExposure = 1.18;
+  private readonly defaultToneMappingExposure = 0.75;
 
   // SpaceX Falcon 9 rocket launch
   private falconGroup!: THREE.Group;
@@ -744,11 +744,11 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     }
 
     if (this.renderer) {
-      this.renderer.toneMappingExposure = THREE.MathUtils.lerp(this.defaultToneMappingExposure, 1.28, bloomEase);
+      this.renderer.toneMappingExposure = THREE.MathUtils.lerp(this.defaultToneMappingExposure, 0.85, bloomEase);
     }
 
     if (!this.hyperspaceActive) {
-      this.postProcessManager?.setBloomIntensity(THREE.MathUtils.lerp(this.originalBloomIntensity, 7.8, bloomEase));
+      this.postProcessManager?.setBloomIntensity(THREE.MathUtils.lerp(this.originalBloomIntensity, 3.0, bloomEase));
     }
 
     if (this.camera) {
@@ -1503,7 +1503,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
     this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.18;
+    this.renderer.toneMappingExposure = 0.75;
     container.appendChild(this.renderer.domElement);
 
     // Orbit controls — Google Earth-style zoom/pan/rotate
@@ -2784,42 +2784,42 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.jupiterGroup.add(this.smallMoons);
 
     // Lighting — biased toward a single believable solar source, not a studio rig.
-    this.ambientSpaceLight = new THREE.AmbientLight(0x050810, 0.14);
+    this.ambientSpaceLight = new THREE.AmbientLight(0x050810, 0.06);
     this.scene.add(this.ambientSpaceLight);
 
     // Main sun light — warm white (5778 K blackbody ≈ 0xfff5e0)
     // Positioned further away for more realistic parallel-ray feel
-    this.sunLight = new THREE.DirectionalLight(0xfff5e6, 3.2);
+    this.sunLight = new THREE.DirectionalLight(0xfff5e6, 1.4);
     this.sunLight.position.copy(this.sunPosition);
     this.scene.add(this.sunLight);
 
     // Point light at the Sun — natural inverse-square falloff; range increased for greater distance
-    this.sunPointLight = new THREE.PointLight(0xfff0d8, 5.8, 420, 1.8);
+    this.sunPointLight = new THREE.PointLight(0xfff0d8, 2.2, 420, 1.8);
     this.sunPointLight.position.copy(this.sunPosition);
     this.scene.add(this.sunPointLight);
 
     // Dim blue-ish fill from opposite side — scattered light / ISM reflection
-    this.sunFillLight = new THREE.DirectionalLight(0x0d1b31, 0.1);
+    this.sunFillLight = new THREE.DirectionalLight(0x0d1b31, 0.04);
     this.sunFillLight.position.set(100, -20, -65);
     this.scene.add(this.sunFillLight);
 
     // Subtle overhead hemisphere fill for readability
-    this.sunHemiLight = new THREE.HemisphereLight(0x08111f, 0x010102, 0.12);
+    this.sunHemiLight = new THREE.HemisphereLight(0x08111f, 0x010102, 0.05);
     this.scene.add(this.sunHemiLight);
 
     // Warm rim/back light — adds depth by outlining dark-side edges
-    this.sunRimLight = new THREE.DirectionalLight(0xe7d6bf, 0.08);
+    this.sunRimLight = new THREE.DirectionalLight(0xe7d6bf, 0.03);
     this.sunRimLight.position.set(40, -20, -60);
     this.scene.add(this.sunRimLight);
 
     // Earthshine — faint blue fill from Earth's reflected light onto the Moon
-    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.18);
+    this.earthshineLight = new THREE.DirectionalLight(0x4488ff, 0.08);
     this.earthshineLight.position.set(10, 5, -5);
     this.scene.add(this.earthshineLight);
     this.scene.add(this.earthshineLight.target);
 
     // Cinematic Anamorphic Lens Flare
-    const flareGeo = new THREE.PlaneGeometry(18, 18);
+    const flareGeo = new THREE.PlaneGeometry(10, 10);
     const flareMat = new THREE.ShaderMaterial({
       uniforms: {
         color: { value: new THREE.Color(0xfff1cf) },
@@ -7637,8 +7637,8 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           finalColor += granulation * vec3(1.0, 0.85, 0.5);
           finalColor *= (1.0 - spots * 0.15); // Darken in sunspot regions
           
-          // Bright HDR emission — push beyond 1.0 for tone mapping bloom
-          finalColor *= 2.5;
+          // HDR emission — mild push for tone mapping bloom
+          finalColor *= 1.2;
           
           gl_FragColor = vec4(finalColor, 1.0);
         }
@@ -7681,7 +7681,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Thin bright ring at the very edge — Hα red-pink emission
           float chromo = pow(rim, 6.0) * 2.0;
           vec3 color = mix(vec3(1.0, 0.3, 0.15), vec3(1.0, 0.5, 0.3), rim);
-          gl_FragColor = vec4(color * 2.0, chromo * 0.8);
+          gl_FragColor = vec4(color * 1.0, chromo * 0.4);
         }
       `,
       transparent: true, side: THREE.FrontSide,
@@ -7734,7 +7734,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Pearly white with slight warm tint
           vec3 color = mix(vec3(1.0, 0.96, 0.88), vec3(1.0, 0.8, 0.5), rim * 0.5);
           
-          gl_FragColor = vec4(color * 1.5, corona * 0.5);
+          gl_FragColor = vec4(color * 0.8, corona * 0.3);
         }
       `,
       transparent: true, side: THREE.BackSide,
@@ -7767,7 +7767,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
           // Slow breathing
           corona *= 0.9 + 0.1 * sin(uTime * 0.3);
           vec3 color = vec3(1.0, 0.88, 0.65);
-          gl_FragColor = vec4(color, corona * 0.12);
+          gl_FragColor = vec4(color, corona * 0.05);
         }
       `,
       transparent: true, side: THREE.BackSide,
@@ -7793,7 +7793,7 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
         void main() {
           vec3 viewDir = normalize(-vPos);
           float facing = max(dot(viewDir, vNormal), 0.0);
-          float glow = pow(facing, 3.0) * 0.15;
+          float glow = pow(facing, 3.0) * 0.06;
           vec3 color = vec3(1.0, 0.92, 0.7);
           gl_FragColor = vec4(color, glow);
         }
@@ -8804,26 +8804,26 @@ export class Background3DComponent implements OnInit, OnDestroy, OnChanges {
     this.camera.getWorldDirection(cameraForward);
     const alignment = Math.max(cameraForward.dot(toSun), 0);
     const flareOpacity = this.theatreSunFlareVisible
-      ? THREE.MathUtils.smootherstep(alignment, 0.985, 0.9997) * 0.22
+      ? THREE.MathUtils.smootherstep(alignment, 0.985, 0.9997) * 0.10
       : 0;
     const flareMaterial = this.sunFlare.material as THREE.ShaderMaterial;
     flareMaterial.uniforms['uOpacity'].value = flareOpacity;
     this.sunFlare.visible = flareOpacity > 0.0005;
     this.sunFlare.position.copy(this.sunPosition);
     this.sunFlare.lookAt(this.camera.position);
-    const flareScale = THREE.MathUtils.lerp(0.85, 1.7, flareOpacity > 0 ? flareOpacity / 0.22 : 0);
+    const flareScale = THREE.MathUtils.lerp(0.6, 1.2, flareOpacity > 0 ? flareOpacity / 0.10 : 0);
     this.sunFlare.scale.setScalar(flareScale);
   }
 
   private updateSunLightRig() {
     const sunDistance = this.camera.position.distanceTo(this.sunPosition);
     const lightFalloff = THREE.MathUtils.clamp(160 / sunDistance, 0.3, 1);
-    this.sunLight.intensity = THREE.MathUtils.lerp(2.1, 3.4, lightFalloff);
-    this.sunPointLight.intensity = THREE.MathUtils.lerp(2.6, 5.8, lightFalloff);
-    this.sunFillLight.intensity = THREE.MathUtils.lerp(0.04, 0.12, lightFalloff);
-    this.sunRimLight.intensity = THREE.MathUtils.lerp(0.02, 0.08, lightFalloff);
-    this.sunHemiLight.intensity = THREE.MathUtils.lerp(0.05, 0.12, lightFalloff);
-    this.ambientSpaceLight.intensity = THREE.MathUtils.lerp(0.08, 0.16, lightFalloff);
+    this.sunLight.intensity = THREE.MathUtils.lerp(0.8, 1.4, lightFalloff);
+    this.sunPointLight.intensity = THREE.MathUtils.lerp(1.0, 2.2, lightFalloff);
+    this.sunFillLight.intensity = THREE.MathUtils.lerp(0.02, 0.04, lightFalloff);
+    this.sunRimLight.intensity = THREE.MathUtils.lerp(0.01, 0.03, lightFalloff);
+    this.sunHemiLight.intensity = THREE.MathUtils.lerp(0.02, 0.05, lightFalloff);
+    this.ambientSpaceLight.intensity = THREE.MathUtils.lerp(0.03, 0.06, lightFalloff);
   }
 
   private onWindowResize() {

@@ -150,7 +150,7 @@ interface CelebrationFrameState {
             </div>
             <div class="border-t border-amber-500/15 pt-2">
               <div class="text-[9px] text-amber-400/50 tracking-widest">MARE TRANQUILLITATIS</div>
-              <div class="text-amber-400/70 text-[11px] mt-1">20 JULI 1969 • 20:17 UTC</div>
+              <div class="text-amber-400/70 text-[11px] mt-1">20 JULY 1969 • 20:17 UTC</div>
             </div>
           </div>
         </div>
@@ -165,7 +165,7 @@ interface CelebrationFrameState {
           <div #crawlContainer class="w-[80%] max-w-3xl text-center text-[var(--color-starwars-yellow)] font-starwars transform-gpu rotate-x-[20deg] origin-bottom transition-opacity duration-[3000ms]" [class.opacity-0]="tourMode()">
             <h1 class="text-7xl md:text-9xl mb-8 uppercase tracking-widest title-shimmer">{{ currentSlide().title }}</h1>
             @if (currentSlide().id === 'title') {
-              <p class="text-sm md:text-xl mb-4 uppercase tracking-[0.5em] opacity-50 font-starwars">Gemaakt door</p>
+              <p class="text-sm md:text-xl mb-4 uppercase tracking-[0.5em] opacity-50 font-starwars">Created by</p>
               <div class="name-backdrop relative mb-6">
                 @for (char of nameChars; track $index) {
                   <span class="name-char relative inline-block text-5xl md:text-8xl font-starwars uppercase"
@@ -173,7 +173,7 @@ interface CelebrationFrameState {
                         [style.min-width]="char === ' ' ? '0.4em' : 'auto'">{{ char }}</span>
                 }
               </div>
-              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-45 name-subtitle">Klas: Groep 7</p>
+              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-45 name-subtitle">Class: Grade 7</p>
             } @else {
               @for (line of currentSlide().content; track $index) {
                 <p class="text-3xl md:text-5xl mb-4 uppercase tracking-wider">{{ line }}</p>
@@ -185,7 +185,7 @@ interface CelebrationFrameState {
                   <div class="w-28 h-28 rounded-full bg-[var(--color-starwars-yellow)]/20 border-2 border-[var(--color-starwars-yellow)] flex items-center justify-center group-hover:bg-[var(--color-starwars-yellow)]/40 group-hover:scale-110 active:scale-95 transition-all duration-300 shadow-[0_0_40px_rgba(255,232,31,0.3)] group-hover:shadow-[0_0_60px_rgba(255,232,31,0.5)] play-pulse">
                     <mat-icon class="!text-6xl !w-14 !h-14 text-[var(--color-starwars-yellow)] ml-1" style="font-size:56px;width:56px;height:56px;">play_arrow</mat-icon>
                   </div>
-                  <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">Klik om te beginnen</span>
+                  <span class="text-xl opacity-70 group-hover:opacity-100 transition-opacity">Click to start</span>
                 </button>
               } @else {
                 <div class="mt-12 flex flex-col items-center gap-4 w-64 mx-auto">
@@ -198,7 +198,7 @@ interface CelebrationFrameState {
                 </div>
               }
             } @else if (currentSlide().id === 'title' && hasStarted()) {
-              <p class="mt-12 text-xl opacity-70 animate-pulse">Druk op spatie of pijltje naar rechts om verder te gaan</p>
+              <p class="mt-12 text-xl opacity-70 animate-pulse">Press space or the right arrow key to continue</p>
             }
           </div>
         </div>
@@ -227,16 +227,16 @@ interface CelebrationFrameState {
           @if (currentSlide().id === 'h1') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[14%] right-[16%] text-right">
-                <div class="text-xs font-mono text-cyan-400/70 tracking-[0.3em] mb-1">CLASSIFICATIE</div>
-                <div class="text-4xl md:text-6xl font-starwars text-cyan-300/90 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GASREUS</div>
-                <div class="text-sm text-white/60 mt-1">Geen steen of zand zoals de aarde</div>
+                <div class="text-xs font-mono text-cyan-400/70 tracking-[0.3em] mb-1">CLASSIFICATION</div>
+                <div class="text-4xl md:text-6xl font-starwars text-cyan-300/90 drop-shadow-[0_0_30px_rgba(100,210,255,0.4)]">GAS GIANT</div>
+                <div class="text-sm text-white/60 mt-1">No rock or sand like Earth</div>
               </div>
               <div class="slide-item absolute top-[38%] right-[6%] md:right-[10%]">
                 <div class="flex items-baseline gap-1">
                   <span class="text-6xl md:text-8xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_30px_rgba(255,232,31,0.4)] tabular-nums">90</span>
                   <span class="text-2xl text-[var(--color-starwars-yellow)]/70 font-starwars">%</span>
                 </div>
-                <div class="text-sm text-white/60 tracking-wider">WATERSTOF (H₂)</div>
+                <div class="text-sm text-white/60 tracking-wider">HYDROGEN (H₂)</div>
               </div>
               <div class="slide-item absolute top-[55%] right-[18%] md:right-[22%]">
                 <div class="flex items-baseline gap-1">
@@ -253,14 +253,14 @@ interface CelebrationFrameState {
                       <span class="text-3xl md:text-4xl font-starwars text-cyan-200/80 tabular-nums">1000</span>
                       <span class="text-sm text-cyan-200/55 tracking-wider">KM</span>
                     </div>
-                    <div class="text-xs text-white/50 tracking-wider">DAMPKRING DIKTE</div>
+                    <div class="text-xs text-white/50 tracking-wider">ATMOSPHERE THICKNESS</div>
                   </div>
                 </div>
               </div>
               <div class="slide-item absolute bottom-[18%] right-[22%]">
                 <div class="text-sm text-red-300/70 italic flex items-center gap-2">
                   <div class="w-1.5 h-1.5 rounded-full bg-red-400/60"></div>
-                  Geen vaste grond om op te landen
+                  No solid ground to land on
                 </div>
               </div>
             </div>
@@ -269,31 +269,31 @@ interface CelebrationFrameState {
           } @else if (currentSlide().id === 'h5') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[12%] right-[14%] text-right">
-                <div class="text-xs font-mono text-purple-400/70 tracking-[0.3em] mb-1">MASSA</div>
+                <div class="text-xs font-mono text-purple-400/70 tracking-[0.3em] mb-1">MASS</div>
                 <div class="flex items-baseline gap-1 justify-end">
                   <span class="text-5xl md:text-7xl font-starwars text-purple-300/90 drop-shadow-[0_0_25px_rgba(180,130,255,0.4)] tabular-nums">300</span>
                   <span class="text-xl text-purple-300/70 font-starwars">×</span>
                 </div>
-                <div class="text-sm text-white/60">zwaarder dan de aarde</div>
+                <div class="text-sm text-white/60">heavier than Earth</div>
               </div>
               <div class="slide-item absolute top-[35%] right-[6%] md:right-[8%]">
                 <div class="flex items-baseline gap-1">
                   <span class="text-4xl md:text-5xl font-starwars text-[var(--color-starwars-yellow)] drop-shadow-[0_0_20px_rgba(255,232,31,0.3)] tabular-nums">9u 55m</span>
                 </div>
-                <div class="text-sm text-white/55 tracking-wider">ÉÉN DAG OP JUPITER</div>
+                <div class="text-sm text-white/55 tracking-wider">ONE DAY ON JUPITER</div>
               </div>
               <div class="slide-item absolute top-[52%] right-[16%] md:right-[20%]">
                 <div class="flex items-baseline gap-1">
                   <span class="text-5xl md:text-6xl font-starwars text-orange-300/90 drop-shadow-[0_0_20px_rgba(255,180,100,0.3)] tabular-nums">2.5</span>
                   <span class="text-xl text-orange-300/65 font-starwars">×</span>
                 </div>
-                <div class="text-sm text-white/55 tracking-wider">ZWAARTEKRACHT</div>
-                <div class="text-xs text-white/50 mt-0.5">Je weegt er flink meer!</div>
+                <div class="text-sm text-white/55 tracking-wider">GRAVITY</div>
+                <div class="text-xs text-white/50 mt-0.5">You weigh a lot more there!</div>
               </div>
               <div class="slide-item absolute bottom-[25%] right-[12%]">
                 <div class="text-sm text-cyan-300/65 flex items-center gap-2">
                   <div class="w-8 h-px bg-gradient-to-r from-transparent to-cyan-400/45"></div>
-                  Allergrootste planeet — een gasreus
+                  Largest planet — a gas giant
                 </div>
               </div>
             </div>
@@ -320,24 +320,24 @@ interface CelebrationFrameState {
           } @else if (currentSlide().id === 'extra') {
             <div class="absolute inset-0 pointer-events-none">
               <div class="slide-item absolute top-[12%] right-[18%] text-right">
-                <div class="text-xs font-mono text-blue-400/70 tracking-[0.3em] mb-1">MAANSYSTEEM</div>
+                <div class="text-xs font-mono text-blue-400/70 tracking-[0.3em] mb-1">MOON SYSTEM</div>
                 <div class="flex items-baseline gap-1 justify-end">
                   <span class="text-6xl md:text-8xl font-starwars text-blue-300/90 drop-shadow-[0_0_30px_rgba(100,150,255,0.4)] tabular-nums">95</span>
                 </div>
-                <div class="text-sm text-white/60">manen in een baan om Jupiter</div>
+                <div class="text-sm text-white/60">moons in orbit around Jupiter</div>
               </div>
               <div class="slide-item absolute top-[38%] right-[6%] md:right-[8%]">
                 <div class="text-xl md:text-2xl font-starwars text-cyan-200/85 drop-shadow-[0_0_15px_rgba(100,210,255,0.3)]">EUROPA</div>
-                <div class="text-sm text-white/55 mt-1 max-w-[220px]">Oceaan onder het ijs — misschien leven?</div>
+                <div class="text-sm text-white/55 mt-1 max-w-[220px]">Ocean under the ice — maybe life?</div>
               </div>
               <div class="slide-item absolute top-[56%] right-[18%] md:right-[22%]">
                 <div class="text-xl md:text-2xl font-starwars text-yellow-300/85 drop-shadow-[0_0_15px_rgba(255,200,50,0.3)]">IO</div>
-                <div class="text-sm text-white/55 mt-1 max-w-[200px]">Vulkanen door Jupiters zwaartekracht</div>
+                <div class="text-sm text-white/55 mt-1 max-w-[200px]">Volcanoes from Jupiter's gravity</div>
               </div>
               <div class="slide-item absolute bottom-[24%] right-[14%]">
                 <div class="text-sm text-red-300/65 italic flex items-center gap-2">
                   <div class="w-1.5 h-1.5 rounded-full bg-red-400/60"></div>
-                  Extreme druk, wind en geen grond
+                  Extreme pressure, wind and no ground
                 </div>
               </div>
             </div>
@@ -349,7 +349,7 @@ interface CelebrationFrameState {
               @if (currentQuizQuestionIndex() < quiz.length) {
                 @let q = quiz[currentQuizQuestionIndex()];
                 <div class="slide-item">
-                  <span class="text-blue-400/60 font-starwars text-base tracking-widest mb-3 block">Vraag {{ currentQuizQuestionIndex() + 1 }} / {{ quiz.length }}</span>
+                  <span class="text-blue-400/60 font-starwars text-base tracking-widest mb-3 block">Question {{ currentQuizQuestionIndex() + 1 }} / {{ quiz.length }}</span>
                   <p class="text-2xl md:text-3xl text-white/90 font-medium mb-6 drop-shadow-[0_2px_8px_rgba(0,0,0,1)]">{{ q.question }}</p>
                   <div class="grid grid-cols-1 gap-3 mb-6">
                     @for (option of q.options; track $index) {
@@ -377,11 +377,11 @@ interface CelebrationFrameState {
                       <button (click)="revealAnswer()" 
                               [disabled]="selectedQuizOption() === -1"
                               class="px-5 py-2.5 bg-[var(--color-starwars-yellow)]/90 text-black font-starwars text-sm tracking-widest rounded-lg hover:bg-[var(--color-starwars-yellow)] transition-all disabled:opacity-20 disabled:cursor-not-allowed">
-                        {{ selectedQuizOption() === -1 ? 'Kies een antwoord' : 'Toon Antwoord' }}
+                        {{ selectedQuizOption() === -1 ? 'Choose an answer' : 'Show Answer' }}
                       </button>
                     } @else {
                       <button (click)="nextQuizQuestion()" class="px-5 py-2.5 bg-blue-500/50 text-white font-starwars text-sm tracking-widest rounded-lg hover:bg-blue-400/50 transition-colors">
-                        {{ currentQuizQuestionIndex() === quiz.length - 1 ? 'Einde Afvalrace' : 'Volgende Vraag' }}
+                        {{ currentQuizQuestionIndex() === quiz.length - 1 ? 'End of Elimination Race' : 'Next Question' }}
                       </button>
                     }
                   </div>
@@ -389,8 +389,8 @@ interface CelebrationFrameState {
               } @else {
                 <div class="text-left quiz-complete slide-item">
                   <mat-icon class="text-5xl text-[var(--color-starwars-yellow)] mb-3 drop-shadow-[0_0_15px_rgba(255,232,31,0.4)] trophy-bounce" style="height: 50px; width: 50px; font-size: 50px;">emoji_events</mat-icon>
-                  <h3 class="text-3xl font-starwars text-[var(--color-starwars-yellow)] mb-3 tracking-widest title-shimmer">Gefeliciteerd!</h3>
-                  <p class="text-xl text-green-100/70">Jullie zijn de ultieme Jupiter-experts!</p>
+                  <h3 class="text-3xl font-starwars text-[var(--color-starwars-yellow)] mb-3 tracking-widest title-shimmer">Congratulations!</h3>
+                  <p class="text-xl text-green-100/70">You are the ultimate Jupiter experts!</p>
                 </div>
               }
             </div>
@@ -432,13 +432,13 @@ interface CelebrationFrameState {
           <!-- Distance counter (h3) — floating near the beam -->
           @if (currentSlide().id === 'h3' && currentDistance() > 0) {
             <div class="absolute right-[10%] top-1/2 -translate-y-1/2 slide-item text-right pointer-events-none">
-              <div class="text-xs text-[var(--color-starwars-yellow)]/65 font-starwars tracking-[0.3em] mb-1">HUIDIGE AFSTAND</div>
+              <div class="text-xs text-[var(--color-starwars-yellow)]/65 font-starwars tracking-[0.3em] mb-1">CURRENT DISTANCE</div>
               <div class="flex items-baseline gap-1 justify-end">
                 <span class="text-5xl md:text-7xl font-starwars text-[var(--color-starwars-yellow)] tracking-wider tabular-nums drop-shadow-[0_0_20px_rgba(255,232,31,0.4)]">{{ currentDistance() }}</span>
                 <span class="text-sm text-[var(--color-starwars-yellow)]/60 font-starwars tracking-wider">M KM</span>
               </div>
               <div class="mt-2 text-sm text-[var(--color-starwars-yellow)]/55 font-mono tracking-wider">
-                ☀️ Licht: {{ lightTravelMinutes() }} min
+                ☀️ Light: {{ lightTravelMinutes() }} min
               </div>
             </div>
           }
@@ -686,108 +686,108 @@ export class App implements AfterViewInit, OnDestroy {
   }> = {
     'jupiter': { title: 'Jupiter', icon: '🪐', color: 'rgba(255,232,31,0.92)',
       stats: [
-        { value: '95', label: 'MANEN', sub: 'in baan om Jupiter' },
-        { value: '300×', label: 'MASSA', sub: 'zwaarder dan de Aarde' },
-        { value: '90%', label: 'WATERSTOF', sub: '+ 10% helium' },
-        { value: 'GRS', label: 'SUPERSTORM', sub: 'Grote Rode Vlek' },
+        { value: '95', label: 'MOONS', sub: 'in orbit around Jupiter' },
+        { value: '300×', label: 'MASS', sub: 'heavier than Earth' },
+        { value: '90%', label: 'HYDROGEN', sub: '+ 10% helium' },
+        { value: 'GRS', label: 'SUPERSTORM', sub: 'Great Red Spot' },
       ]},
-    'zon': { title: 'De Zon', icon: '☀️', color: 'rgba(255,200,60,0.92)',
+    'zon': { title: 'The Sun', icon: '☀️', color: 'rgba(255,200,60,0.92)',
       stats: [
-        { value: '5.500°C', label: 'BUITENKANT', sub: 'kern: 15 mln °C' },
-        { value: '1,3 MLN×', label: 'VOLUME', sub: 'groter dan de Aarde' },
-        { value: '8 min', label: 'LICHT REISTIJD', sub: 'zon → aarde' },
-        { value: 'G2V', label: 'STERTYPE', sub: 'gele dwergster' },
+        { value: '5.500°C', label: 'SURFACE', sub: 'core: 15 mln °C' },
+        { value: '1,3 MLN×', label: 'VOLUME', sub: 'larger than Earth' },
+        { value: '8 min', label: 'LIGHT TRAVEL TIME', sub: 'sun → earth' },
+        { value: 'G2V', label: 'STAR TYPE', sub: 'yellow dwarf star' },
       ]},
-    'mercurius': { title: 'Mercurius', icon: '🪨', color: 'rgba(210,195,175,0.90)',
+    'mercurius': { title: 'Mercury', icon: '🪨', color: 'rgba(210,195,175,0.90)',
       stats: [
-        { value: '430°C', label: 'OVERDAG', sub: '-180°C \'s nachts' },
-        { value: '88d', label: 'EEN JAAR', sub: 'kortste omloop' },
-        { value: '0', label: 'MANEN', sub: 'geheel alleen' },
-        { value: '0.4×', label: 'GROOTTE', sub: 'vs. Aarde' },
+        { value: '430°C', label: 'DAYTIME', sub: '-180°C at night' },
+        { value: '88d', label: 'ONE YEAR', sub: 'shortest orbit' },
+        { value: '0', label: 'MOONS', sub: 'all alone' },
+        { value: '0.4×', label: 'SIZE', sub: 'vs. Earth' },
       ]},
     'venus': { title: 'Venus', icon: '🌕', color: 'rgba(220,185,100,0.90)',
       stats: [
-        { value: '465°C', label: 'TEMPERATUUR', sub: 'heetste planeet!' },
-        { value: 'H₂SO₄', label: 'WOLKEN', sub: 'zwavelzuur' },
-        { value: '−1', label: 'ROTATIE', sub: 'draait andersom' },
-        { value: '0.9×', label: 'GROOTTE', sub: 'vs. Aarde' },
+        { value: '465°C', label: 'TEMPERATURE', sub: 'hottest planet!' },
+        { value: 'H₂SO₄', label: 'CLOUDS', sub: 'sulfuric acid' },
+        { value: '−1', label: 'ROTATION', sub: 'spins backwards' },
+        { value: '0.9×', label: 'SIZE', sub: 'vs. Earth' },
       ]},
-    'aarde': { title: 'De Aarde', icon: '🌍', color: 'rgba(100,200,255,0.92)',
+    'aarde': { title: 'Earth', icon: '🌍', color: 'rgba(100,200,255,0.92)',
       stats: [
-        { value: '71%', label: 'WATEROPPERVLAK', sub: 'uniek in ons stelsel' },
-        { value: '1', label: 'MAAN', sub: 'Luna, onze trouwe maan' },
-        { value: '24u', label: 'EEN DAG', sub: 'aardse dag' },
-        { value: '🚀', label: 'FALCON 9', sub: 'nu op weg naar Mars!' },
+        { value: '71%', label: 'WATER SURFACE', sub: 'unique in our solar system' },
+        { value: '1', label: 'MOON', sub: 'Luna, our faithful moon' },
+        { value: '24u', label: 'ONE DAY', sub: 'earth day' },
+        { value: '🚀', label: 'FALCON 9', sub: 'now on its way to Mars!' },
       ]},
-    'maan': { title: 'De Maan', icon: '🌙', color: 'rgba(200,200,190,0.90)',
+    'maan': { title: 'The Moon', icon: '🌙', color: 'rgba(200,200,190,0.90)',
       stats: [
-        { value: '0.674°N', label: 'BREEDTEGRAAD', sub: 'Tranquility Base' },
-        { value: '23.473°E', label: 'LENGTEGRAAD', sub: 'Mare Tranquillitatis' },
-        { value: '1969', label: 'APOLLO 11', sub: '20 juli — maanlanding' },
-        { value: '∅ wind', label: 'VOETSPOREN', sub: 'voor altijd in het stof' },
+        { value: '0.674°N', label: 'LATITUDE', sub: 'Tranquility Base' },
+        { value: '23.473°E', label: 'LONGITUDE', sub: 'Mare Tranquillitatis' },
+        { value: '1969', label: 'APOLLO 11', sub: '20 July — moon landing' },
+        { value: '∅ wind', label: 'FOOTPRINTS', sub: 'forever in the dust' },
       ]},
     'columbia': { title: 'Columbia', icon: '🛰️', color: 'rgba(255,150,105,0.94)',
       stats: [
-        { value: 'STS-107', label: 'MISSIE', sub: 'wetenschappelijke shuttlevlucht' },
-        { value: '7', label: 'BEMANNING', sub: 'zeven astronauten herdacht' },
-        { value: '1 FEB 2003', label: 'RAMP', sub: 'tijdens terugkeer naar de aarde' },
-        { value: 'RE-ENTRY', label: 'LOCATIE', sub: 'hoog in de aardatmosfeer' },
+        { value: 'STS-107', label: 'MISSION', sub: 'scientific shuttle flight' },
+        { value: '7', label: 'CREW', sub: 'seven astronauts remembered' },
+        { value: '1 FEB 2003', label: 'DISASTER', sub: 'during return to Earth' },
+        { value: 'RE-ENTRY', label: 'LOCATION', sub: 'high in Earth\'s atmosphere' },
       ]},
     'mars': { title: 'Mars', icon: '🔴', color: 'rgba(230,100,60,0.92)',
       stats: [
-        { value: '21 km', label: 'OLYMPUS MONS', sub: 'hoogste berg ooit' },
-        { value: '2', label: 'MANEN', sub: 'Phobos & Deimos' },
-        { value: '-65°C', label: 'TEMPERATUUR', sub: 'gemiddeld op Mars' },
-        { value: '1.9j', label: 'EEN JAAR', sub: 'op Mars duurt langer' },
+        { value: '21 km', label: 'OLYMPUS MONS', sub: 'highest mountain ever' },
+        { value: '2', label: 'MOONS', sub: 'Phobos & Deimos' },
+        { value: '-65°C', label: 'TEMPERATURE', sub: 'average on Mars' },
+        { value: '1.9j', label: 'ONE YEAR', sub: 'on Mars takes longer' },
       ]},
     'starman': { title: 'Starman', icon: '🚗', color: 'rgba(200,40,40,0.92)',
       stats: [
-        { value: 'Tesla', label: 'ROADSTER', sub: 'rode sportwagen' },
-        { value: '2018', label: 'GELANCEERD', sub: 'SpaceX Falcon Heavy' },
-        { value: '∞', label: 'IN DE RUIMTE', sub: 'draait om de zon' },
-        { value: '🎵', label: 'DAVID BOWIE', sub: 'Space Oddity speelt' },
+        { value: 'Tesla', label: 'ROADSTER', sub: 'red sports car' },
+        { value: '2018', label: 'LAUNCHED', sub: 'SpaceX Falcon Heavy' },
+        { value: '∞', label: 'IN SPACE', sub: 'orbits the sun' },
+        { value: '🎵', label: 'DAVID BOWIE', sub: 'Space Oddity is playing' },
       ]},
-    'saturnus': { title: 'Saturnus', icon: '🪐', color: 'rgba(220,195,140,0.92)',
+    'saturnus': { title: 'Saturn', icon: '🪐', color: 'rgba(220,195,140,0.92)',
       stats: [
-        { value: '146', label: 'MANEN', sub: 'waaronder Titan' },
-        { value: '0.7', label: 'DICHTHEID', sub: 'drijft op water!' },
-        { value: '300.000', label: 'RING BREEDTE', sub: 'km — slechts 1 km dik' },
-        { value: '10.7u', label: 'EEN DAG', sub: 'op Saturnus' },
+        { value: '146', label: 'MOONS', sub: 'including Titan' },
+        { value: '0.7', label: 'DENSITY', sub: 'floats on water!' },
+        { value: '300.000', label: 'RING WIDTH', sub: 'km — only 1 km thick' },
+        { value: '10.7u', label: 'ONE DAY', sub: 'on Saturn' },
       ]},
     'uranus': { title: 'Uranus', icon: '🔵', color: 'rgba(100,230,210,0.92)',
       stats: [
-        { value: '98°', label: 'KANTELHOEK', sub: 'draait op z\'n zij!' },
-        { value: '-224°C', label: 'TEMPERATUUR', sub: 'koudste planeet' },
-        { value: '27', label: 'MANEN', sub: 'Shakespeare-namen' },
-        { value: '84j', label: 'EEN JAAR', sub: 'op Uranus' },
+        { value: '98°', label: 'TILT ANGLE', sub: 'spins on its side!' },
+        { value: '-224°C', label: 'TEMPERATURE', sub: 'coldest planet' },
+        { value: '27', label: 'MOONS', sub: 'Shakespeare names' },
+        { value: '84j', label: 'ONE YEAR', sub: 'on Uranus' },
       ]},
-    'neptunus': { title: 'Neptunus', icon: '🔵', color: 'rgba(80,130,255,0.92)',
+    'neptunus': { title: 'Neptune', icon: '🔵', color: 'rgba(80,130,255,0.92)',
       stats: [
-        { value: '2100 km/u', label: 'WIND', sub: 'snelste winden!' },
-        { value: '4,5 mrd', label: 'ZON-AFSTAND', sub: 'km van de Zon' },
-        { value: '165j', label: 'EEN JAAR', sub: 'op Neptunus' },
-        { value: '14', label: 'MANEN', sub: 'waaronder Triton' },
+        { value: '2100 km/u', label: 'WIND', sub: 'fastest winds!' },
+        { value: '4,5 mrd', label: 'SUN DISTANCE', sub: 'km from the Sun' },
+        { value: '165j', label: 'ONE YEAR', sub: 'on Neptune' },
+        { value: '14', label: 'MOONS', sub: 'including Triton' },
       ]},
     'pluto': { title: 'Pluto', icon: '🌑', color: 'rgba(196,168,130,0.90)',
       stats: [
-        { value: 'DWERG', label: 'PLANEETSTATUS', sub: 'geen echte planeet' },
-        { value: '248j', label: 'EEN JAAR', sub: 'op Pluto' },
-        { value: '5', label: 'MANEN', sub: 'waaronder Charon' },
-        { value: '-230°C', label: 'TEMPERATUUR', sub: 'ijzig koud!' },
+        { value: 'DWARF', label: 'PLANET STATUS', sub: 'not a real planet' },
+        { value: '248j', label: 'ONE YEAR', sub: 'on Pluto' },
+        { value: '5', label: 'MOONS', sub: 'including Charon' },
+        { value: '-230°C', label: 'TEMPERATURE', sub: 'icy cold!' },
       ]},
-    'blackhole': { title: 'Zwart Gat', icon: '🕳️', color: 'rgba(255,120,50,0.95)',
+    'blackhole': { title: 'Black Hole', icon: '🕳️', color: 'rgba(255,120,50,0.95)',
       stats: [
-        { value: '∞', label: 'ZWAARTEKRACHT', sub: 'Licht kan niet ontsnappen' },
-        { value: 'Gargantua', label: 'CLASSIFICATIE', sub: 'Superzwaar Zwart Gat' },
-        { value: '1=7', label: 'TIJDSVERTRAGING', sub: '1 uur hier = 7 jaar op aarde' },
+        { value: '∞', label: 'GRAVITY', sub: 'Light cannot escape' },
+        { value: 'Gargantua', label: 'CLASSIFICATION', sub: 'Supermassive Black Hole' },
+        { value: '1=7', label: 'TIME DILATION', sub: '1 hour here = 7 years on Earth' },
         { value: 'Horizon', label: 'EVENT', sub: 'Point of no return' },
       ]},
-    'jupiter-einde': { title: 'Terug bij Jupiter', icon: '✨', color: 'rgba(255,232,31,0.92)',
+    'jupiter-einde': { title: 'Back at Jupiter', icon: '✨', color: 'rgba(255,232,31,0.92)',
       stats: [
-        { value: '#1', label: 'GROOTSTE', sub: 'planeet in ons stelsel' },
-        { value: '95', label: 'MANEN', sub: 'en nog meer ontdekt!' },
-        { value: '1300×', label: 'VOLUME', sub: 'vs. de Aarde' },
-        { value: '♾️', label: 'BEDANKT!', sub: 'voor het kijken!' },
+        { value: '#1', label: 'BIGGEST', sub: 'planet in our solar system' },
+        { value: '95', label: 'MOONS', sub: 'and more discovered!' },
+        { value: '1300×', label: 'VOLUME', sub: 'vs. Earth' },
+        { value: '♾️', label: 'THANK YOU!', sub: 'for watching!' },
       ]},
   };
 

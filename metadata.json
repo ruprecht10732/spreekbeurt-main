@@ -1,5 +1,5 @@
 {
-  "name": "Jupiter Spreekbeurt",
-  "description": "Een interactieve 3D presentatie over Jupiter in Star Wars stijl.",
+  "name": "Jupiter Presentation",
+  "description": "An interactive 3D presentation about Jupiter in Star Wars style.",
   "requestFramePermissions": []
 }

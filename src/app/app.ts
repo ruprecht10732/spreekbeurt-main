@@ -523,7 +523,7 @@ interface CelebrationFrameState {
 })
 export class App implements AfterViewInit, OnDestroy {
   slides = SLIDES;
-  nameChars = [...'Asbjørn Oost'];
+  nameChars = [...'Bauke Oost'];
   currentIndex = signal(0);
   currentQuizQuestionIndex = signal(0);
   isAnswerRevealed = signal(false);

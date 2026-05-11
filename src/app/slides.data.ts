@@ -23,7 +23,7 @@ export const SLIDES: Slide[] = [
     title: 'Presentation about Jupiter',
     content: [
       'Created by: Bauke Oost',
-      'Class: Grade 1'
+      'Class: 1.4'
     ],
     isTitleSlide: true
   },

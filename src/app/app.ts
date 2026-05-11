@@ -173,7 +173,7 @@ interface CelebrationFrameState {
                         [style.min-width]="char === ' ' ? '0.4em' : 'auto'">{{ char }}</span>
                 }
               </div>
-              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-45 name-subtitle">Class: Grade 7</p>
+              <p class="text-lg md:text-2xl uppercase tracking-wider opacity-45 name-subtitle">Class: 1.4</p>
             } @else {
               @for (line of currentSlide().content; track $index) {
                 <p class="text-3xl md:text-5xl mb-4 uppercase tracking-wider">{{ line }}</p>
